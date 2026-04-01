@@ -1,0 +1,1 @@
+"""InfraScan integrated package."""
