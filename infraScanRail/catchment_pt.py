@@ -4,9 +4,9 @@ from rasterio.features import rasterize
 from rasterio.transform import from_bounds
 from rasterio.transform import from_origin
 
-import settings
+from . import settings
 # Additional imports for grid creation
-from data_import import *
+from .data_import import *
 
 
 # 1.) Define Access Points (Train Stations):
@@ -575,7 +575,7 @@ def calculate_total_travel_time(bus_times_within_buffer, closest_trainstations_d
     return pd.DataFrame(total_times)
 
 
-def save_points_as_raster(df, output_path=r'data/catchment_pt/catchement.tif', resolution=100, crs='EPSG:2056'):
+def save_points_as_raster(df, output_path='data/catchment_pt/catchement.tif', resolution=100, crs='EPSG:2056'):
     """
     Save points from a DataFrame to a GeoTIFF raster file.
 
@@ -734,12 +734,12 @@ def get_catchment(use_cache):
     outerboundary = polygon_from_points(e_min=e_min, e_max=e_max, n_min=n_min, n_max=n_max, margin=margin)
     
     # Load the GeoPackage for bus lines and stops
-    bus_lines_path = r"data/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
+    bus_lines_path = "data/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
     
     # Load the bus lines and bus stops layers
     layer_name_segmented = 'ZVV_LINIEN_L'
     bus_lines_segmented = gpd.read_file(bus_lines_path, layer=layer_name_segmented)
-    stops = gpd.read_file(r"data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg")
+    stops = gpd.read_file("data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg")
     
     
     # Filter bus stops and bus lines within the boundary

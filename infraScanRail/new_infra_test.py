@@ -6,7 +6,7 @@ from plots import plot_graph, plot_lines_for_each_missing_connection
 os.chdir(paths.MAIN)
 
 df_network = gpd.read_file(settings.infra_generation_rail_network)
-df_points = gpd.read_file(r'data\Network\processed\points.gpkg')
+df_points = gpd.read_file('data/Network/processed/points.gpkg')
 G, pos = prepare_Graph(df_network, df_points)
 
 # Analyze the railway network to find missing connections

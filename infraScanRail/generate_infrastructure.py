@@ -6,12 +6,13 @@ from joblib import Parallel, delayed
 import os
 import time
 
+
 from sympy.polys.subresultants_qq_zz import final_touches
 
-import paths
-import settings
-from scoring import *
-from scoring import split_via_nodes, merge_lines
+from . import settings
+from . import paths
+from .scoring import *
+from .scoring import split_via_nodes, merge_lines
 
 
 def generate_rail_edges(n, radius):
@@ -28,7 +29,7 @@ def generate_rail_edges(n, radius):
     radius = radius * 1000  # Convert radius to meters
     
     # Step 1: Load data and filter
-    current_points = gpd.read_file(r"data/Network/processed/points.gpkg")
+    current_points = gpd.read_file("data/Network/processed/points.gpkg")
     current_points = current_points[~current_points['ID_point'].isin([112, 113, 720, 2200])]
 
     network_railway_service_path = paths.get_rail_services_path(settings.rail_network)
@@ -77,8 +78,8 @@ def generate_rail_edges(n, radius):
     generated_points = assign_services_to_generated_points(raw_edges, generated_points)
     
     # Save intermediate files
-    generated_points.to_file(r"data/Network/processed/generated_nodeset.gpkg", driver="GPKG")
-    nearest_gdf.to_file(r"data/Network/processed/endnodes.gpkg", driver="GPKG")
+    generated_points.to_file("data/Network/processed/generated_nodeset.gpkg", driver="GPKG")
+    nearest_gdf.to_file("data/Network/processed/endnodes.gpkg", driver="GPKG")
 
     # Create lines
     create_lines(generated_points, nearest_gdf)
@@ -115,7 +116,7 @@ def filter_unnecessary_links(rail_network):
     network_railway_service_path = paths.get_rail_services_path(rail_network)
     raw_edges = gpd.read_file(network_railway_service_path)
     time.sleep(1)  # Ensure file access is sequential
-    line_gdf = gpd.read_file(r"data\Network\processed\new_links.gpkg")
+    line_gdf = gpd.read_file("data/Network/processed/new_links.gpkg")
 
     # Step 1: Build Sline routes
     sline_routes = (
@@ -141,7 +142,7 @@ def filter_unnecessary_links(rail_network):
 
     # Save filtered links
     try:
-        filtered_gdf.to_file(r"data\Network\processed\filtered_new_links.gpkg", driver="GPKG")
+        filtered_gdf.to_file("data/Network/processed/filtered_new_links.gpkg", driver="GPKG")
         print("Filtered new links saved successfully!")
     except Exception as e:
         print(f"Error saving filtered new links: {e}")
@@ -154,9 +155,9 @@ def filter_unnecessary_links(rail_network):
 def calculate_new_service_time():
     # Set up working directory and file paths
     os.chdir(paths.MAIN)
-    s_bahn_lines_path = r"data/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
+    s_bahn_lines_path = "data/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
     layer_name_segmented = 'ZVV_S_BAHN_Linien_L'
-    stops_path = r"data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg"
+    stops_path = "data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg"
 
     # Load S-Bahn lines and stops data
     s_bahn_lines = gpd.read_file(s_bahn_lines_path, layer=layer_name_segmented)
@@ -166,10 +167,10 @@ def calculate_new_service_time():
     split_lines_gdf = split_multilinestrings_at_stops(s_bahn_lines, stops)
 
     # Save the split lines for future use
-    split_lines_gdf.to_file(r"data\Network\processed\split_s_bahn_lines.gpkg", driver="GPKG")
+    split_lines_gdf.to_file("data/Network/processed/split_s_bahn_lines.gpkg", driver="GPKG")
 
     # Load split lines and corridor line data
-    corridor_path = r"data\Network\processed\filtered_new_links_in_corridor.gpkg"
+    corridor_path = "data/Network/processed/filtered_new_links_in_corridor.gpkg"
     new_links = gpd.read_file(corridor_path)
 
     # Create the graph from split line segments with weights
@@ -474,7 +475,7 @@ def create_lines(gen_pts_gdf, nearest_infra_pt_gdf):
     line_gdf = gpd.GeoDataFrame(connections, geometry='geometry', crs=gen_pts_gdf.crs)
 
     # Save the resulting GeoDataFrame
-    line_gdf.to_file(r"data/Network/processed/new_links.gpkg", driver="GPKG")
+    line_gdf.to_file("data/Network/processed/new_links.gpkg", driver="GPKG")
 
     print("New links saved successfully!")
 
@@ -569,7 +570,7 @@ def update_network_with_new_links(rail_network_selection, new_links_updated_path
 
     network_railway_service = gpd.read_file(network_railway_service_path)
     new_links_updated = gpd.read_file(new_links_updated_path)
-    rail_node = pd.read_csv(r"data/Network/Rail_Node.csv", sep=";", decimal=",", encoding="ISO-8859-1")
+    rail_node = pd.read_csv("data/Network/Rail_Node.csv", sep=";", decimal=",", encoding="ISO-8859-1")
 
     # Ensure Rail_Node has required columns
     if not {"NR", "NAME"}.issubset(rail_node.columns):

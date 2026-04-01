@@ -102,7 +102,7 @@ def infrascanrail():
 
 
     elif settings.OD_type == 'pt_catchment_perimeter':
-        od_directory_scenario = r"data/traffic_flow/od/rail"
+        od_directory_scenario = "data/traffic_flow/od/rail"
         GetCatchmentOD(settings.use_cache_catchmentOD)
     else:
         raise ValueError("OD_type must be either 'canton_ZH' or 'pt_catchment_perimeter'")
@@ -173,7 +173,8 @@ def infrascanrail():
                                                             duration=cp.duration)
 
 
-    cost_and_benefits_dev = create_cost_and_benefit_df(settings.start_year_scenario, settings.end_year_scenario, settings.start_valuation_year)
+    _, cost_and_benefits_dev = create_cost_and_benefit_df(settings.start_year_scenario, settings.end_year_scenario, settings.start_valuation_year)
+    #cost_and_benefits_dev = create_cost_and_benefit_df(settings.start_year_scenario, settings.end_year_scenario, settings.start_valuation_year)
     costs_and_benefits_dev_discounted = discounting(cost_and_benefits_dev, discount_rate=cp.discount_rate, base_year=settings.start_valuation_year)
     costs_and_benefits_dev_discounted.to_csv(paths.COST_AND_BENEFITS_DISCOUNTED)
     plot_costs_benefits(costs_and_benefits_dev_discounted, line='101032.0')  # only plots cost&benefits for the dev with highest tts
@@ -188,7 +189,7 @@ def infrascanrail():
 
     # Write runtimes to a file
 
-    with open(r'runtimes.txt', 'w') as file:
+    with open('runtimes.txt', 'w') as file:
         for part, runtime in runtimes.items():
             file.write(f"{part}: {runtime}/n")
     ##################################################################################
@@ -202,7 +203,7 @@ def infrascanrail():
     runtimes["Visualize results"] = time.time() - st
     st = time.time()
 
-    with open(r'runtimes.txt', 'w') as file:
+    with open('runtimes.txt', 'w') as file:
         for part, runtime in runtimes.items():
             file.write(f"{part}: {runtime}/n")
 
@@ -388,7 +389,7 @@ def compute_tts(dev_id_lookup,
 
     # 3) If we reach here, use_cache=False ⇒ do the “full” computation
     df_access = pd.read_csv(
-        r"data/Network/Rail_Node.csv",
+        "data/Network/Rail_Node.csv",
         sep=";",
         decimal=",",
         encoding="ISO-8859-1"
@@ -433,7 +434,7 @@ def compute_tts(dev_id_lookup,
 def import_process_network(use_cache):
     if use_cache:
         print("Using cached rail network data...")
-        return gpd.read_file(r'data\Network\processed\points.gpkg')
+        return gpd.read_file('data/Network/processed/points.gpkg')
     reformat_rail_nodes()
     network_ak2035, points = create_railway_services_AK2035()
     create_railway_services_AK2035_extended(network_ak2035, points)
@@ -472,7 +473,7 @@ def getScenarios(od_directory_scenario, railway_station_OD):
 
 
 def add_construction_info_to_network():
-    const_cost_path = r"data/Network/Rail-Service_Link_construction_cost.csv"
+    const_cost_path = "data/Network/Rail-Service_Link_construction_cost.csv"
     rows = ['NumOfTracks', 'Bridges m', 'Tunnel m', 'TunnelTrack',
             'tot length m', 'length of 1', 'length of 2 ', 'length of 3 and more']
     df_railway_network = gpd.read_file(paths.RAIL_SERVICES_AK2035_PATH)
@@ -535,7 +536,7 @@ def create_travel_time_graphs(network_selection, use_cache, dev_id_lookup_table)
     # networks with all developments
     # get the paths of all developments
     directories_dev = [os.path.join(paths.DEVELOPMENT_DIRECTORY, filename)
-                       for filename in os.listdir(paths.DEVELOPMENT_DIRECTORY) if filename.endswith(".gpkg")]
+                       for filename in os.listdir(paths.DEVELOPMENT_DIRECTORY) if filename.endswith(".gpkg") and not filename.startswith('._')] # NOTE: added condition to exclude hidden files like ._filename
     directories_dev = [path.replace("\\", "/") for path in directories_dev]
     G_developments = create_graphs_from_directories(directories_dev)
     od_times_dev = calculate_od_pairs_with_times_by_graph(G_developments)  # OD-time for each development
@@ -695,7 +696,7 @@ def generate_infra_development(use_cache, mod_type):
 
     if mod_type in ('ALL', 'NEW_DIRECT_CONNECTIONS'):
         df_network = gpd.read_file(settings.infra_generation_rail_network)
-        df_points = gpd.read_file(r'data\Network\processed\points.gpkg')
+        df_points = gpd.read_file('data/Network/processed/points.gpkg')
         G, pos = prepare_Graph(df_network, df_points)
 
         # Analyze the railway network to find missing connections
@@ -759,7 +760,7 @@ def create_dev_id_lookup_table():
     # List all files in the directory and filter out subdirectories
     all_files = [
         f for f in os.listdir(dev_dir)
-        if os.path.isfile(os.path.join(dev_dir, f))
+        if os.path.isfile(os.path.join(dev_dir, f)) and not f.startswith('._') # Note: the '._' prefix is often added by macOS and has to be filtered out to avoid issues with file handling
     ]
 
     # Strip file extensions and sort the filenames

@@ -18,9 +18,9 @@ from openpyxl import load_workbook
 import logging
 
 # Import from existing modules
-from capacity_calculator import _build_sections_dataframe, build_capacity_tables
-from network_plot import plot_capacity_network
-import cost_parameters
+from .capacity_calculator import _build_sections_dataframe, build_capacity_tables
+from .network_plot import plot_capacity_network
+from . import cost_parameters
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')

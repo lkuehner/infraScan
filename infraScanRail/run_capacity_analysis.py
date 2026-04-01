@@ -29,10 +29,10 @@ from pathlib import Path
 import pandas as pd
 
 # Import capacity modules
-from capacity_calculator import export_capacity_workbook, _derive_prep_path, _derive_sections_path
-from capacity_interventions import run_phase_four, visualize_enhanced_network
-import settings
-import paths
+from .capacity_calculator import export_capacity_workbook, _derive_prep_path, _derive_sections_path
+from .capacity_interventions import run_phase_four, visualize_enhanced_network
+from . import settings
+from . import paths
 
 # Define absolute paths (consistent with capacity_calculator.py)
 DATA_ROOT = Path(paths.MAIN) / "data" / "Network"

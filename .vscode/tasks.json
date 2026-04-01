@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Rewrite integrated config style",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"- <<'PY'\nfrom pathlib import Path\np = Path('/Users/laura/Desktop/infraScan_lkuehner/infraScan/infraScanIntegrated/config.py')\np.write_text('''from __future__ import annotations\n\nfrom pathlib import Path\nfrom typing import Any\n\n\nCONFIG: dict[str, Any] = {\n    \"run\": {\n        \"run_road\": True,\n        \"run_rail\": True,\n        \"generate_plots\": False,\n        \"use_cache\": True,\n        \"save_intermediate\": True,\n    },\n    \"scenarios\": {\n        \"scenario_ids\": [\"low\", \"medium\", \"high\"],\n        \"start_year\": 2018,\n        \"end_year\": 2100,\n        \"valuation_year\": 2050,\n    },\n    \"scoring\": {\n        \"normalization_method\": \"minmax\",\n        \"score_weight_net_benefit\": 0.7,\n        \"score_weight_cba\": 0.3,\n        \"robust_weight_mean\": 0.5,\n        \"robust_weight_q10\": 0.3,\n        \"robust_weight_regret\": 0.2,\n    },\n    \"output\": {\n        \"output_subdir\": \"outputs\",\n        \"export_runtime_report\": True,\n        \"export_pipeline_summary\": True,\n    },\n}\n\n\ndef get_config() -> dict[str, Any]:\n    return CONFIG\n\n\ndef get_output_dir(module_root: Path) -> Path:\n    return module_root / str(CONFIG[\"output\"][\"output_subdir\"])\n''', encoding='utf-8')\nprint('config.py updated to dict style')\nPY"
+			]
+		},
+		{
+			"label": "Rewrite config file safely",
+			"type": "shell",
+			"command": "cat > /Users/laura/Desktop/infraScan_lkuehner/infraScan/infraScanIntegrated/config.py <<'EOF'\nfrom __future__ import annotations\n\nfrom pathlib import Path\nfrom typing import Any\n\n\nCONFIG: dict[str, Any] = {\n    \"run\": {\n        \"run_road\": True,\n        \"run_rail\": True,\n        \"generate_plots\": False,\n        \"use_cache\": True,\n        \"save_intermediate\": True,\n    },\n    \"scenarios\": {\n        \"scenario_ids\": [\"low\", \"medium\", \"high\"],\n        \"start_year\": 2018,\n        \"end_year\": 2100,\n        \"valuation_year\": 2050,\n    },\n    \"scoring\": {\n        \"normalization_method\": \"minmax\",\n        \"score_weight_net_benefit\": 0.7,\n        \"score_weight_cba\": 0.3,\n        \"robust_weight_mean\": 0.5,\n        \"robust_weight_q10\": 0.3,\n        \"robust_weight_regret\": 0.2,\n    },\n    \"output\": {\n        \"output_subdir\": \"outputs\",\n        \"export_runtime_report\": True,\n        \"export_pipeline_summary\": True,\n    },\n}\n\n\ndef get_config() -> dict[str, Any]:\n    return CONFIG\n\n\ndef get_output_dir(module_root: Path) -> Path:\n    return module_root / str(CONFIG[\"output\"][\"output_subdir\"])\nEOF\n",
+			"isBackground": false
+		}
+	]
+}

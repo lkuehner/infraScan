@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Debug infraScanRoad",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/infraScanRoad/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/infraScanRoad",
+            "justMyCode": true
+        },
+        {
+            "name": "Debug infraScanRail",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/infraScanRail/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/infraScanRail",
+            "justMyCode": true
+        },
+        {
+            "name": "Debug infraScanIntegrated",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/infraScanIntegrated/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/infraScanIntegrated",
+            "justMyCode": true
+        }
+    ]
+}

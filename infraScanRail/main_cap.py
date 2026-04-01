@@ -80,7 +80,7 @@ class PipelineConfig:
         
         # Detect available choices from prompt
         # Look for patterns like "(1-2)" or "(1-3)" in the prompt      
-        choice_match = re.search(r'\(1-(\d+)\)', prompt)
+        choice_match = re.search(r'\(1-(\d+)\)', prompt) 
         if choice_match:
             max_choice = int(choice_match.group(1))
             available_choices = [str(i) for i in range(1, max_choice + 1)]
@@ -888,7 +888,7 @@ def phase_11_old_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         settings.start_year_scenario,
         settings.end_year_scenario,
         settings.start_valuation_year,
-        cost_file_path="data/costs/construction_cost_old.csv"
+        cost_file_path="data/costs/construction_cost.csv" # Note: construction_cost_old replaced
     )
 
     # Apply discounting
@@ -1109,7 +1109,7 @@ def export_pipeline_comparison_report_statistics():
 
     # Load data from both pipelines
     new_data_path = "data/costs/total_costs_raw.csv"
-    old_data_path = "data/costs/total_costs_raw_old.csv"
+    old_data_path = "data/costs/total_costs_raw.csv" # Note: no old data file (_old)
 
     if not os.path.exists(new_data_path) or not os.path.exists(old_data_path):
         print(f"  ⚠ Data files not found - skipping report statistics export")
@@ -1567,7 +1567,7 @@ def infrascanrail_cap():
     ##################################################################################
     # SAVE RUNTIMES
     ##################################################################################
-    with open(r'runtimes_cap.txt', 'w') as file:
+    with open('runtimes_cap.txt', 'w') as file:
         file.write("=" * 80 + "\n")
         file.write("INFRASCANRAIL CAPACITY-ENHANCED PIPELINE RUNTIMES\n")
         file.write("=" * 80 + "\n\n")
@@ -1837,7 +1837,7 @@ def import_process_network(use_cache):
     """Import and process railway network data."""
     if use_cache:
         print("Using cached rail network data...")
-        return gpd.read_file(r'data\Network\processed\points.gpkg')
+        return gpd.read_file('data/Network/processed/points.gpkg')
     reformat_rail_nodes()
     network_ak2035, points = create_railway_services_AK2035()
     create_railway_services_AK2035_extended(network_ak2035, points)
@@ -1863,7 +1863,7 @@ def getStationOD(use_cache, stations_in_perimeter, only_demand_from_to_corridor=
 
 def add_construction_info_to_network():
     """Add construction cost information to network edges."""
-    const_cost_path = r"data/Network/Rail-Service_Link_construction_cost.csv"
+    const_cost_path = "data/Network/Rail-Service_Link_construction_cost.csv"
     rows = ['NumOfTracks', 'Bridges m', 'Tunnel m', 'TunnelTrack',
             'tot length m', 'length of 1', 'length of 2 ', 'length of 3 and more']
     df_railway_network = gpd.read_file(paths.RAIL_SERVICES_AK2035_PATH)
@@ -2075,7 +2075,7 @@ def compute_tts(dev_id_lookup, od_times_dev, od_times_status_quo, use_cache=Fals
         return dev_list, monetized_tt, scenario_list
 
     df_access = pd.read_csv(
-        r"data/Network/Rail_Node.csv",
+        "data/Network/Rail_Node.csv",
         sep=";",
         decimal=",",
         encoding="ISO-8859-1"
@@ -2130,7 +2130,7 @@ def generate_infra_development(use_cache, mod_type, generate_plots=True):
     if mod_type in ('ALL', 'NEW_DIRECT_CONNECTIONS'):
         print(f"\n  ✓ Generating NEW_DIRECT_CONNECTIONS (mod_type={mod_type})")
         df_network = gpd.read_file(settings.infra_generation_rail_network)
-        df_points = gpd.read_file(r'data\Network\processed\points.gpkg')
+        df_points = gpd.read_file('data/Network/processed/points.gpkg')
         G, pos = prepare_Graph(df_network, df_points)
 
         # Analyze the railway network to find missing connections

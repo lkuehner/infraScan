@@ -1,9 +1,9 @@
 import os
 os.environ['USE_PYGEOS'] = '0'
-import settings
+from . import settings
 from shapely.geometry import Polygon
-import paths
-from plots import *
+from . import paths
+from .plots import *
 import ast
 from tqdm import tqdm
 
@@ -14,20 +14,24 @@ def import_cities():
     :return: GeoPandas DataFrame containing the locations as points
     """
     # Read csv file into pandas DataFrame
-    df_cities = pd.read_csv(r"data\manually_gathered_data\City_map.csv", sep=";")
+    df_cities = pd.read_csv("data/manually_gathered_data/City_map.csv", sep=";")
 
     # Convert single values into coordinates of geopandas DataFrame and initialize the coordinate reference system
     gdf_cities = gpd.GeoDataFrame(df_cities, geometry=gpd.points_from_xy(df_cities["x"], df_cities["y"]),
                                   crs="epsg:2056")
 
-    gdf_cities.to_file('data\manually_gathered_data\cities.shp')
+    gdf_cities.to_file('data/manually_gathered_data/cities.shp')
     return
 
 
 def get_lake_data():
-    gdf = gpd.read_file(r"data\landuse_landcover\landcover\lake\WB_STEHGEWAESSER_F.shp")
+    output_path = 'data/landuse_landcover/processed/lake_data_zh.gpkg'
+    if os.path.exists(output_path):
+        return
+
+    gdf = gpd.read_file("data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp")
     gdf = gdf[gdf["GEWAESSERN"].isin(["Zürichsee", "Greifensee", "Pfäffikersee"])].to_crs("epsg:2056")
-    gdf.to_file('data\landuse_landcover\processed\lake_data_zh.gpkg')
+    gdf.to_file(output_path)
     return
 
 
@@ -100,7 +104,7 @@ def reformat_rail_edges(rail_network):
 
 
     edges_gdf = edges_gdf.drop(['first', 'last'],axis=1)
-    edges_gdf.to_file(r"data\Network\processed\edges.gpkg")
+    edges_gdf.to_file("data/Network/processed/edges.gpkg")
 
 
 def reformat_rail_nodes():
@@ -116,7 +120,7 @@ def reformat_rail_nodes():
                                       crs="epsg:21781")
     current_points = current_points.to_crs("epsg:2056")
     current_points = current_points.rename(columns={"NR": "ID_point"})
-    current_points.to_file(r"data\Network\processed\points.gpkg")
+    current_points.to_file("data/Network/processed/points.gpkg")
 
 
 def add_new_line(stations, frequency, service_name, travel_times, edges, points, via=[]):
@@ -230,7 +234,7 @@ def add_new_line(stations, frequency, service_name, travel_times, edges, points,
 
 def create_railway_services_2024_extended():
     edges_ak2024_ext = gpd.read_file(paths.RAIL_SERVICES_2024_PATH)
-    points = gpd.read_file(r'data\Network\processed\points.gpkg')
+    points = gpd.read_file('data/Network/processed/points.gpkg')
 
     edges_ak2024_ext = add_new_line(
         stations=[
@@ -437,7 +441,7 @@ def create_railway_services_2024_extended():
 def create_railway_services_AK2035():
 
     edges_ak2035 = gpd.read_file(paths.RAIL_SERVICES_2024_PATH)
-    points = gpd.read_file(r'data\Network\processed\points.gpkg')
+    points = gpd.read_file('data/Network/processed/points.gpkg')
 
     # Double the frequency and capacity for rows where "Service" contains "S9"
     edges_ak2035.loc[edges_ak2035["Service"] == "S9", "Frequency"] *= 2
@@ -767,14 +771,14 @@ def network_in_corridor(poly):
 
     edges["ID_edge"] = edges.index
 
-    points.to_file(r"data\Network\processed\points_with_attribute.gpkg")
-    edges.to_file(r"data\Network\processed\edges_with_attribute.gpkg")
+    points.to_file("data/Network/processed/points_with_attribute.gpkg")
+    edges.to_file("data/Network/processed/edges_with_attribute.gpkg")
 
 
 def only_links_to_corridor():
     # Load the new_links and all access points datasets
-    new_links = gpd.read_file(r"data\Network\processed\filtered_new_links.gpkg")
-    all_access_points = gpd.read_file(r"data\Network\processed\points_with_attribute.gpkg")
+    new_links = gpd.read_file("data/Network/processed/filtered_new_links.gpkg")
+    all_access_points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
 
     # Filter all_access_points to retain only those within the corridor
     access_corridor = all_access_points[all_access_points["within_corridor"] == 1]

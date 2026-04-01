@@ -159,7 +159,7 @@ def maintenance_costs(duration, highway, tunnel, bridge, structural):
 
 def bridges_crossing_water(links):
     # crosing things as water
-    rivers = gpd.read_file(r"data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
+    rivers = gpd.read_file("data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
     rivers = rivers[["ABFLUSS", "geometry"]]
 
     # Use spatial join to find crossings - this will add an index to each street where it intersects a river
@@ -184,7 +184,7 @@ def rail_crossing(links):
     # Get all the layers from the .gdb file
     # layers = fiona.listlayers(r"data/landuse_landcover/landcover/railway/schienennetz_2056_de.gdb")
     # print(layers)
-    rail = gpd.read_file(r"data/landuse_landcover/landcover/railway/schienennetz_2056_de.gdb", layer='Netzsegment')
+    rail = gpd.read_file("data/landuse_landcover/landcover/railway/schienennetz_2056_de.gdb", layer='Netzsegment')
 
     # Use spatial join to find crossings - this will add an index to each street where it intersects a river
     intersections = gpd.sjoin(links, rail, how="left", predicate='intersects')
@@ -201,7 +201,7 @@ def rail_crossing(links):
 
 
 def land_tb_reallocated(links, buffer_distance):
-    zones = gpd.read_file(r"data/landuse_landcover/processed/partly_protected.gpkg")
+    zones = gpd.read_file("data/landuse_landcover/processed/partly_protected.gpkg")
     print("Zones", zones.name.unique())
 
     buffer = links.copy()
@@ -233,7 +233,7 @@ def land_tb_reallocated(links, buffer_distance):
 def externalities_costs(ce_highway, ce_tunnel, realloc_forest, realloc_FFF, realloc_dry_meadow, realloc_period,
                         nat_fragmentation, fragm_period, nat_loss_habitat, habitat_period):
     # Import dataframe with links geometries
-    generated_links_gdf = gpd.read_file(r"data/Network/processed/links_with_geometry_attributes.gpkg")
+    generated_links_gdf = gpd.read_file("data/Network/processed/links_with_geometry_attributes.gpkg")
     # Replace nan values by 0
     generated_links_gdf = generated_links_gdf.fillna(0)
     ########################################3
@@ -628,7 +628,7 @@ def osm_nw_to_raster(limits):
     gpkg_folder = "data/Network/OSM_road"
 
     # List all geopackage files in the folder
-    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')]
+    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg') and not f.startswith('._')]
 
     # Combine all geopackages into one GeoDataFrame
     gdf_combined = gpd.GeoDataFrame(pd.concat([gpd.read_file(f) for f in gpkg_files], ignore_index=True))

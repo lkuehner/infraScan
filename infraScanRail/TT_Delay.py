@@ -3,10 +3,11 @@ from tqdm import tqdm  # Stellen Sie sicher, dass tqdm importiert wird
 from joblib import Parallel, delayed
 # from scipy.spatial import cKDTree
 # Additional imports for grid creation
-from data_import import *
-from random_scenarios import load_scenarios_from_cache
+from .data_import import *
+from .random_scenarios import load_scenarios_from_cache
 import numba
-import cost_parameters as cp
+from . import cost_parameters as cp
+
 
 
 def create_directed_graph(df, change_time):

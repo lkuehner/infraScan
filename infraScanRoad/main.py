@@ -21,13 +21,13 @@ def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
     #os.chdir(r"C:\Users\Fabrice\Desktop\HS23\Thesis\Code")
     #os.chdir(r"G:\IM\09 - Teaching\11 - Masters - Projects\2023 - FS\Marggi\04_Submission\Submission\FS2023 - MScProject - Marggi\06 - Developments\01 - Code\01 - Python")
-    os.chdir(r"C:/Users/spadmin/PycharmProjects/infraScan/infraScanRoad")
-#    os.chdir(r"/local/home/earnor/infraScan/")
+    os.chdir("/Volumes/WD_Windows/MSc_Thesis/infraScanRoad")
+    # os.chdir(r"/local/home/earnor/infraScan/")
     #os.chdir(r"/home/earnor/infraScan/")
 
     runtimes = {}
 
-
+    
     ##################################################################################
     # Initializing global variables
     print("\nINITIALIZE VARIABLES \n")
@@ -99,15 +99,15 @@ def print_hi(name):
     #import_locations()
 
 
-    # Define area that is protected for constructing highway links
-    get_protected_area(limits=limits_corridor)
+    # Define area that is protected for constructing highway links 
+    # get_protected_area(limits=limits_corridor)
     get_unproductive_area(limits=limits_corridor)
     landuse(limits=limits_corridor)
 
     # Tif file of all unsuitable land cover and protected areas
     # File is stored to 'data\landuse_landcover\processed\zone_no_infra\protected_area_{suffix}.tif'
 
-    #all_protected_area_to_raster(suffix="corridor")
+    all_protected_area_to_raster(suffix="corridor")
 
     runtimes["Import land use and land cover data"] = time.time() - st
     st = time.time()
@@ -179,18 +179,18 @@ def print_hi(name):
     # 3) Generate developments (new access points) and connection to existing infrastructure
 
     # Make random points within the perimeter (extent) and filter them, so they do not fall within protected or
-    # unsuitable area
+    # unsuitable area 
     # The resulting dataframe of generated nodes is stored in "data\Network\processed\generated_nodes.gpkg"
     num_rand = 1000
     random_gdf = generated_access_points(extent=innerboundary, number=num_rand)
-    filter_access_points(random_gdf)
+    # filter_access_points(random_gdf)
     #filtered_gdf.to_file(r"data/Network/processed/generated_nodes.gpkg")
 
     # Import the generated points as dataframe
-    generated_points = gpd.read_file(r"data/Network/processed/generated_nodes.gpkg")
+    generated_points = gpd.read_file("data/Network/processed/generated_nodes.gpkg")
 
     # Import current points as dataframe and filter only access points (no intersection points)
-    current_points = gpd.read_file(r"data/Network/processed/points_corridor_attribute.gpkg")
+    current_points = gpd.read_file("data/Network/processed/points_corridor_attribute.gpkg")
     current_access_points = current_points.loc[current_points["intersection"] == 0]
 
     # Connect the generated points to the existing access points
@@ -250,8 +250,7 @@ def print_hi(name):
     # Import the raw data, reshape it partially and store it as tif
     # Tif are stored to "data/independent_variable/processed/raw/pop20.tif"
     # File name indicates population (pop) and employment (empl), the year (20), and the extent swisswide (_ch) or only for corridor (no suffix)
-    import_data(limits_variables)
-    runtimes["Import variable for scenario (population and employment)"] = time.time() - st
+    # import_data(limits_variables) #NOTE: this function is not run because the data is already imported and processed. 
     st = time.time()
     ##################################################################################
     ##################################################################################
@@ -311,7 +310,7 @@ def print_hi(name):
     ##################################################################################
     # 2) Import road network from OSM and rasterize it
     # Import the road network from OSM and rasterize it
-    nw_from_osm(limits_variables) #todo this requires data under data/Network/OSM_road that is not available.
+    # nw_from_osm(limits_variables) #todo this requires data under data/Network/OSM_road that is not available. #NOTE: already exist KLR
     osm_nw_to_raster(limits_variables)
     runtimes["Import and rasterize local road network from OSM"] = time.time() - st
     st = time.time()
@@ -451,7 +450,7 @@ def print_hi(name):
 
     #################################################################################
     # Travel time delay on highway
-
+    
     # Compute the OD matrix for the current infrastructure under all scenarios
     GetVoronoiOD()
     # od = GetVoronoiOD()

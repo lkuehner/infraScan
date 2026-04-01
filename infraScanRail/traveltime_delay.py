@@ -17,17 +17,17 @@ def stack_tif_files(var):
     tiff_files = [f"\s1_{var}.tif", f"\s2_{var}.tif", f"\s3_{var}.tif"]
 
     # Open the first file to retrieve the metadata
-    with rasterio.open(r"data\independent_variable\processed\scenario"+tiff_files[0]) as src0:
+    with rasterio.open("data/independent_variable/processed/scenario"+tiff_files[0]) as src0:
         meta = src0.meta
 
     # Update metadata to reflect the number of layers
     meta.update(count=len(tiff_files))
 
-    out_fp = fr"data\independent_variable\processed\scenario\scen_{var}.tif"
+    out_fp = f"data/independent_variable/processed/scenario/scen_{var}.tif"
     # Read each layer and write it to stack
     with rasterio.open(out_fp, 'w', **meta) as dst:
         for id, layer in enumerate(tiff_files, start=1):
-            with rasterio.open(r"data\independent_variable\processed\scenario"+layer) as src1:
+            with rasterio.open("data/independent_variable/processed/scenario"+layer) as src1:
                 dst.write_band(id, src1.read(1))
 
 
@@ -78,7 +78,7 @@ def GetODMatrix(od):
 
 
 def GetCommuneShapes(raster_path): #todo this might be unnecessary if you already have these shapes.
-    communalraw = gpd.read_file(r"data\_basic_data\Gemeindegrenzen\UP_GEMEINDEN_F.shp")
+    communalraw = gpd.read_file("data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     communalraw = communalraw.loc[(communalraw['ART_TEXT']=='Gemeinde')]
     communedf = gpd.GeoDataFrame(data=communalraw,geometry=communalraw['geometry'],columns=['BFS','GEMEINDENA'],crs="epsg:2056").sort_values(by='BFS')
 
@@ -116,8 +116,8 @@ def compute_TT():
 
     # Directories containing CSV files (relative paths since the working directory is now set)
     directories = [
-        r"data\traffic_flow\od\rail",
-        r"data\Network\travel_time\developments"
+        "data/traffic_flow/od/rail",
+        "data/Network/travel_time/developments"
     ]
 
     # Loop through each directory
@@ -364,8 +364,8 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     print(f"Sum of OD matrix before {temp_sum} and after {temp_sum2}")
 
     # Save pd df to csv
-    od_grouped.to_csv(r"data\traffic_flow\od\od_matrix_2020.csv")
-    #odmat.to_csv(r"data\traffic_flow\od\od_matrix_raw.csv")
+    od_grouped.to_csv("data/traffic_flow/od/od_matrix_2020.csv")
+    #odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
 
     # Print sum of all values in od df
     # Sum over all values in pd df
@@ -386,7 +386,7 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     voronoidf = voronoidf.merge(origin, how='left', left_on='ID_point', right_on='voronoi_id')
     voronoidf = voronoidf.merge(destination, how='left', left_on='ID_point', right_on='voronoi_id')
     voronoidf = voronoidf.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-    voronoidf.to_file(r"data\traffic_flow\od\OD_voronoidf.gpkg", driver="GPKG")
+    voronoidf.to_file("data/traffic_flow/od/OD_voronoidf.gpkg", driver="GPKG")
 
 
     # Same for odmat and commune_df
@@ -397,7 +397,7 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
     commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
     commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-    commune_df.to_file(r"data\traffic_flow\od\OD_commune_filtered.gpkg", driver="GPKG")
+    commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
 
 
     #potential = np.outer(scen_pop_medium_tif.flatten().reshape(1, -1), scen_empl_medium_tif.flatten().reshape(1, -1))
@@ -613,8 +613,8 @@ def GetVoronoiOD_multi_old(scen_empl_path, scen_pop_path, voronoi_tif_path):
         np.fill_diagonal(od_grouped.values, 0)
 
         # Save pd df to csv
-        od_grouped.to_csv(fr"data\traffic_flow\od\developments\od_matrix_dev{xx}.csv")
-        #odmat.to_csv(r"data\traffic_flow\od\od_matrix_raw.csv")
+        od_grouped.to_csv(f"data/traffic_flow/od/developments/od_matrix_dev{xx}.csv")
+        #odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
 
     return
 
@@ -632,7 +632,7 @@ def GetCatchmentOD_old():
             od_matrix_temp.loc[:, polygon_id] *= row[f'{scen}']
 
         # Save the ungrouped OD matrix as a CSV
-        ungrouped_od_matrix_path = fr"data/traffic_flow/od/rail/od_matrix_temp_{scen}.csv"
+        ungrouped_od_matrix_path = f"data/traffic_flow/od/rail/od_matrix_temp_{scen}.csv"
         od_matrix_temp.to_csv(ungrouped_od_matrix_path)
         print(f"Saved ungrouped OD matrix for scenario {scen} at {ungrouped_od_matrix_path}")
 
@@ -663,7 +663,7 @@ def GetCatchmentOD_old():
         print(f"Sum of OD matrix before {temp_sum} and after {temp_sum2} removing diagonal values")
 
         # Save the grouped OD matrix
-        grouped_od_matrix_path = fr"data/traffic_flow/od/rail/od_matrix_{scen}.csv"
+        grouped_od_matrix_path = f"data/traffic_flow/od/rail/od_matrix_{scen}.csv"
         od_grouped.to_csv(grouped_od_matrix_path)
         print(f"Saved grouped OD matrix for scenario {scen} at {grouped_od_matrix_path}")
 
@@ -691,7 +691,7 @@ def GetCatchmentOD_old():
         catchmentdf_temp = catchmentdf_temp.merge(origin, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.merge(destination, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-        catchmentdf_temp.to_file(fr"data/traffic_flow/od/catchment_id_{scen}.gpkg", driver="GPKG")
+        catchmentdf_temp.to_file(f"data/traffic_flow/od/catchment_id_{scen}.gpkg", driver="GPKG")
 
         # Same for odmat and commune_df
         if scen == "20":
@@ -702,6 +702,6 @@ def GetCatchmentOD_old():
             commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
             commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
             commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-            commune_df.to_file(r"data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+            commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
 
     return

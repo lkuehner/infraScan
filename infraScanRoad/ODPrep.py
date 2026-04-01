@@ -18,7 +18,7 @@ from scipy.optimize import minimize, Bounds, least_squares
 import rasterio
 from rasterio.transform import from_origin
 from rasterio.features import geometry_mask, shapes, rasterize
-from shapely.geometry import Point, Polygon, box, shape, MultiPolygon, mapping
+from shapely.geometry import LineString, Point, Polygon, box, shape, MultiPolygon, mapping
 from shapely.ops import unary_union
 from pyproj import Transformer
 from rasterio.mask import mask
@@ -45,7 +45,8 @@ from shapely.ops import voronoi_diagram
 from scipy.spatial import Voronoi
 
 #os.chdir(r"C:\Users\Fabrice\Desktop\HS23\Thesis\Code")
-os.chdir(r"C:\Users\spadmin\PycharmProjects\infraScan\infraScanRoad")
+# os.chdir(r"C:\Users\spadmin\PycharmProjects\infraScan\infraScanRoad")
+os.chdir("/Volumes/WD_Windows/MSc_Thesis/infraScanRoad")
 
 def GetCommunePopulation(y0):  # We find population of each commune.
     rawpop = pd.read_excel('data/_basic_data/KTZH_00000127_00001245.xlsx', sheet_name='Gemeinden', header=None)
@@ -65,7 +66,7 @@ def GetCommuneEmployment(y0):  # we find employment in each commune.
     return jobvec
 
 def GetCommuneShapes(raster_path):  # todo this might be unnecessary if you already have these shapes.
-    communalraw = gpd.read_file(r"data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
+    communalraw = gpd.read_file("data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     communalraw = communalraw.loc[(communalraw['ART_TEXT'] == 'Gemeinde')]
     communedf = gpd.GeoDataFrame(data=communalraw, geometry=communalraw['geometry'], columns=['BFS', 'GEMEINDENA'],
                                  crs="epsg:2056").sort_values(by='BFS')
@@ -278,7 +279,7 @@ def osm_nw_to_raster(limits):
             sys.stdout.flush()
 
     # Check for spatial overlap with the second raster and update values if necessary
-    with rasterio.open(r"data\landuse_landcover\processed\unproductive_area.tif") as src2:
+    with rasterio.open("data/landuse_landcover/processed/unproductive_area.tif") as src2:
         unproductive_area = src2.read(1)
         if raster.shape == unproductive_area.shape:
             print("Network raster and unproductive area are overalpping")
@@ -452,14 +453,14 @@ def raster_to_graph(raster_data):
 
 def travel_cost_polygon(frame):
 
-    points_all = gpd.read_file(r"data\Network\processed\points_attribute.gpkg")
+    points_all = gpd.read_file("data/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points_all = points_all[points_all["intersection"] == 0]
     points_all_frame = points_all.cx[frame[0]:frame[2], frame[1]:frame[3]]
     # print(points_all_frame.head(10).to_string())
 
     # travel speed
-    raster_file = r"data\Network\OSM_tif\speed_limit_raster.tif"
+    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -523,7 +524,7 @@ def travel_cost_polygon(frame):
 
     # Save the path length raster
     with rasterio.open(
-            r'data\Network\travel_time\travel_time_raster.tif', 'w',
+            "data/Network/travel_time/travel_time_raster.tif", 'w',
             driver='GTiff',
             height=path_length_raster.shape[0],
             width=path_length_raster.shape[1],
@@ -562,7 +563,7 @@ def travel_cost_polygon(frame):
     # Set NaN values to a specific NoData value, e.g., -1
     source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-    path_id_raster = r'data\Network\travel_time\source_id_raster.tif'
+    path_id_raster = "data/Network/travel_time/source_id_raster.tif"
     with rasterio.open(path_id_raster, 'w',
         driver='GTiff',
         height=source_coord_raster.shape[0],
@@ -577,7 +578,7 @@ def travel_cost_polygon(frame):
     # get Voronoi polygons in vector data as gpd df
     gdf_polygon = raster_to_polygons(path_id_raster)
     #print(gdf_polygon.head(10).to_string())
-    gdf_polygon.to_file(r"data\Network\travel_time\Voronoi_statusquo.gpkg")
+    gdf_polygon.to_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
 
         # how to get the inputs? nodes in which reference system, weights automatically?
         # how to get the coordinates of the closest point?
@@ -650,7 +651,7 @@ def GetVoronoiCells(limits,outer,inner):
     return
 
 def GetNetworkNodes():
-    node_table = pd.read_csv(r"data\Network\Road_Node.csv", sep=";")
+    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
     return
 
 def polygon_from_points(bounds=None, e_min=None, e_max=None, n_min=None, n_max=None, margin=0):
@@ -685,9 +686,9 @@ def load_nw():
     """
 
     # Read csv files of node, links and link attributes to a Pandas DataFrame
-    edge_table = pd.read_csv(r"data\Network\Road_Link.csv", sep=";")
-    node_table = pd.read_csv(r"data\Network\Road_Node.csv", sep=";")
-    link_attribute = pd.read_csv(r"data\Network\Road_LinkType.csv", sep=";")
+    edge_table = pd.read_csv("data/Network/Road_Link.csv", sep=";")
+    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
+    link_attribute = pd.read_csv("data/Network/Road_LinkType.csv", sep=";")
 
     # Add coordinates of the origin node of each link by merging nodes and links through the node ID
     edge_table = pd.merge(edge_table, node_table, how="left", left_on="From Node", right_on="Node NR").rename(
@@ -727,7 +728,7 @@ def load_nw():
 
     # Drop unwanted columns and store the network DataFrame as shapefile
     nw_gdf = nw_gdf.drop(['point_O','point_D', "line"], axis=1)
-    nw_gdf.to_file(r"data/temp/network_highway.gpkg")
+    nw_gdf.to_file("data/temp/network_highway.gpkg")
 
     return
 
@@ -840,7 +841,7 @@ def GetTAZBasis(bbox):
     df_voronoi["ID_point"] = pointlist
     df_voronoi["geometry"] = df_voronoi[0]
     df_voronoi = df_voronoi.iloc[:, 1:]
-    df_voronoi.to_file(r"data\Voronoi\voronoi_basis.gpkg")
+    df_voronoi.to_file("data/Voronoi/voronoi_basis.gpkg")
     return df_voronoi
 
 def GetTAZwithCommunes(basis):
@@ -916,8 +917,8 @@ limits = [e_min-margin, n_min-margin, e_max+margin, n_max+margin]
 
 #1.	define TAZs defined in GVM
 
-raster_path = r"data/Network/travel_time/source_id_raster.tif"
-points_all = gpd.read_file(r"data\Network\processed\points.gpkg")
+raster_path = "data/Network/travel_time/source_id_raster.tif"
+points_all = gpd.read_file("data/Network/processed/points.gpkg")
 
 commune_raster, communedf = GetCommuneShapes(raster_path)
 cantonshape = communedf.dissolve()

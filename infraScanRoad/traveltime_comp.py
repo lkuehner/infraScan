@@ -13,10 +13,12 @@ import networkx as nx
 from itertools import islice
 import matplotlib.pyplot as plt
 from scipy.sparse.csgraph import connected_components
-import data_import
+from .data_import import *
 
 #os.chdir(r"C:\Users\Fabrice\Desktop\HS23\Thesis\Code")
-os.chdir(r"C:\Users\spadmin\PycharmProjects\infraScan")
+#os.chdir(r"C:\Users\spadmin\PycharmProjects\infraScan")
+os.chdir("/Volumes/WD_Windows/MSc_Thesis/infraScanRoad")
+
 ## INPUT TRAFFIC NETWORK
 #--- Options
 output_lab='Portugal'
@@ -26,11 +28,11 @@ figureoption=1 #0: no figures, otherwise, 1
 
 def convert_data_to_input():
     # Import gpkg file with the network points
-    points = gpd.read_file(r"data\Network\processed\points_with_attribute.gpkg")
-    #point_in_corridor = gpd.read_file(r"data\Network\processed\points_corridor.gpkg")
-    #points_on_border = gpd.read_file(r"data\Network\processed\points_corridor_border.gpkg")
+    points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
+    #point_in_corridor = gpd.read_file("data/Network/processed/points_corridor.gpkg")
+    #points_on_border = gpd.read_file("data/Network/processed/points_corridor_border.gpkg")
     # Import gpkg file with the network edges
-    edges = gpd.read_file(r"data\Network\processed\edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
 
     # Set crs for points and edges to epsg:2056
     points = points.set_crs("epsg:2056", allow_override=True)
@@ -101,15 +103,15 @@ def get_nw_data():
     ### Check for 2050
 
     # Import OD matrix and flatten it (D_od)
-    OD_matrix = pd.read_csv(r"data\traffic_flow\od\od_matrix_2020.csv", sep=",", index_col=0)
+    OD_matrix = pd.read_csv("data/traffic_flow/od/od_matrix_2020.csv", sep=",", index_col=0)
     print(OD_matrix.head(5).to_string())
     # Import polygons of the corridor
-    #voronoi_OD = gpd.read_file(r"data\traffic_flow\od\OD_voronoidf.gpkg")
-    voronoi_OD = gpd.read_file(r"data\Network\travel_time\Voronoi_statusquo.gpkg")
+    #voronoi_OD = gpd.read_file("data/traffic_flow/od/OD_voronoidf.gpkg")
+    voronoi_OD = gpd.read_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
     print(voronoi_OD.head(5).to_string())
 
     # Import gpkg file with the network points
-    points = gpd.read_file(r"data\Network\processed\points_with_attribute.gpkg")
+    points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
     points = points.sort_values(by=["ID_point"])
 
     # Filter points to only keep those within the corridor or on border
@@ -144,7 +146,7 @@ def get_nw_data():
     # nodes within perimeter and on border
     # Get nodes in zones -> then build network with these nodes
     # Import edges
-    edges = gpd.read_file(r"data\Network\processed\edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
     edges = edges.sort_values(by=["ID_edge"])
 
     print(edges.head(5).to_string())

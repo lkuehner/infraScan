@@ -44,8 +44,8 @@ def ODPrep_rail():
     limits = [e_min - margin, n_min - margin, e_max + margin, n_max + margin]
     # boundary = LineString([[e_min,n_min],[e_max,n_min],[e_max,n_max],[e_min,n_max],[e_min,n_min]])
     # 1.	define TAZs defined in GVM
-    raster_path = r"data/Network/travel_time/source_id_raster.tif"
-    points_street_network_all = gpd.read_file(r"data\Network\processed\street_network_points.gpkg")
+    raster_path = "data/Network/travel_time/source_id_raster.tif"
+    points_street_network_all = gpd.read_file("data/Network/processed/street_network_points.gpkg")
     commune_raster, communedf = GetCommuneShapes(raster_path)
     cantonshape = communedf.dissolve()
     tazgdf = getTAZs(points_street_network_all)
@@ -54,7 +54,7 @@ def ODPrep_rail():
     tazgdf.loc[tazgdf.within(outer), "scalecategory"] = 2
     tazgdf.loc[tazgdf.within(inner), "scalecategory"] = 1
     # Save the tazgdf as a geopackage
-    # tazgdf.to_file(r"abc.gpkg", driver="GPKG")
+    # tazgdf.to_file("abc.gpkg", driver="GPKG")
     # 2.	categorise TAZs as
     ##a.	within extent
     ##b.	within outer bounary
@@ -75,7 +75,7 @@ def ODPrep_rail():
     # GetVoronoiCells(limits,outer,inner)
     ### todo: start from here to go from communal OD to newly tesselated OD for scoring
     # 6.	Identify ‘access points‘ to the canton‘s network from the external tazs
-    points_all = gpd.read_file(r"data\Network\processed\points.gpkg")
+    points_all = gpd.read_file("data/Network/processed/points.gpkg")
     points_in_outer = points_all[points_all.within(outer)]
     points_outside_inner = points_in_outer[~points_in_outer.within(inner)]
     # make sure that access points are served by an S-Bahn
@@ -119,7 +119,7 @@ def GetCommuneEmployment(y0):  # we find employment in each commune.
     return jobvec
 
 def GetCommuneShapes(raster_path):  # todo this might be unnecessary if you already have these shapes.
-    communalraw = gpd.read_file(r"data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
+    communalraw = gpd.read_file("data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     communalraw = communalraw.loc[(communalraw['ART_TEXT'] == 'Gemeinde')]
     communedf = gpd.GeoDataFrame(data=communalraw, geometry=communalraw['geometry'], columns=['BFS', 'GEMEINDENA'],
                                  crs="epsg:2056").sort_values(by='BFS')
@@ -295,7 +295,7 @@ def osm_nw_to_raster(limits):
     transform = from_origin(west=minx, north=maxy, xsize=resolution, ysize=resolution)
 
 
-    #lake = gpd.read_file(r"data\landuse_landcover\landcover\water_ch\Typisierung_LV95\typisierung.gpkg")
+    #lake = gpd.read_file("data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
     ###############################################################################################################
 
     print("ready to fill")
@@ -332,7 +332,7 @@ def osm_nw_to_raster(limits):
             sys.stdout.flush()
 
     # Check for spatial overlap with the second raster and update values if necessary
-    with rasterio.open(r"data\landuse_landcover\processed\unproductive_area.tif") as src2:
+    with rasterio.open("data/landuse_landcover/processed/unproductive_area.tif") as src2:
         unproductive_area = src2.read(1)
         if raster.shape == unproductive_area.shape:
             print("Network raster and unproductive area are overalpping")
@@ -506,14 +506,14 @@ def raster_to_graph(raster_data):
 
 def travel_cost_polygon(frame):
 
-    points_all = gpd.read_file(r"data\Network\processed\points_attribute.gpkg")
+    points_all = gpd.read_file("data/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points_all = points_all[points_all["intersection"] == 0]
     points_all_frame = points_all.cx[frame[0]:frame[2], frame[1]:frame[3]]
     # print(points_all_frame.head(10).to_string())
 
     # travel speed
-    raster_file = r"data\Network\OSM_tif\speed_limit_raster.tif"
+    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -577,7 +577,7 @@ def travel_cost_polygon(frame):
 
     # Save the path length raster
     with rasterio.open(
-            r'data\Network\travel_time\travel_time_raster.tif', 'w',
+            'data/Network/travel_time/travel_time_raster.tif', 'w',
             driver='GTiff',
             height=path_length_raster.shape[0],
             width=path_length_raster.shape[1],
@@ -616,7 +616,7 @@ def travel_cost_polygon(frame):
     # Set NaN values to a specific NoData value, e.g., -1
     source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-    path_id_raster = r'data\Network\travel_time\source_id_raster.tif'
+    path_id_raster = 'data/Network/travel_time/source_id_raster.tif'
     with rasterio.open(path_id_raster, 'w',
         driver='GTiff',
         height=source_coord_raster.shape[0],
@@ -631,7 +631,7 @@ def travel_cost_polygon(frame):
     # get Voronoi polygons in vector data as gpd df
     gdf_polygon = raster_to_polygons(path_id_raster)
     #print(gdf_polygon.head(10).to_string())
-    gdf_polygon.to_file(r"data\Network\travel_time\Voronoi_statusquo.gpkg")
+    gdf_polygon.to_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
 
         # how to get the inputs? nodes in which reference system, weights automatically?
         # how to get the coordinates of the closest point?
@@ -704,7 +704,7 @@ def GetVoronoiCells(limits,outer,inner):
     return
 
 def GetNetworkNodes():
-    node_table = pd.read_csv(r"data\Network\Road_Node.csv", sep=";")
+    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
     return
 
 def polygon_from_points(bounds=None, e_min=None, e_max=None, n_min=None, n_max=None, margin=0):
@@ -834,7 +834,7 @@ def GetTAZBasis(bbox, street_network_points):
     df_voronoi["ID_point"] = pointlist
     df_voronoi["geometry"] = df_voronoi[0]
     df_voronoi = df_voronoi.iloc[:, 1:]
-    df_voronoi.to_file(r"data\Voronoi\voronoi_basis.gpkg")
+    df_voronoi.to_file("data/Voronoi/voronoi_basis.gpkg")
     return df_voronoi
 
 def GetTAZwithCommunes(basis):

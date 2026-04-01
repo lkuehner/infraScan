@@ -1,8 +1,8 @@
 import pandas as pd
 import random
 
-import settings
-from data_import import *
+from . import settings
+from .data_import import *
 from rasterio.features import geometry_mask, rasterize
 from rasterstats import zonal_stats
 
@@ -27,7 +27,7 @@ from shapely.geometry import Polygon
 def future_scenario_pop(n):
     # Load boundaries of municipalities (GEMEINDEN)
     #n=3
-    boundaries = gpd.read_file(r"data\Scenario\Boundaries\Gemeindegrenzen\UP_GEMEINDEN_F.shp")
+    boundaries = gpd.read_file("data/Scenario/Boundaries/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
 
     # Define the inner boundary polygon based on the corridor limits
     e_min, e_max = 2687000, 2708000
@@ -47,11 +47,11 @@ def future_scenario_pop(n):
     # Filter for municipalities that intersect with the inner boundary
     boundaries_in_corridor = boundaries[boundaries.intersects(innerboundary)]
 
-    scenario_zh = pd.read_csv(r"data/Scenario/KTZH_00000705_00001741.csv", sep=";")
+    scenario_zh = pd.read_csv("data/Scenario/KTZH_00000705_00001741.csv", sep=";")
     total_growth = scenario_zh[scenario_zh['jahr'] == 2050]['anzahl'].sum() - scenario_zh[scenario_zh['jahr'] == 2020]['anzahl'].sum()
 
     # Read the CSV file and select relevant columns
-    pop_gemeinden = pd.read_excel(r"data/_basic_data/KTZH_00000127_00001245.xlsx", 
+    pop_gemeinden = pd.read_excel("data/_basic_data/KTZH_00000127_00001245.xlsx", 
                                   sheet_name="Gemeinden", header=5).dropna()[['BFS-NR', 'GEMEINDE', 'TOTAL_2021']]
 
     def calculate_growth(pop_gemeinden, total_growth, k_urban, k_equal, k_rural):
@@ -129,12 +129,12 @@ def future_scenario_pop(n):
         crs="EPSG:2056")  # Replace with the Swiss coordinates system
 
     # Save the GeoDataFrame to a shapefile
-    merged_scenarios.to_file(r"data\temp\data_scenario_pop.shp")
+    merged_scenarios.to_file("data/temp/data_scenario_pop.shp")
     return
 
 def scenario_to_raster_pop(frame=False):
     # Load the shapefile
-    scenario_polygon = gpd.read_file(r"data\temp\data_scenario_pop.shp")
+    scenario_polygon = gpd.read_file("data/temp/data_scenario_pop.shp")
     #frame = [2680600, 1227700, 2724300, 1265600]
 
     if frame != False:
@@ -159,18 +159,18 @@ def scenario_to_raster_pop(frame=False):
 
     
     #growth_rate_columns_pop = ["s1_pop", "s2_pop", "s3_pop"]
-    path_pop = r"data\independent_variable\processed\raw\pop20.tif"
+    path_pop = "data/independent_variable/processed/raw/pop20.tif"
 
     #growth_rate_columns_empl = ["s1_empl", "s2_empl", "s3_empl"]
-    #path_empl = r"data\independent_variable\processed\raw\empl20.tif"
+    #path_empl = "data/independent_variable/processed/raw/empl20.tif"
 
     growth_to_tif(scenario_polygon, path=path_pop, columns=settings.pop_scenarios)
     #growth_to_tif(scenario_polygon, path=path_empl, columns=growth_rate_columns_empl)
     print('Scenario_To_Raster complete')
 
 
-    base_path = r"data/independent_variable/processed/scenario"
-    output_file = r"data/independent_variable/processed/scenario/pop_combined.tif"
+    base_path = "data/independent_variable/processed/scenario"
+    output_file = "data/independent_variable/processed/scenario/pop_combined.tif"
 
     create_single_tif_with_bands(base_path, settings.pop_scenarios, output_file)
     return
@@ -182,7 +182,7 @@ def scenario_to_raster_pop(frame=False):
 
 def future_scenario_empl(n):
     # Load boundaries of municipalities (GEMEINDEN)
-    boundaries = gpd.read_file(r"data\Scenario\Boundaries\Gemeindegrenzen\UP_GEMEINDEN_F.shp")
+    boundaries = gpd.read_file("data/Scenario/Boundaries/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     # Aggregate geometries by municipality name to handle exclaves
     boundaries = boundaries.dissolve(by='GEMEINDENA').reset_index()
 
@@ -205,7 +205,7 @@ def future_scenario_empl(n):
     boundaries_in_corridor = boundaries[boundaries.intersects(innerboundary)]
 
     # Load employment data and calculate growth
-    empl_dev = pd.read_csv(r"data\Scenario\KANTON_ZUERICH_596.csv", sep=";", encoding="unicode_escape")
+    empl_dev = pd.read_csv("data/Scenario/KANTON_ZUERICH_596.csv", sep=";", encoding="unicode_escape")
     empl_dev = empl_dev[["BFS_NR", "INDIKATOR_JAHR", "INDIKATOR_VALUE"]]
     empl_dev = empl_dev.rename(columns={"BFS_NR": "BFS", "INDIKATOR_JAHR": "jahr", "INDIKATOR_VALUE": "anzahl"})
     empl_dev = empl_dev[empl_dev["BFS"] != 0].reset_index(drop=True)
@@ -213,7 +213,7 @@ def future_scenario_empl(n):
     empl_dev = empl_dev.pivot(index="BFS", columns="jahr", values="anzahl").reset_index()
 
     # Import BFS mapping
-    bfs_nr = gpd.read_file(r"data\Scenario\Boundaries\Gemeindegrenzen\UP_GEMEINDEN_F.shp")
+    bfs_nr = gpd.read_file("data/Scenario/Boundaries/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     bfs_nr = bfs_nr[["BFS", "GEMEINDENA"]]
     empl_dev = empl_dev.merge(bfs_nr, on="BFS", how="left")
     empl_dev.columns.name = None
@@ -291,14 +291,14 @@ def future_scenario_empl(n):
 
     # Save to shapefile
     merged_scenarios = merged_scenarios.drop_duplicates(subset=['GEMEINDE'])
-    merged_scenarios.to_file(r"data\temp\data_scenario_empl.shp")
+    merged_scenarios.to_file("data/temp/data_scenario_empl.shp")
     return
 
 ####################################################################################################################################################
 
 def scenario_to_raster_emp(frame=False):
     # Load the shapefile
-    scenario_polygon = gpd.read_file(r"data\temp\data_scenario_empl.shp")
+    scenario_polygon = gpd.read_file("data/temp/data_scenario_empl.shp")
     #frame = [2680600, 1227700, 2724300, 1265600]
 
     if frame != False:
@@ -333,15 +333,15 @@ def scenario_to_raster_emp(frame=False):
         scenario_polygon = gpd.GeoDataFrame(pd.concat([pd.DataFrame(scenario_polygon), pd.DataFrame(pd.Series(new_row)).T], ignore_index=True))
     
     #growth_rate_columns_empl = ["s1_empl", "s2_empl", "s3_empl"]
-    path_empl = r"data\independent_variable\processed\raw\empl20.tif"
+    path_empl = "data/independent_variable/processed/raw/empl20.tif"
 
     growth_to_tif(scenario_polygon, path=path_empl, columns=settings.empl_scenarios)
     #growth_to_tif(scenario_polygon, path=path_empl, columns=growth_rate_columns_empl)
     print('Scenario_To_Raster complete')
 
 
-    base_path = r"data/independent_variable/processed/scenario"
-    output_file = r"data/independent_variable/processed/scenario/empl_combined.tif"
+    base_path = "data/independent_variable/processed/scenario"
+    output_file = "data/independent_variable/processed/scenario/empl_combined.tif"
 
     create_single_tif_with_bands(base_path, settings.empl_scenarios, output_file)
     return
@@ -457,7 +457,7 @@ def dummy_generate_scenarios(n_scenarios: int, seed: int = None):
 
 def scenario_inward_development():
     # Load geodatabase
-    gdf = gpd.read_file(r"data\Scenario\potential\outputshape\zh_pot.dbf")
+    gdf = gpd.read_file("data/Scenario/potential/outputshape/zh_pot.dbf")
     # set index as new column
     gdf['ID_unique'] = gdf.index
     # PARZSTRUK: 1 Teil Parzelle, 2 Einzelparzelle, 3 mehrere Parzellen
@@ -465,7 +465,7 @@ def scenario_inward_development():
     # POT_TYPE:
 
     # Load current density data
-    gdf_density = gpd.read_file(r"data\Scenario\potential\development\Quartieranalyse_-OGD.gpkg")
+    gdf_density = gpd.read_file("data/Scenario/potential/development/Quartieranalyse_-OGD.gpkg")
 
 
     ##################################################
@@ -490,7 +490,7 @@ def scenario_inward_development():
     gdf = gdf[["geometry", "pop_potential", "EINF"]]
 
     # Load current pop tif file
-    with rasterio.open(r"data\independent_variable\processed\raw\pop20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/raw/pop20.tif") as src:
         pop_raster = src.read(1)
         pop_meta = src.meta
 
@@ -518,7 +518,7 @@ def scenario_inward_development():
     })
 
     # Write both rasters to a new file with two bands
-    with rasterio.open(r'data\Scenario\potential\max_pot_plus.tif', 'w', **output_meta) as dest:
+    with rasterio.open('data/Scenario/potential/max_pot_plus.tif', 'w', **output_meta) as dest:
         dest.write(pop_potential_raster_plus, 1)  # Band 1 for population potential
 
 
@@ -564,19 +564,19 @@ def scenario_inward_development():
     output_meta.update(count=len(pop_scenario), dtype=rasterio.float32)
 
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\pop_scen_plus.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/pop_scen_plus.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(pop_scenario, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
 
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\pop_change_plus.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/pop_change_plus.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(pop_change, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
     # Create a new TIFF file to store the scenarios
 
 
     # Convert the extracted numbers to integers, missing values will become None
-    #gdf_density['extracted_use'] = gdf_density['U_ZONE_KT'].str.extract(r'W[A-Za-z]?(\d+)')
+    #gdf_density['extracted_use'] = gdf_density['U_ZONE_KT'].str.extract('W[A-Za-z]?(/d+)')
     #gdf_density['extracted_use'] = pd.to_numeric(gdf_density['extracted_use'], errors='coerce').astype('Int64')
 
     # Nbr levels * area of plot / use per capita (46.3 m3/person)
@@ -602,7 +602,7 @@ def scenario_inward_development():
 
 
     # Load current pop tif file
-    with rasterio.open(r"data\independent_variable\processed\raw\pop20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/raw/pop20.tif") as src:
         pop_raster = src.read(1)
         pop_meta = src.meta
 
@@ -651,7 +651,7 @@ def scenario_inward_development():
     })
 
     # Write the output array to a new raster file
-    with rasterio.open(r'data\Scenario\potential\max_pot.tif', 'w', **output_meta) as dest:
+    with rasterio.open('data/Scenario/potential/max_pot.tif', 'w', **output_meta) as dest:
         dest.write(potential_raster, 1)
     """
 
@@ -681,7 +681,7 @@ def scenario_inward_development():
     })
 
     # Write both rasters to a new file with two bands
-    with rasterio.open(r'data\Scenario\potential\max_pot.tif', 'w', **output_meta) as dest:
+    with rasterio.open('data/Scenario/potential/max_pot.tif', 'w', **output_meta) as dest:
         dest.write(pop_potential_raster, 1)  # Band 1 for population potential
         dest.write(empl_potential_raster, 2)  # Band 2 for employment potential
 
@@ -732,21 +732,21 @@ def scenario_inward_development():
     output_meta.update(count=len(pop_scenario), dtype=rasterio.float32)
 
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\pop_scen.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/pop_scen.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(pop_scenario, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\empl_scen.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/empl_scen.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(empl_scenario, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
 
 
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\pop_change.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/pop_change.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(pop_change, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
     # Create a new TIFF file to store the scenarios
-    with rasterio.open(r'data\Scenario\potential\empl_change.tif', 'w', **output_meta) as dst:
+    with rasterio.open('data/Scenario/potential/empl_change.tif', 'w', **output_meta) as dst:
         for i, scenario in enumerate(empl_change, start=1):
             dst.write(scenario.astype(rasterio.float32), i)
 

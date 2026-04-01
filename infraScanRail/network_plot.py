@@ -28,8 +28,8 @@ from matplotlib.patches import Patch, Polygon, Rectangle, Circle
 from matplotlib.ticker import PercentFormatter
 import pandas as pd
 
-import paths
-import settings
+from . import settings
+from . import paths
 
 try:
     import geopandas as gpd  # type: ignore

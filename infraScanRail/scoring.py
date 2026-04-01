@@ -1,10 +1,10 @@
 import pandas
 
-import cost_parameters as cp
-import paths
+from . import cost_parameters as cp
+from . import paths
 
-from data_import import *
-from plots import plot_costs_benefits
+from .data_import import *
+from .plots import plot_costs_benefits
 import os
 import pandas as pd
 
@@ -16,7 +16,7 @@ from shapely import wkt
 from tqdm import tqdm
 from rasterio.warp import reproject
 import glob
-import settings
+from . import settings
 import ast  # For safely evaluating string representations of lists
 import pickle
 def split_via_nodes(df):
@@ -1003,17 +1003,17 @@ def stack_tif_files(var):
     tiff_files = [f"/s1_{var}.tif", f"/s2_{var}.tif", f"/s3_{var}.tif"]
 
     # Open the first file to retrieve the metadata
-    with rasterio.open(r"data/independent_variable/processed/scenario" + tiff_files[0]) as src0:
+    with rasterio.open("data/independent_variable/processed/scenario" + tiff_files[0]) as src0:
         meta = src0.meta
 
     # Update metadata to reflect the number of layers
     meta.update(count=len(tiff_files))
 
-    out_fp = fr"data/independent_variable/processed/scenario/scen_{var}.tif"
+    out_fp = f"data/independent_variable/processed/scenario/scen_{var}.tif"
     # Read each layer and write it to stack
     with rasterio.open(out_fp, 'w', **meta) as dst:
         for id, layer in enumerate(tiff_files, start=1):
-            with rasterio.open(r"data/independent_variable/processed/scenario" + layer) as src1:
+            with rasterio.open("data/independent_variable/processed/scenario" + layer) as src1:
                 dst.write_band(id, src1.read(1))
 
 
@@ -1066,7 +1066,7 @@ def GetODMatrix(od):
 
 
 def GetCommuneShapes(raster_path):  # todo this might be unnecessary if you already have these shapes.
-    communalraw = gpd.read_file(r"data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
+    communalraw = gpd.read_file("data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     communalraw = communalraw.loc[(communalraw['ART_TEXT'] == 'Gemeinde')]
     communedf = gpd.GeoDataFrame(data=communalraw, geometry=communalraw['geometry'], columns=['BFS', 'GEMEINDENA'],
                                  crs="epsg:2056").sort_values(by='BFS')
@@ -1187,15 +1187,15 @@ def GetCatchmentOD(use_cache = False):
     if use_cache == True:
         return
     # Import the required data or define the path to access it
-    catchment_tif_path = r'data/catchment_pt/catchement.tif'
-    catchmentdf = gpd.read_file(r"data/catchment_pt/catchement.gpkg")
+    catchment_tif_path = 'data/catchment_pt/catchement.tif'
+    catchmentdf = gpd.read_file("data/catchment_pt/catchement.gpkg")
 
     # Paths to input and output files
-    pop_combined_file = r"data/independent_variable/processed/scenario/pop_combined.tif"
-    empl_combined_file = r"data/independent_variable/processed/scenario/empl_combined.tif"
+    pop_combined_file = "data/independent_variable/processed/scenario/pop_combined.tif"
+    empl_combined_file = "data/independent_variable/processed/scenario/empl_combined.tif"
 
-    output_pop_path = r"data/independent_variable/processed/scenario/pop20_corrected.tif"
-    output_empl_path = r"data/independent_variable/processed/scenario/empl20_corrected.tif"
+    output_pop_path = "data/independent_variable/processed/scenario/pop20_corrected.tif"
+    output_empl_path = "data/independent_variable/processed/scenario/empl20_corrected.tif"
 
     # Correct rasters using the catchment raster as reference
     correct_rasters_to_extent(
@@ -1240,11 +1240,11 @@ def GetCatchmentOD(use_cache = False):
             empl_raster_data[scenario] = src.read(idx)  # Read each band
 
     # Paths to input and output files
-    empl_raster_path = r"data/independent_variable/processed/raw/empl20.tif"
-    pop_raster_path = r"data/independent_variable/processed/raw/pop20.tif"
+    empl_raster_path = "data/independent_variable/processed/raw/empl20.tif"
+    pop_raster_path = "data/independent_variable/processed/raw/pop20.tif"
 
-    output_empl_path = r"data/independent_variable/processed/raw/empl20_corrected.tif"
-    output_pop_path = r"data/independent_variable/processed/raw/pop20_corrected.tif"
+    output_empl_path = "data/independent_variable/processed/raw/empl20_corrected.tif"
+    output_pop_path = "data/independent_variable/processed/raw/pop20_corrected.tif"
 
     # Correct rasters using the catchment raster as reference
     correct_rasters_to_extent(
@@ -1422,8 +1422,8 @@ def GetCatchmentOD(use_cache = False):
 
         # Save pd df to csv
 
-        od_grouped.to_csv(fr"data/traffic_flow/od/rail/od_matrix_{pop_scenarios[i],empl_scenarios[i]}.csv")
-        # odmat.to_csv(r"data/traffic_flow/od/od_matrix_raw.csv")
+        od_grouped.to_csv(f"data/traffic_flow/od/rail/od_matrix_{pop_scenarios[i],empl_scenarios[i]}.csv")
+        # odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
 
         # Print sum of all values in od df
         # Sum over all values in pd df
@@ -1449,7 +1449,7 @@ def GetCatchmentOD(use_cache = False):
         catchmentdf_temp = catchmentdf_temp.merge(origin, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.merge(destination, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-        catchmentdf_temp.to_file(fr"data/traffic_flow/od/catchment_id_{pop_scenarios[i]}.gpkg", driver="GPKG") #only output
+        catchmentdf_temp.to_file(f"data/traffic_flow/od/catchment_id_{pop_scenarios[i]}.gpkg", driver="GPKG") #only output
 
         """        # Same for odmat and commune_df
         if scen == "20":
@@ -1460,7 +1460,7 @@ def GetCatchmentOD(use_cache = False):
             commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
             commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
             commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-            commune_df.to_file(r"data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+            commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
             """
     return
 
@@ -1642,13 +1642,13 @@ def link_traffic_to_map():
         Generates a processed geopackage file at "data/Network/processed/edges_only_flow.gpkg".
     """
     # Import travel flows from matrix to df, no index, set column name to flow
-    # flow = pd.read_csv(r"data/traffic_flow/Xi_sum.csv", header=None, index_col=False)
-    flow = pd.read_csv(r"data/traffic_flow/developments/D_i/Xi_sum_status_quo_20.csv", header=None, index_col=False)
+    # flow = pd.read_csv("data/traffic_flow/Xi_sum.csv", header=None, index_col=False)
+    flow = pd.read_csv("data/traffic_flow/developments/D_i/Xi_sum_status_quo_20.csv", header=None, index_col=False)
     flow.columns = ['flow']
     print(flow.head(10).to_string())
 
     # Import data with links
-    edges = gpd.read_file(r"data/Network/processed/edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
     print(edges.head(10).to_string())
 
     # Compare lenght of dataframes
@@ -1667,7 +1667,7 @@ def link_traffic_to_map():
     # Only keep column capacity, flow and geometry
     edges = edges[['ID_edge', 'geometry', 'flow']]
     # Safe file
-    edges.to_file(r"data/Network/processed/edges_only_flow.gpkg")
+    edges.to_file("data/Network/processed/edges_only_flow.gpkg")
 
     # Compare values to calibrate to tau value when creating the OD matrix
     # Edge ID 94 -> Tagesverkehr 3028 (DTV 54014)
@@ -1704,14 +1704,14 @@ def monetize_tts(VTTS, duration):
         ValueError: If input data cannot be converted to the required types.
     """
     # Import total travel time for each scenario and each development
-    tt_total = pd.read_csv(r"data/traffic_flow/travel_time.csv")
+    tt_total = pd.read_csv("data/traffic_flow/travel_time.csv")
 
     tt_total["low"] = tt_total["low"].apply(lambda x: float(x[1:-1]))
     tt_total["medium"] = tt_total["medium"].apply(lambda x: float(x[1:-1]))
     tt_total["high"] = tt_total["high"].apply(lambda x: float(x[1:-1]))
 
     # Import reference travel time for each scenario and current infrastructure
-    tt_status_quo = pd.read_csv(fr"data/traffic_flow/travel_time_status_quo.csv")
+    tt_status_quo = pd.read_csv(f"data/traffic_flow/travel_time_status_quo.csv")
 
     # monetization factor of travel time (peak hour * CHF/h * 365 d/a * 50 a)
     mon_factor = VTTS * 365 * duration
@@ -1728,7 +1728,7 @@ def monetize_tts(VTTS, duration):
 
     # drop useless columns
     tt_total = tt_total.drop(columns=["low", "medium", "high"])
-    tt_total.to_csv(r"data/costs/traveltime_savings.csv")
+    tt_total.to_csv("data/costs/traveltime_savings.csv")
 
 def discounting(df, discount_rate, base_year=2018):
     """
@@ -1778,7 +1778,6 @@ def create_cost_and_benefit_df(scenario_start_year=2018, end_year=2100, start_va
             Returns the same DataFrame twice for backward compatibility
             DataFrame has MultiIndex (development, scenario, year) and cost/benefit columns
     """
-    import cost_parameters as cp
 
     # Load cached data
     with open(paths.TTS_CACHE, "rb") as f_in:

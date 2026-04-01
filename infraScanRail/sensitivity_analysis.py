@@ -228,7 +228,7 @@ def load_network_graph():
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
     network_path = os.path.join(base_dir, settings.infra_generation_rail_network)
-    points_path = os.path.join(base_dir, r'data\Network\processed\points.gpkg')
+    points_path = os.path.join(base_dir, 'data/Network/processed/points.gpkg')
 
     # Check if files exist
     if not os.path.exists(network_path):

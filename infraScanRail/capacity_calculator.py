@@ -20,8 +20,8 @@ from typing import Dict, List, Optional, Set, Tuple
 import geopandas as gpd
 import pandas as pd
 
-import paths
-import settings
+from . import settings
+from . import paths
 
 # ---------------------------------------------------------------------------
 # Paths and constants
@@ -213,7 +213,7 @@ def _parse_service_frequency_string(cell: str) -> Dict[str, float]:
     result: Dict[str, float] = {}
     if not cell:
         return result
-    tokens = [token.strip() for token in re.split(r"[;,]", str(cell)) if token.strip()]
+    tokens = [token.strip() for token in re.split("[;,]", str(cell)) if token.strip()]
     for token in tokens:
         parts = token.split(".", 1)
         if len(parts) != 2:
@@ -230,7 +230,7 @@ def _parse_service_direction_frequency_string(cell: str) -> Dict[Tuple[str, str]
     result: Dict[Tuple[str, str], float] = {}
     if not cell:
         return result
-    tokens = [token.strip() for token in re.split(r"[;,]", str(cell)) if token.strip()]
+    tokens = [token.strip() for token in re.split("[;,]", str(cell)) if token.strip()]
     for token in tokens:
         first = token.split(".", 1)
         if len(first) != 2:
@@ -1433,7 +1433,7 @@ def _build_sections_dataframe(stations_df: pd.DataFrame, segments_df: pd.DataFra
     }
 
     def _parse_services(cell: str) -> tuple[str, tuple[str, ...]]:
-        raw_tokens = [token.strip() for token in re.split(r"[;,]", cell) if token.strip()]
+        raw_tokens = [token.strip() for token in re.split("[;,]", cell) if token.strip()]
         tokens: List[str] = []
         for token in raw_tokens:
             base = token.split(".")[0].strip()

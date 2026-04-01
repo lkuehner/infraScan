@@ -1,5 +1,5 @@
 import pandas as pd
-import paths
+from . import paths
 import matplotlib.pyplot as plt
 from matplotlib.ticker import EngFormatter
 from tqdm import tqdm
@@ -763,7 +763,7 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
 
     # Empty the directory first (only .pkl files)
     for filename in os.listdir(cache_dir):
-        if filename.endswith(".pkl"):
+        if filename.endswith(".pkl") and not filename.startswith("._"):
             os.remove(os.path.join(cache_dir, filename))
     # Save each scenario to a separate .pkl file
     for scenario_name, scenario_data in scenarios.items():
