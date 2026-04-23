@@ -5,7 +5,7 @@ from matplotlib.ticker import EngFormatter
 from tqdm import tqdm
 from scipy.stats import norm, qmc
 import numpy as np
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 from joblib import Parallel, delayed
 import pickle
 import os
@@ -589,6 +589,7 @@ def generate_od_growth_scenarios(
         start_year: int,
         end_year: int,
         num_of_scenarios: int,
+    scenario_components: Optional[Dict[str, Any]] = None,
         do_plot: bool = False,
         n_jobs: int = -1
 ) -> Dict[str, Dict[int, pd.DataFrame]]:
@@ -597,34 +598,39 @@ def generate_od_growth_scenarios(
     """
 
     initial_od_matrix = initial_od_matrix.set_index('from_station')
-    # 1) Bezirkspopulationsszenarien
-    bezirk_pop_scenarios = get_bezirk_population_scenarios()
-    population_scenarios = {
-        bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
-        for bezirk, df in bezirk_pop_scenarios.items()
-    }
+    if scenario_components is not None:
+        population_scenarios = scenario_components["population_scenarios"]
+        modal_split_scenarios = scenario_components["modal_split_rail"]
+        distance_per_person_scenarios = scenario_components["distance_per_person"]
+    else:
+        # 1) Bezirkspopulationsszenarien
+        bezirk_pop_scenarios = get_bezirk_population_scenarios()
+        population_scenarios = {
+            bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
+            for bezirk, df in bezirk_pop_scenarios.items()
+        }
 
-    # 2) Modal-Split- & Distance-per-Person-Szenarien
-    modal_split_scenarios = generate_modal_split_scenarios(
-        avg_growth_rate=0.0045,
-        start_value=0.209,
-        start_year=start_year,
-        end_year=end_year,
-        n_scenarios=num_of_scenarios,
-        start_std_dev=0.015,
-        end_std_dev=0.045,
-        std_dev_shocks=0.02
-    )
-    distance_per_person_scenarios = generate_distance_per_person_scenarios(
-        avg_growth_rate=-0.0027,
-        start_value=39.79,
-        start_year=start_year,
-        end_year=end_year,
-        n_scenarios=num_of_scenarios,
-        start_std_dev=0.005,
-        end_std_dev=0.015,
-        std_dev_shocks=0.015
-    )
+        # 2) Modal-Split- & Distance-per-Person-Szenarien
+        modal_split_scenarios = generate_modal_split_scenarios(
+            avg_growth_rate=0.0045,
+            start_value=0.209,
+            start_year=start_year,
+            end_year=end_year,
+            n_scenarios=num_of_scenarios,
+            start_std_dev=0.015,
+            end_std_dev=0.045,
+            std_dev_shocks=0.02
+        )
+        distance_per_person_scenarios = generate_distance_per_person_scenarios(
+            avg_growth_rate=-0.0027,
+            start_value=39.79,
+            start_year=start_year,
+            end_year=end_year,
+            n_scenarios=num_of_scenarios,
+            start_std_dev=0.005,
+            end_std_dev=0.015,
+            std_dev_shocks=0.015
+        )
     if do_plot:
         os.chdir(paths.MAIN)
         first_three_bezirk = list(population_scenarios.keys())[:3]
@@ -728,7 +734,7 @@ def load_scenarios_from_cache(cache_dir):
         print(f"Loaded {len(scenarios)} scenarios from {cache_dir}")
     return scenarios
 
-def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, use_cache=False, do_plot=False):
+def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, use_cache=False, do_plot=False, shared_components_path=None):
     """
     Retrieve or generate random OD growth scenarios.
 
@@ -748,6 +754,11 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
         return
 
     # Generate new scenarios
+    scenario_components = None
+    if shared_components_path and os.path.exists(shared_components_path):
+        with open(shared_components_path, "rb") as f:
+            scenario_components = pickle.load(f)
+
     scenarios = generate_od_growth_scenarios(
         pd.read_csv(paths.OD_STATIONS_KT_ZH_PATH),
         pd.read_excel(paths.COMMUNE_TO_STATION_PATH),
@@ -755,6 +766,7 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
         start_year=start_year,
         end_year=end_year,
         num_of_scenarios=num_of_scenarios,
+        scenario_components=scenario_components,
         do_plot=do_plot
     )
 

@@ -1,12 +1,19 @@
 import numpy as np
 import rasterio
 from scipy.interpolate import griddata
+from scipy.spatial import QhullError
+import matplotlib
+import os
+os.environ['USE_PYGEOS'] = '0'
+if not hasattr(matplotlib.rcParams, "_get"):
+    matplotlib.rcParams._get = matplotlib.rcParams.__getitem__
+backend = os.environ.get("INFRASCAN_MPL_BACKEND")
+if backend:
+    matplotlib.use(backend, force=True)
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from matplotlib_scalebar.scalebar import ScaleBar
 import rasterio.plot
-import os
-os.environ['USE_PYGEOS'] = '0'
 import geopandas as gpd
 import pandas as pd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -14,6 +21,18 @@ import matplotlib.patches as mpatches
 from matplotlib.patches import FancyArrowPatch
 import math
 import matplotlib.lines as mlines
+
+
+def _safe_interpolate_grid(points, values, grid_x, grid_y):
+    unique_points = np.unique(points, axis=0)
+
+    if unique_points.shape[0] < 3:
+        return griddata(points, values, (grid_x, grid_y), method='nearest')
+
+    try:
+        return griddata(points, values, (grid_x, grid_y), method='linear')
+    except QhullError:
+        return griddata(points, values, (grid_x, grid_y), method='nearest')
 
 
 class CustomBasemap:
@@ -90,7 +109,7 @@ class CustomBasemap:
         gdf_voronoi["ID"] = gdf_voronoi["ID"].astype(int)
         #print(gdf_voronoi[gdf_voronoi["ID"] == id].head(9).to_string())
         gdf_voronoi[gdf_voronoi["ID"] == id].plot(ax=self.ax, edgecolor='red', facecolor='none' , lw=2)
-        plt.savefig(f"plot/Voronoi/developments/dev_{id}.png", dpi=400)
+        plt.savefig(f"plots/Voronoi/developments/dev_{id}.png", dpi=400)
 
 
 def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=None, access_points=None, plot_name=False, col="total_medium"):
@@ -166,7 +185,7 @@ def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=No
     grid_x, grid_y = np.mgrid[xmin:xmax:1000j, ymin:ymax:1000j]  # Adjust grid size as needed
     points = np.array([df_costs.geometry.x, df_costs.geometry.y]).T
     values = df_costs[col]
-    grid_z = griddata(points, values, (grid_x, grid_y), method='linear') # cubic
+    grid_z = _safe_interpolate_grid(points, values, grid_x, grid_y)
 
     # Plot heatmap
     heatmap = ax.imshow(grid_z.T, extent=(xmin, xmax, ymin, ymax), origin='lower', cmap=cmap, alpha=0.8, zorder=2)
@@ -225,7 +244,7 @@ def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=No
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
 
     plt.show()
     return
@@ -308,7 +327,7 @@ def plot_single_cost_result(df_costs, banned_area , title_bar, boundary=None, ne
     grid_x, grid_y = np.mgrid[xmin:xmax:1000j, ymin:ymax:1000j]  # Adjust grid size as needed
     points = np.array([df_costs.geometry.x, df_costs.geometry.y]).T
     values = df_costs[col]
-    grid_z = griddata(points, values, (grid_x, grid_y), method='linear') # cubic
+    grid_z = _safe_interpolate_grid(points, values, grid_x, grid_y)
 
     # Plot heatmap
     heatmap = ax.imshow(grid_z.T, extent=(xmin, xmax, ymin, ymax), origin='lower', cmap=cmap, alpha=0.8, zorder=2)
@@ -358,7 +377,7 @@ def plot_single_cost_result(df_costs, banned_area , title_bar, boundary=None, ne
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
 
     plt.show()
     return
@@ -537,7 +556,7 @@ def plot_cost_uncertainty(df_costs, banned_area, col, legend_title, boundary=Non
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
 
     plt.show()
     return
@@ -600,7 +619,7 @@ def plot_benefit_distribution_bar_single(df_costs, column):
     plt.tight_layout()
 
     # Safe figure
-    plt.savefig("plot/results/benefit_distribution.png", dpi=500)
+    plt.savefig("plots/results/benefit_distribution.png", dpi=500)
 
     # Show the plot
     plt.show()
@@ -688,7 +707,7 @@ def plot_benefit_distribution_line_multi(df_costs, columns, labels, plot_name, l
     plt.grid(axis='y', linestyle='--', alpha=0.7, zorder=1)
 
     plt.tight_layout()
-    plt.savefig(fr"plot/results/04_distribution_line_{plot_name}.png", dpi=500)
+    plt.savefig(fr"plots/results/04_distribution_line_{plot_name}.png", dpi=500)
     plt.show()
 
 
@@ -771,7 +790,7 @@ def boxplot(df, nbr):
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
     plt.tight_layout()
-    plt.savefig("plot/results/04_boxplot.png", dpi=500)
+    plt.savefig("plots/results/04_boxplot.png", dpi=500)
     plt.show()
 
 
@@ -827,7 +846,7 @@ def plot_2x3_subplots(gdf, limits, network, location):
                   horizontalalignment='center', verticalalignment='center')
 
     # Show the plot
-    plt.savefig("plot/Scenario/5_all_scen.png", dpi=450, bbox_inches='tight', pad_inches=0.1)
+    plt.savefig("plots/scenarios/5_all_scen.png", dpi=450, bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
 
@@ -925,7 +944,7 @@ def plot_points_gen(points, edges, banned_area, points_2=None, boundary=None, ne
     plt.tight_layout()
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=500, bbox_inches='tight')
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500, bbox_inches='tight')
 
     plt.show()
     return
@@ -1003,7 +1022,7 @@ def plot_voronoi_comp(eucledian, traveltime, boundary=None, network=None, access
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=500)
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500)
 
     plt.show()
     return
@@ -1089,7 +1108,7 @@ def plot_voronoi_development(statusquo, development_voronoi, development_point, 
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plot/results/04_{plot_name}.png", dpi=500)
+        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500)
 
     plt.show()
     return

@@ -1,10 +1,12 @@
 import os
 os.environ['USE_PYGEOS'] = '0'
 import geopandas as gpd
+if hasattr(gpd.options, "io_engine"):
+    gpd.options.io_engine = "fiona"
 import math
 import pandas as pd
 from shapely.geometry import LineString, MultiLineString, Point, MultiPoint, shape, box
-from shapely.ops import split, snap, linemerge, cascaded_union
+from shapely.ops import split, snap, linemerge, unary_union
 from rasterio import crs
 from rasterio.transform import from_origin
 from rasterio.features import shapes, rasterize
@@ -12,6 +14,30 @@ from shapely.geometry import shape, Polygon
 from geopandas.tools import sjoin
 
 from .plots import *
+
+
+def _append_georow(gdf, row):
+    """
+    Helper function to append one row while preserving the existing GeoDataFrame schema.
+    """
+    geometry_col = gdf.geometry.name
+    filtered_row = {col: row.get(col, pd.NA) for col in gdf.columns if col != geometry_col}
+    filtered_row[geometry_col] = row[geometry_col]
+    row_gdf = gpd.GeoDataFrame([filtered_row], geometry=geometry_col, crs=gdf.crs)
+
+    for col in gdf.columns:
+        if col == geometry_col:
+            continue
+        try:
+            row_gdf[col] = row_gdf[col].astype(gdf[col].dtype)
+        except (TypeError, ValueError):
+            pass
+
+    return gpd.GeoDataFrame(
+        pd.concat([gdf, row_gdf[gdf.columns]], ignore_index=True),
+        geometry=geometry_col,
+        crs=gdf.crs,
+    )
 
 
 
@@ -184,9 +210,9 @@ def load_nw():
     """
 
     # Read csv files of node, links and link attributes to a Pandas DataFrame
-    edge_table = pd.read_csv("data/Network/Road_Link.csv", sep=";")
-    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
-    link_attribute = pd.read_csv("data/Network/Road_LinkType.csv", sep=";")
+    edge_table = pd.read_csv("data/infraScanRoad/Network/Road_Link.csv", sep=";")
+    node_table = pd.read_csv("data/infraScanRoad/Network/Road_Node.csv", sep=";")
+    link_attribute = pd.read_csv("data/infraScanRoad/Network/Road_LinkType.csv", sep=";")
 
     # Add coordinates of the origin node of each link by merging nodes and links through the node ID
     edge_table = pd.merge(edge_table, node_table, how="left", left_on="From Node", right_on="Node NR").rename(
@@ -223,13 +249,13 @@ def load_nw():
 
     # Drop unwanted columns and store the network DataFrame as shapefile
     nw_gdf = nw_gdf.drop(['point_O','point_D', "line"], axis=1)
-    nw_gdf.to_file("data/temp/network_highway.gpkg")
+    nw_gdf.to_file("data/infraScanRoad/temp/network_highway.gpkg")
 
     return
 
 
 def load_nw_zh():
-    all_roads = gpd.read_file("data/Network/Strassennetz/TBA_STR_ACHS_L.shp")
+    all_roads = gpd.read_file("data/infraScanRoad/Network/Strassennetz/TBA_STR_ACHS_L.shp")
     print(all_roads.columns)
 
 
@@ -267,18 +293,18 @@ def map_access_points_on_network(current_points, network):
     #adjusted_points_gdf.columns = adjusted_points_gdf.columns.astype(str)
     #adjusted_points_gdf = adjusted_points_gdf.drop('0')
     #adjusted_points_gdf = adjusted_points_gdf.dropna(subset=['geometry'])
-    adjusted_points_gdf.to_file("data/Network/processed/access_highway_matched.gpkg")
+    adjusted_points_gdf.to_file("data/infraScanRoad/Network/processed/access_highway_matched.gpkg")
     return
 
 
 def reformat_network():
     # Import points and nodes
     #points_gdf = gpd.read_file("data/access_highway_correct.shp")
-    current_points = pd.read_csv("data/manually_gathered_data/highway_access.csv", sep=";")
+    current_points = pd.read_csv("data/infraScanRoad/manually_gathered_data/highway_access.csv", sep=";")
     current_points = gpd.GeoDataFrame(current_points, geometry=gpd.points_from_xy(current_points["x"], current_points["y"]),
                                   crs="epsg:2056")
 
-    edges_gdf = gpd.read_file("data/temp/network_highway.gpkg")
+    edges_gdf = gpd.read_file("data/infraScanRoad/temp/network_highway.gpkg")
 
     for index, row in edges_gdf.iterrows():
         coords = [(coords) for coords in list(row['geometry'].coords)]
@@ -350,7 +376,7 @@ def reformat_network():
     buffered = crossing_nodes.copy()
     buffered['geometry'] = crossing_nodes.buffer(1000)
     joined = gpd.sjoin(buffered, crossing_nodes, how='left', predicate='intersects')
-    mean_coords = joined.groupby('index_right')['geometry'].apply(lambda x: cascaded_union(x).centroid)
+    mean_coords = joined.groupby('index_right')['geometry'].apply(lambda x: unary_union(x).centroid)
     crossing_nodes['new_geometry'] = crossing_nodes.apply(lambda row: mean_coords.get(row.name, row.geometry), axis=1)
     #print(crossing_nodes.head(20).to_string())
     #print("Number of nodes at highway junctions: ", crossing_nodes.shape[0])
@@ -368,12 +394,14 @@ def reformat_network():
 
     ## if both geometries then delete (both geometries -> new_geometry)
     df_first = edges_gdf.set_geometry("first")
+    df_first = df_first.set_crs("epsg:2056", allow_override=True)
     overlay_f = gpd.sjoin(df_first, crossing_nodes, how='left', predicate='intersects', lsuffix="first", rsuffix="geometry")
     overlay_f['first'] = np.where(overlay_f['new_geometry'].notna(), overlay_f['new_geometry'], overlay_f['first'])
     overlay_f['one'] = np.where(overlay_f['new_geometry'].notna(), True, False)
     new_edges = overlay_f.drop(columns=["new_geometry", "index_geometry"])
 
     df_last = new_edges.set_geometry("last")
+    df_last = df_last.set_crs("epsg:2056", allow_override=True)
     overlay_l = gpd.sjoin(df_last, crossing_nodes, how='left', predicate='intersects', lsuffix="last", rsuffix="geometry")
     overlay_l['two'] = np.where(overlay_l['new_geometry'].notna(), True, False)
     overlay_l['last'] = np.where(overlay_l['new_geometry'].notna(), overlay_l['new_geometry'], overlay_l['last'])
@@ -392,7 +420,7 @@ def reformat_network():
     #print(edges_gdf.head(20).to_string())
     new_edges = new_edges.set_crs("epsg:2056")
     new_edges = new_edges.drop(columns=["first", "last"])
-    new_edges.to_file("data/temp/edges_simple.gpkg")
+    new_edges.to_file("data/infraScanRoad/temp/edges_simple.gpkg")
 
     # delete some edges that cannot deleted automatically
     # task made in Qgis
@@ -401,7 +429,7 @@ def reformat_network():
     # Convert the MultiLineString to a single LineString
     single_line = new_edges['geometry'].unary_union
     merged_line = linemerge(single_line)
-    gpd.GeoDataFrame({'geometry': [single_line]}).to_file("data/temp/single_lines_n.gpkg")
+    gpd.GeoDataFrame({'geometry': [single_line]}).to_file("data/infraScanRoad/temp/single_lines_n.gpkg")
 
 
     # Define the locations where you want to split the MultiLineString
@@ -562,7 +590,7 @@ def reformat_network():
     points_completed = points_completed[~points_completed['ID_point'].isin([96, 97])]
     points_completed["ID_point"] = points_completed.index
 
-    points_completed.to_file("data/Network/processed/points.gpkg")
+    points_completed.to_file("data/infraScanRoad/Network/processed/points.gpkg")
 
     # Create a temporary GeoDataFrame with buffered points this is to avoid rounding errors
     points_temp = points_completed.copy()
@@ -584,14 +612,14 @@ def reformat_network():
 
     print(filtered_edges.head(100).to_string())
 
-    filtered_edges.to_file("data/Network/processed/edges.gpkg")
+    filtered_edges.to_file("data/infraScanRoad/Network/processed/edges.gpkg")
 
 
 def required_manipulations_on_network():
     # This function is introduced to add/remoce some parts of the network enable some computations
     # Import the network
-    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
-    points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
+    edges = gpd.read_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+    points = gpd.read_file("data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
     print(edges.head(10).to_string())
     print(points.head(10).to_string())
 
@@ -603,14 +631,14 @@ def required_manipulations_on_network():
     new_row_data = {
         'intersection': 0,
         'ID_point': max_id + 1,
+        'open_ends': False,
         'within_corridor': False,
         'on_corridor_border': False,
         'generate_traffic': False,
         'geometry': Point(2676958, 1243990)
     }
     # Append the new row to the DataFrame
-    #points = points.append(new_row_data, ignore_index=True)
-    points = gpd.GeoDataFrame(pd.concat([pd.DataFrame(points), pd.DataFrame(pd.Series(new_row_data)).T], ignore_index=True))
+    points = _append_georow(points, new_row_data)
 
     # Some changes to the network are needed
     # Point with id 131 should be deleted, while all edges to it should go to id 7
@@ -667,8 +695,7 @@ def required_manipulations_on_network():
         }
 
         # Append the new row to edges_df
-        #edges = edges.append(new_row, ignore_index=True)
-        edges = gpd.GeoDataFrame(pd.concat([pd.DataFrame(edges), pd.DataFrame(pd.Series(new_row)).T], ignore_index=True))
+        edges = _append_georow(edges, new_row)
 
 
 
@@ -690,18 +717,17 @@ def required_manipulations_on_network():
     }
 
     # Append the new row to edges_df
-    #edges = edges.append(new_row, ignore_index=True)
-    edges = gpd.GeoDataFrame(pd.concat([pd.DataFrame(edges), pd.DataFrame(pd.Series(new_row)).T], ignore_index=True))
+    edges = _append_georow(edges, new_row)
 
     # Store the updated edges DataFrame
-    edges.to_file("data/Network/processed/edges_with_attribute.gpkg")
-    points.to_file("data/Network/processed/points_with_attribute.gpkg")
+    edges.to_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+    points.to_file("data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
 
 
 
 def get_edge_attributes():
-    edges_raw = gpd.read_file("data/temp/network_highway.gpkg")
-    edges_process = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
+    edges_raw = gpd.read_file("data/infraScanRoad/temp/network_highway.gpkg")
+    edges_process = gpd.read_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
 
 
     # Step 1: Create a buffer around the edges in df2
@@ -743,7 +769,7 @@ def get_edge_attributes():
 
     print(edges_process.head(10).to_string())
 
-    edges_process.to_file("data/Network/processed/edges_with_attribute.gpkg")
+    edges_process.to_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
 
 
 def network_in_corridor(polygon):
@@ -751,8 +777,8 @@ def network_in_corridor(polygon):
     polygon = gpd.GeoDataFrame({'geometry': [polygon]})
     polygon.crs = "epsg:2056"
 
-    edges = gpd.read_file("data/Network/processed/edges.gpkg")
-    points = gpd.read_file("data/Network/processed/points.gpkg")
+    edges = gpd.read_file("data/infraScanRoad/Network/processed/edges.gpkg")
+    points = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
 
     print(edges.head(10).to_string())
     print(points.head(10).to_string())
@@ -764,7 +790,7 @@ def network_in_corridor(polygon):
     # filter points in polygon
     points_corridor = gpd.sjoin(points, polygon, how="inner")
     points_corridor = points_corridor.drop(columns=["index_right"]) # , "FID"
-    points_corridor.to_file("data/Network/processed/points_corridor.gpkg")
+    points_corridor.to_file("data/infraScanRoad/Network/processed/points_corridor.gpkg")
 
     # Check if point are in polygon if so add True as "within_corridor" attribute otherwise False
     points['within_corridor'] = points.apply(lambda row: polygon.contains(row.geometry), axis=1)
@@ -772,7 +798,7 @@ def network_in_corridor(polygon):
     # get edges within the polygon
     edges_corridor = gpd.sjoin(edges, polygon, how="inner")
     edges_corridor = edges_corridor.drop(columns=["start_access", "end_access", "index_right"])
-    edges_corridor.to_file("data/Network/processed/edges_in_corridor.gpkg")
+    edges_corridor.to_file("data/infraScanRoad/Network/processed/edges_in_corridor.gpkg")
 
     # Get edges crossed by polygon frame
     # Only keep edges with exactly on endpoint in the polygon and the other outside the polygon (= point_corridor)
@@ -788,7 +814,7 @@ def network_in_corridor(polygon):
     # Apply the function to filter edges and save the filtered edges in seperate file
     #edges_crossing_polygon = edges[edges.apply(lambda x: is_one_endpoint_inside(x, polygon), axis=1)]
     edges_crossing_polygon = edges[edges["polygon_border"] == True]
-    edges_crossing_polygon.to_file("data/Network/processed/edges_on_corridor_border.gpkg")
+    edges_crossing_polygon.to_file("data/infraScanRoad/Network/processed/edges_on_corridor_border.gpkg")
 
     # get nodes of edges on corridor
 
@@ -820,15 +846,15 @@ def network_in_corridor(polygon):
     print(edges.head(10).to_string())
 
 
-    points.to_file("data/Network/processed/points_with_attribute.gpkg")
-    edges.to_file("data/Network/processed/edges_with_attribute.gpkg")
+    points.to_file("data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
+    edges.to_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
 
 
 def map_values_to_nodes():
-    nodes_processed = gpd.read_file("data/Network/processed/points_corridor.gpkg")
+    nodes_processed = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor.gpkg")
     nodes_processed.set_crs("epsg:2056")
 
-    points_raw = pd.read_csv("data/manually_gathered_data/highway_access.csv", sep=";")
+    points_raw = pd.read_csv("data/infraScanRoad/manually_gathered_data/highway_access.csv", sep=";")
     points_raw = gpd.GeoDataFrame(points_raw,
                                       geometry=gpd.points_from_xy(points_raw["x"], points_raw["y"]), crs="epsg:2056")
 
@@ -838,12 +864,12 @@ def map_values_to_nodes():
     neww.loc[neww['intersection'] == 1, columns_to_replace] = np.nan
     #neww.set_crs("epsg:2056")
 
-    neww.to_file("data/Network/processed/points_corridor_attribute.gpkg")
+    neww.to_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
 
     # Same for all points
-    nodes_processed = gpd.read_file("data/Network/processed/points.gpkg")
+    nodes_processed = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
 
-    points_raw = pd.read_csv("data/manually_gathered_data/highway_access.csv", sep=";")
+    points_raw = pd.read_csv("data/infraScanRoad/manually_gathered_data/highway_access.csv", sep=";")
     points_raw = gpd.GeoDataFrame(points_raw,
                                       geometry=gpd.points_from_xy(points_raw["x"], points_raw["y"]), crs="epsg:2056")
 
@@ -856,12 +882,12 @@ def map_values_to_nodes():
     # Remove duplicate columns, keeping the first occurrence
     neww = neww.loc[:, ~neww.columns.duplicated()]
 
-    neww.to_file("data/Network/processed/points_attribute.gpkg")
+    neww.to_file("data/infraScanRoad/Network/processed/points_attribute.gpkg")
 
 
 def only_links_to_corridor():
-    all_links = gpd.read_file("data/Network/processed/new_links.gpkg")
-    all_access_points = gpd.read_file("data/Network/processed/points_corridor_attribute.gpkg")
+    all_links = gpd.read_file("data/infraScanRoad/Network/processed/new_links.gpkg")
+    all_access_points = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
     access_corridor = all_access_points[all_access_points["cor_1"] == "1"]
     print(access_corridor.head(50).to_string())
 
@@ -869,32 +895,36 @@ def only_links_to_corridor():
     links_corridor = all_links.merge(right=access_corridor[["cor_1", "ID_point"]], left_on="ID_current", right_index=True) #right_on="ID_point")
     print("Links connected to access points within the corridor: ", links_corridor.shape[0], " of ", all_links.shape[0])
     links_corridor = links_corridor.drop(columns=["ID_current"])
-    links_corridor.to_file("data/Network/processed/developments_to_corridor_attribute.gpkg")
+    links_corridor.to_file("data/infraScanRoad/Network/processed/developments_to_corridor_attribute.gpkg")
 
     # same for access points
-    generated_points = gpd.read_file("data/Network/processed/generated_nodes.gpkg")
+    generated_points = gpd.read_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
 
     temp = generated_points.merge(right=links_corridor, left_on="ID_new", right_on="ID_new")
     generated_points_corridor = temp[["ID_new", "geometry_x", "ID_point"]]
     #all_objects_corridor = temp[["ID_new", "geometry_x", "ID_point", "geometry_y"]]
     #all_objects_corridor = all_objects_corridor.rename({"geometry_x":"point_geom", "geometry_y":"edge_geom", "ID_point":"ID_current"})
 
-    gpd.GeoDataFrame(generated_points_corridor, geometry="geometry_x").to_file("data/Network/processed/generated_nodes_connecting_corridor.gpkg")
-    #gpd.GeoDataFrame(all_objects_corridor,geometry="geometry_x").to_file("data/Network/processed/generated_objects_connecting_corridor.shp")
+    gpd.GeoDataFrame(generated_points_corridor, geometry="geometry_x").to_file("data/infraScanRoad/Network/processed/generated_nodes_connecting_corridor.gpkg")
+    #gpd.GeoDataFrame(all_objects_corridor,geometry="geometry_x").to_file("data/infraScanRoad/Network/processed/generated_objects_connecting_corridor.shp")
 
 
-def get_protected_area(limits):
-    bln = gpd.read_file("data/landuse_landcover/Schutzzonen/BLN/N2017_Revision_landschaftnaturdenkmal_20170727_20221110.shp")
-    wildkorridore = gpd.read_file("data/landuse_landcover/Schutzzonen/Wildtierkorridore/Wildtierkorridore.gpkg")
-    trockenweiden = gpd.read_file("data/landuse_landcover/Schutzzonen/Trockenwiesen/TWW_LV95/trockenwiesenweiden.shp")
-    trockenlandschaften = gpd.read_file("data/landuse_landcover/Schutzzonen/Moorlandschaft/Moorlandschaft_LV95/moorlandschaft.shp")
-    flachmoore = gpd.read_file("data/landuse_landcover/Schutzzonen/Flachmoore/Flachmoor_LV95/flachmoor_20210701.shp")
-    hochmoore = gpd.read_file("data/landuse_landcover/Schutzzonen/Hochmoor/Hochmoor_LV95/hochmoor.shp")
-    bundesinventar_auen = gpd.read_file("data/landuse_landcover/Schutzzonen/Bundesinventar_auen/N2017_Revision_Auengebiete_20171101_20221122.shp")
-    ramsar = gpd.read_file("data/landuse_landcover/Schutzzonen/Ramsar/Ramsar_LV95/ra.shp")
-    naturschutz = gpd.read_file("data/landuse_landcover/Schutzzonen/Inventar_der_Natur-_und_Landsch...uberkommunaler_Bedeutung_-OGD/INV80_NATURSCHUTZOBJEKTE_F.shp")
-    wald = gpd.read_file("data/landuse_landcover/Schutzzonen/Waldareal_-OGD/WALD_WALDAREAL_F.shp")
-    fruchtfolgeflaeche = gpd.read_file("data/landuse_landcover/Schutzzonen/Fruchtfolgeflachen_-OGD/FFF_F.shp")
+def get_protected_area(limits, suffix=None):
+    bln = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/BLN/N2017_Revision_landschaftnaturdenkmal_20170727_20221110.shp")
+    wildkorridore = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Wildtierkorridore/Wildtierkorridore.gdb", layer="N2025_revision_wildtierkorridoreUeberreg_20250201")
+    trockenweiden = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Trockenwiesen/TWW_LV95/Trockenwiesenweiden.gdb")
+    trockenlandschaften = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Moorlandschaft/Moorlandschaft_LV95/N2017_Revision_Moorlandschaft_20171101.shp")
+    flachmoore = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Flachmoore/bundesinventare-flachmoore_2056.shp")
+    hochmoore = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Hochmoor/Hochmoor_LV95/Hochmoore.gdb")
+    bundesinventar_auen = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Bundesinventar_auen/bundesinventare-auen_2056.gdb.zip")
+    ramsar = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Ramsar/Ramsar_LV95/ra.shp")
+    naturschutz = gpd.read_file("data/landuse_landcover/Schutzzonen/Bund/Naturschutz/naturschutzgebiete_2056.gpkg")
+    naturschutzgebiete = gpd.read_file("data/landuse_landcover/Schutzzonen/Canton_ZH/Naturschutzgebiete/Inventar_der_Naturschutzgebiete...ommunaler_Bedeutung_1980_-OGD.gdb")
+    landschaftschutz = gpd.read_file("data/landuse_landcover/Schutzzonen/Canton_ZH/Landschaftschutzobjekte/Inventar_der_Landschaftsschutzo...uberkommunaler_Bedeutung_-OGD.gdb")  
+    wald = gpd.read_file("data/landuse_landcover/Schutzzonen/Canton_ZH/Wald/Waldareal_-OGD/Waldareal_-OGD.gdb")
+    fruchtfolgeflaeche = gpd.read_file("data/landuse_landcover/Schutzzonen/Canton_ZH/Fruchtfolgeflachen/Fruchtfolgeflachen_-OGD/Fruchtfolgeflachen_-OGD.gdb")
+
+
 
     gdf_fully_protected = [
         bln,
@@ -903,7 +933,8 @@ def get_protected_area(limits):
         hochmoore,
         bundesinventar_auen,
         ramsar,
-        naturschutz
+        naturschutz,
+        naturschutzgebiete
     ]
     names_fully_protected = [
         'bln',
@@ -912,32 +943,36 @@ def get_protected_area(limits):
         'hochmoore',
         'bundesinventar_auen',
         'ramsar',
-        'naturschutz'
+        'naturschutz',
+        'naturschutzgebiete' 
     ]
 
     gdf_partly_protected = [
         wald,
         fruchtfolgeflaeche,
         trockenweiden,
-        trockenlandschaften
+        trockenlandschaften,
+        landschaftschutz
     ]
     names_partly_protected = [
         "wald",
         "fruchtfolgeflaeche",
         "trockenweiden",
-        "trockenlandschaften"
+        "trockenlandschaften",
+        'landschaftschutz'
     ]
 
-    multiple_shp_to_one(gdf_fully_protected, names_fully_protected, "fully_protected", limits)
-    multiple_shp_to_one(gdf_partly_protected, names_partly_protected, "partly_protected", limits)
+    frame_suffix = suffix if suffix else None
+
+    multiple_shp_to_one(gdf_fully_protected, names_fully_protected, "fully_protected", limits, frame_suffix=frame_suffix)
+    multiple_shp_to_one(gdf_partly_protected, names_partly_protected, "partly_protected", limits, frame_suffix=frame_suffix)
 
     return
 
 
-def multiple_shp_to_one(gdf_list, names_list, path, limits):
+def multiple_shp_to_one(gdf_list, names_list, path, limits, frame_suffix=None):
     # Initialize an empty list to store the dissolved geometries
     dissolved_geometries = []
-
     for gdf in gdf_list:
         # Dissolve all features within the GeoDataFrame into a single geometry
         dissolved = gdf.dissolve()
@@ -952,7 +987,7 @@ def multiple_shp_to_one(gdf_list, names_list, path, limits):
     combined_gdf["name"] = names_list
     combined_gdf.crs = "epsg:2056"
 
-    combined_gdf.to_file(f"data/landuse_landcover/Schutzzonen/{path}.gpkg", driver="GPKG")
+    combined_gdf.to_file(f"data/landuse_landcover/processed/{path}.gpkg", driver="GPKG")
 
     # Create a bounding box as a shapely object
     frame_box = box(limits[0], limits[1], limits[2], limits[3])
@@ -960,17 +995,20 @@ def multiple_shp_to_one(gdf_list, names_list, path, limits):
     # Clip the GeoDataFrame using the bounding box
     combined_gdf_frame = gpd.clip(combined_gdf, frame_box)
     #combined_gdf_frame.to_file(fr"data\landuse_landcover\Schutzzonen\{path}_frame.gpkg")
-    combined_gdf_frame.to_file(f"data/landuse_landcover/processed/{path}_frame.gpkg")
+    frame_suffix_token = f"_{frame_suffix}" if frame_suffix else ""
+    combined_gdf_frame.to_file(f"data/landuse_landcover/processed/{path}_frame{frame_suffix_token}.gpkg")
 
 
 def all_protected_area_to_raster(suffix=""):
+    suffix_token = f"_{suffix}" if suffix else ""
+
     # Load your shapefile with geopandas
-    #shp_file = r"data\landuse_landcover\processed\fully_protected.gpkg"
-    shp_file =  "data/landuse_landcover/Schutzzonen/fully_protected.gpkg" #correction by Arnor
+    shp_file = "data/landuse_landcover/processed/fully_protected.gpkg"
+    #shp_file =  "data/landuse_landcover/Schutzzonen/fully_protected.gpkg" #correction by Arnor
     shapes = gpd.read_file(shp_file)
 
     # Load your raster file with rasterio
-    tif_file = "data/landuse_landcover/processed/protected_area.tif"
+    tif_file = f"data/landuse_landcover/processed/protected_area{suffix_token}.tif"
 
     try:
         # Load the CSV file with the coordinates
@@ -1011,11 +1049,12 @@ def all_protected_area_to_raster(suffix=""):
             print("No cell to remove")
 
         # Write the updated data to a new raster file
-        with rasterio.open(fr'data/landuse_landcover/processed/zone_no_infra/protected_area_{suffix}.tif', 'w', **meta) as dst:
+        out_file = f"data/landuse_landcover/processed/zone_no_infra/protected_area{suffix_token}.tif"
+        with rasterio.open(out_file, 'w', **meta) as dst:
             dst.write(updated_data, 1)
 
 
-def landuse(limits):
+def landuse(limits, suffix=None):
     # Read the CSV file into a Pandas DataFrame
     # Arealstatistik - 1985, 1997, 2009, 2018
     areal_stat = pd.read_csv("data/landuse_landcover/landcover/ag-b-00.03-37-area-csv.csv", sep=";")
@@ -1036,12 +1075,13 @@ def landuse(limits):
     protected_area_full = fill_raster_dataframe(protected_area)
     print(protected_area_full.head(10).to_string())
     # Correction of the reference of each raster cell from bottom left to top left
-    protected_area_full["N_COORD"] = protected_area_full["N_COORD"] + 100
-    csv_to_tiff(protected_area_full, attribute="AS18_27", path="data/landuse_landcover/processed/protected_area.tif")
+    # protected_area_full["N_COORD"] = protected_area_full["N_COORD"] + 100
+    suffix_token = f"_{suffix}" if suffix else ""
+    csv_to_tiff(protected_area_full, attribute="AS18_27", path=f"data/landuse_landcover/processed/protected_area{suffix_token}.tif")
     # print(areal_stat.head(50).to_string())
 
 
-def get_unproductive_area(limits):
+def get_unproductive_area(limits, suffix=None):
     areal_stat = pd.read_csv("data/landuse_landcover/landcover/ag-b-00.03-37-area-csv.csv", sep=";")
     if limits:
         areal_stat = areal_stat[(areal_stat["E_COORD"] >= limits[0]) &
@@ -1058,9 +1098,9 @@ def get_unproductive_area(limits):
     unproductive_area_full = fill_raster_dataframe(unproductive_area)
     #print(unproductive_area_full.head(10).to_string())
     # Correction of the reference of each raster cell from bottom left to top left
-    unproductive_area_full["N_COORD"] = unproductive_area_full["N_COORD"] + 100
-    csv_to_tiff(unproductive_area_full, attribute="AS18_27", path="data/landuse_landcover/processed/" \
-    "unproductive_area.tif")
+    # unproductive_area_full["N_COORD"] = unproductive_area_full["N_COORD"] + 100
+    suffix_token = f"_{suffix}" if suffix else ""
+    csv_to_tiff(unproductive_area_full, attribute="AS18_27", path=f"data/landuse_landcover/processed/unproductive_area{suffix_token}.tif")
 
     # AS85_17 17 Klassen gemäss Standardnomenklatur der Arealstatistik 1979/85
     # AS85_4  4 Hauptbereiche gemäss Standardnomenklatur der Arealstatistik 1979/85
@@ -1102,4 +1142,3 @@ def tif_to_shp(path_tif, path_shp):
         gdf.to_file(path_shp)
     else:
         print("No valid geometries were found in the raster with the given threshold.")
-

@@ -10,6 +10,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from infraScan.infraScanIntegrated import config as integrated_config
 from infraScan.infraScanIntegrated import settings as integrated_settings
 from infraScan.infraScanIntegrated import pipeline_integrated as integrated_pipeline
+from infraScan.infraScanIntegrated import random_scenarios as integrated_random_scenarios
 
 
 from infraScan.infraScanRail import pipeline as rail_pipeline
@@ -91,7 +92,18 @@ def infrascan_integrated():
     # ================================================================================
     # Phase 5: Scenario Generation
     # ================================================================================
-    if rail_settings.OD_type == 'canton_ZH':
+    shared_scenarios_result = None
+    if integrated_settings.scenario_type == "GENERATED":
+        shared_scenarios_result = integrated_random_scenarios.generate_and_apply_shared_scenarios(
+            start_year=integrated_settings.start_year_scenario,
+            end_year=integrated_settings.end_year_scenario,
+            num_of_scenarios=integrated_settings.amount_of_scenarios,
+            representative_scenarios_count=integrated_settings.representative_scenarios_count,
+            run_road=True,
+            run_rail=True,
+            do_plot=False,
+        )
+    elif rail_settings.OD_type == 'canton_ZH':
         rail_pipeline.phase_8_scenario_generation(runtimes)
 
     # ================================================================================
@@ -167,6 +179,7 @@ def infrascan_integrated():
         "enhanced_network_label": enhanced_network_label,
         "dev_id_lookup": dev_id_lookup,
         "capacity_analysis_results": capacity_analysis_results,
+        "shared_scenarios_result": shared_scenarios_result,
     }
 
 

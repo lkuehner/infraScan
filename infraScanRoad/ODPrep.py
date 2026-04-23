@@ -46,7 +46,7 @@ from scipy.spatial import Voronoi
 
 #os.chdir(r"C:\Users\Fabrice\Desktop\HS23\Thesis\Code")
 # os.chdir(r"C:\Users\spadmin\PycharmProjects\infraScan\infraScanRoad")
-os.chdir("/Volumes/WD_Windows/MSc_Thesis/infraScanRoad")
+#os.chdir("/Volumes/WD_Windows/MSc_Thesis/")
 
 def GetCommunePopulation(y0):  # We find population of each commune.
     rawpop = pd.read_excel('data/_basic_data/KTZH_00000127_00001245.xlsx', sheet_name='Gemeinden', header=None)
@@ -188,7 +188,7 @@ def nw_from_osm(limits):
             gdf_edges = gdf_edges.to_crs("EPSG:2056")
 
             # Save only the edges GeoDataFrame to a GeoPackage
-            output_filename = f"data/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
+            output_filename = f"data/infraScanRoad/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
             gdf_edges.to_file(output_filename, driver="GPKG")
 
         except ValueError as e:
@@ -201,7 +201,7 @@ def osm_nw_to_raster(limits):
     # Add comment
 
     # Folder containing all the geopackages
-    gpkg_folder = "data/Network/OSM_road"
+    gpkg_folder = "data/infraScanRoad/Network/OSM_road"
 
     # List all geopackage files in the folder
     gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')]
@@ -217,11 +217,11 @@ def osm_nw_to_raster(limits):
     gdf_combined['speed_kph'].fillna(30, inplace=True)
     # print(gdf_combined.crs)
     # print(gdf_combined.head(10).to_string())
-    gdf_combined.to_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined.to_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
     print("file stored")
 
 
-    gdf_combined = gpd.read_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined = gpd.read_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
 
     # Define the resolution
     resolution = 100
@@ -290,7 +290,7 @@ def osm_nw_to_raster(limits):
 
 
     with rasterio.open(
-            'data/Network/OSM_tif/speed_limit_raster.tif',
+            'data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif',
             'w',
             driver='GTiff',
             height=raster.shape[0],
@@ -453,14 +453,14 @@ def raster_to_graph(raster_data):
 
 def travel_cost_polygon(frame):
 
-    points_all = gpd.read_file("data/Network/processed/points_attribute.gpkg")
+    points_all = gpd.read_file("data/infraScanRoad/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points_all = points_all[points_all["intersection"] == 0]
     points_all_frame = points_all.cx[frame[0]:frame[2], frame[1]:frame[3]]
     # print(points_all_frame.head(10).to_string())
 
     # travel speed
-    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
+    raster_file = "data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -524,7 +524,7 @@ def travel_cost_polygon(frame):
 
     # Save the path length raster
     with rasterio.open(
-            "data/Network/travel_time/travel_time_raster.tif", 'w',
+            "data/infraScanRoad/Network/travel_time/travel_time_raster.tif", 'w',
             driver='GTiff',
             height=path_length_raster.shape[0],
             width=path_length_raster.shape[1],
@@ -563,7 +563,7 @@ def travel_cost_polygon(frame):
     # Set NaN values to a specific NoData value, e.g., -1
     source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-    path_id_raster = "data/Network/travel_time/source_id_raster.tif"
+    path_id_raster = "data/infraScanRoad/Network/travel_time/source_id_raster.tif"
     with rasterio.open(path_id_raster, 'w',
         driver='GTiff',
         height=source_coord_raster.shape[0],
@@ -578,7 +578,7 @@ def travel_cost_polygon(frame):
     # get Voronoi polygons in vector data as gpd df
     gdf_polygon = raster_to_polygons(path_id_raster)
     #print(gdf_polygon.head(10).to_string())
-    gdf_polygon.to_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
+    gdf_polygon.to_file("data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
 
         # how to get the inputs? nodes in which reference system, weights automatically?
         # how to get the coordinates of the closest point?
@@ -651,7 +651,7 @@ def GetVoronoiCells(limits,outer,inner):
     return
 
 def GetNetworkNodes():
-    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
+    node_table = pd.read_csv("data/infraScanRoad/Network/Road_Node.csv", sep=";")
     return
 
 def polygon_from_points(bounds=None, e_min=None, e_max=None, n_min=None, n_max=None, margin=0):
@@ -686,9 +686,9 @@ def load_nw():
     """
 
     # Read csv files of node, links and link attributes to a Pandas DataFrame
-    edge_table = pd.read_csv("data/Network/Road_Link.csv", sep=";")
-    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
-    link_attribute = pd.read_csv("data/Network/Road_LinkType.csv", sep=";")
+    edge_table = pd.read_csv("data/infraScanRoad/Network/Road_Link.csv", sep=";")
+    node_table = pd.read_csv("data/infraScanRoad/Network/Road_Node.csv", sep=";")
+    link_attribute = pd.read_csv("data/infraScanRoad/Network/Road_LinkType.csv", sep=";")
 
     # Add coordinates of the origin node of each link by merging nodes and links through the node ID
     edge_table = pd.merge(edge_table, node_table, how="left", left_on="From Node", right_on="Node NR").rename(
@@ -728,7 +728,7 @@ def load_nw():
 
     # Drop unwanted columns and store the network DataFrame as shapefile
     nw_gdf = nw_gdf.drop(['point_O','point_D', "line"], axis=1)
-    nw_gdf.to_file("data/temp/network_highway.gpkg")
+    nw_gdf.to_file("data/infraScanRoad/temp/network_highway.gpkg")
 
     return
 
@@ -841,7 +841,7 @@ def GetTAZBasis(bbox):
     df_voronoi["ID_point"] = pointlist
     df_voronoi["geometry"] = df_voronoi[0]
     df_voronoi = df_voronoi.iloc[:, 1:]
-    df_voronoi.to_file("data/Voronoi/voronoi_basis.gpkg")
+    df_voronoi.to_file("data/infraScanRoad/Voronoi/voronoi_basis.gpkg")
     return df_voronoi
 
 def GetTAZwithCommunes(basis):
@@ -917,8 +917,8 @@ limits = [e_min-margin, n_min-margin, e_max+margin, n_max+margin]
 
 #1.	define TAZs defined in GVM
 
-raster_path = "data/Network/travel_time/source_id_raster.tif"
-points_all = gpd.read_file("data/Network/processed/points.gpkg")
+raster_path = "data/infraScanRoad/Network/travel_time/source_id_raster.tif"
+points_all = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
 
 commune_raster, communedf = GetCommuneShapes(raster_path)
 cantonshape = communedf.dissolve()

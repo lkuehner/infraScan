@@ -1,4 +1,4 @@
-name: infraScan
+name: infraScan_2
 channels:
   - conda-forge
   - defaults
@@ -223,4 +223,4 @@ dependencies:
       - tifffile
       - tobler
       - xyzservices
-prefix: /Users/laura/anaconda3/envs/infraScan
+

@@ -13,14 +13,14 @@ from shapely.geometry import Polygon, MultiPolygon
 
 def travel_cost_polygon(frame):
 
-    points_all = gpd.read_file("data/Network/processed/points_attribute.gpkg")
+    points_all = gpd.read_file("data/infraScanRoad/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points_all = points_all[points_all["intersection"] == 0]
     points_all_frame = points_all.cx[frame[0]:frame[2], frame[1]:frame[3]]
     # print(points_all_frame.head(10).to_string())
 
     # travel speed
-    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
+    raster_file = "data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -84,7 +84,7 @@ def travel_cost_polygon(frame):
 
     # Save the path length raster
     with rasterio.open(
-            "data/Network/travel_time/travel_time_raster.tif", 'w',
+            "data/infraScanRoad/Network/travel_time/travel_time_raster.tif", 'w',
             driver='GTiff',
             height=path_length_raster.shape[0],
             width=path_length_raster.shape[1],
@@ -123,7 +123,7 @@ def travel_cost_polygon(frame):
     # Set NaN values to a specific NoData value, e.g., -1
     source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-    path_id_raster = "data/Network/travel_time/source_id_raster.tif"
+    path_id_raster = "data/infraScanRoad/Network/travel_time/source_id_raster.tif"
     with rasterio.open(path_id_raster, 'w',
         driver='GTiff',
         height=source_coord_raster.shape[0],
@@ -138,7 +138,7 @@ def travel_cost_polygon(frame):
     # get Voronoi polygons in vector data as gpd df
     gdf_polygon = raster_to_polygons(path_id_raster)
     #print(gdf_polygon.head(10).to_string())
-    gdf_polygon.to_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
+    gdf_polygon.to_file("data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
 
         # how to get the inputs? nodes in which reference system, weights automatically?
         # how to get the coordinates of the closest point?
@@ -411,19 +411,19 @@ def match_access_point_on_highway(idx, raster):
 def travel_cost_developments(frame):
     # First delete all elements that are in the folder where the files are stored to avoid doubling
 
-    files = glob.glob("data/Network/travel_time/developments/*")
+    files = glob.glob("data/infraScanRoad/Network/travel_time/developments/*")
     for f in files:
         os.remove(f)
 
-    points = gpd.read_file("data/Network/processed/points_attribute.gpkg")
+    points = gpd.read_file("data/infraScanRoad/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points = points[points["intersection"] == 0]
     points = points.cx[frame[0]:frame[2], frame[1]:frame[3]]
 
-    generated_points = gpd.read_file("data/Network/processed/generated_nodes.gpkg")
+    generated_points = gpd.read_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
 
     # travel speed
-    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
+    raster_file = "data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -481,7 +481,7 @@ def travel_cost_developments(frame):
 
             # Save the path length raster
             with rasterio.open(
-                    f"data/Network/travel_time/developments/dev{id_new}_travel_time_raster.tif", 'w',
+                    f"data/infraScanRoad/Network/travel_time/developments/dev{id_new}_travel_time_raster.tif", 'w',
                     driver='GTiff',
                     height=path_length_raster.shape[0],
                     width=path_length_raster.shape[1],
@@ -529,7 +529,7 @@ def travel_cost_developments(frame):
             # Set NaN values to a specific NoData value, e.g., -1
             source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-            path_id_raster = f"data/Network/travel_time/developments/dev{id_new}_source_id_raster.tif"
+            path_id_raster = f"data/infraScanRoad/Network/travel_time/developments/dev{id_new}_source_id_raster.tif"
             with rasterio.open(
                 path_id_raster, 'w',
                 driver='GTiff',
@@ -545,7 +545,7 @@ def travel_cost_developments(frame):
             # get Voronoi polygons in vector data as gpd df
             gdf_polygon = raster_to_polygons(path_id_raster)
             # print(gdf_polygon.head(10).to_string())
-            gdf_polygon.to_file(f"data/Network/travel_time/developments/dev{id_new}_Voronoi.gpkg")
+            gdf_polygon.to_file(f"data/infraScanRoad/Network/travel_time/developments/dev{id_new}_Voronoi.gpkg")
                 # how to get the inputs? nodes in which reference system, weights automatically?
                 # how to get the coordinates of the closest point?
 
@@ -556,10 +556,10 @@ def travel_cost_developments(frame):
 
 def get_voronoi_frame(polygons_gdf):
     margin = 100
-    points_gdf = gpd.read_file("data/Network/processed/points_corridor_attribute.gpkg")
+    points_gdf = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
     points_gdf = points_gdf[points_gdf["intersection"] == 0]
 
-    points_all = gpd.read_file("data/Network/processed/points.gpkg")
+    points_all = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
     points_all.crs = "epsg:2056"
     points_all = points_all[points_all["intersection"] == 0]
 

@@ -24,17 +24,56 @@ from traveltime_delay import *
 
 CHECKPOINT_DIR = "checkpoints"
 
+def _phase_label_for_checkpoint(name):
+    phase_map = {
+        "import_raw_data": "PHASE_2",
+        "map_access_points": "PHASE_2",
+        "generate_infrastructure": "PHASE_3",
+        "import_scenario_variables": "PHASE_4",
+        "scenario_generation": "PHASE_4",
+        "scenario_generation_generated": "PHASE_4",
+        "scenario_generation_static": "PHASE_4",
+        "protected_area_variables": "PHASE_5",
+        "osm_network": "PHASE_5",
+        "elevation_tunnel_bridges": "PHASE_5",
+        "construction_costs": "PHASE_5",
+        "externalities": "PHASE_5",
+        "travel_time_voronoi": "PHASE_5",
+        "travel_time_developments": "PHASE_5",
+        "combine_tt_voronoi": "PHASE_5",
+        "accessibility": "PHASE_5",
+        "od_matrices": "PHASE_6",
+        "tt_optimization_status_quo": "PHASE_6",
+        "tt_optimization_developments": "PHASE_6",
+        "tt_optimization_status_quo_by_od": "PHASE_6",
+        "tt_optimization_developments_by_od": "PHASE_6",
+        "aggregate_costs": "PHASE_7",
+    }
+    return phase_map.get(name, "PHASE_UNKNOWN")
+
+def _phase_token_for_checkpoint(name):
+    phase_label = _phase_label_for_checkpoint(name)
+    if phase_label.startswith("PHASE_"):
+        return phase_label.lower()
+    return "phase_unknown"
+
 def _cp_path(name, ext="sentinel"):
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    phase_token = _phase_token_for_checkpoint(name)
+    return os.path.join(CHECKPOINT_DIR, f"{phase_token}_{name}.{ext}")
+
+def _legacy_cp_path(name, ext="sentinel"):
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     return os.path.join(CHECKPOINT_DIR, f"{name}.{ext}")
 
 def checkpoint_exists(name):
-    return os.path.exists(_cp_path(name))
+    return os.path.exists(_cp_path(name)) or os.path.exists(_legacy_cp_path(name))
 
 def save_checkpoint(name):
     """Mark a section as complete (no data to save)."""
     with open(_cp_path(name), "w") as f:
-        f.write("done")
+        phase_token = _phase_token_for_checkpoint(name)
+        f.write(f"{phase_token}_{name}\n")
     print(f"  [CHECKPOINT] Saved: {name}")
 
 def save_data_checkpoint(name, data):
@@ -46,7 +85,11 @@ def save_data_checkpoint(name, data):
 def load_data_checkpoint(name):
     pkl = _cp_path(name, "pkl")
     if not os.path.exists(pkl):
-        raise FileNotFoundError(f"No data checkpoint found for '{name}'")
+        legacy_pkl = _legacy_cp_path(name, "pkl")
+        if os.path.exists(legacy_pkl):
+            pkl = legacy_pkl
+        else:
+            raise FileNotFoundError(f"No data checkpoint found for '{name}'")
     with open(pkl, "rb") as f:
         data = pickle.load(f)
     print(f"  [CHECKPOINT] Loaded: {name}")
@@ -567,11 +610,8 @@ def print_hi(name):
     runtimes["Reallocate OD matrices to Voronoi polygons"] = time.time() - st
     st = time.time()
 
-    # NOTE: tt_optimization_status_quo() currently crashes with:
-    #   NameError: name 'n_demand' is not defined
-    #   in scoring.py:1683 inside get_nw_data()
-    # Fix scoring.py first, then delete checkpoints/tt_optimization_status_quo.sentinel
-    # to re-run only from this point onward.
+    # NOTE: If this step fails, fix the root cause in scoring.py first and then
+    # delete the matching checkpoint sentinel to re-run from here onward only.
     if not checkpoint_exists("tt_optimization_status_quo"):
         tt_optimization_status_quo()
         save_checkpoint("tt_optimization_status_quo")

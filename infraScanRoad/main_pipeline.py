@@ -27,9 +27,7 @@ def infrascanroad():
     This orchestrator sequentially calls all 8 phases of the road pipeline.
     Each phase is now encapsulated as a separate function for easier debugging and testing.
     """
-    module_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(module_dir)
-    os.chdir(project_root)
+    os.chdir(settings.MAIN)
 
     warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
     runtimes = {}
@@ -51,7 +49,7 @@ def infrascanroad():
     # PHASE 3: INFRASTRUCTURE DEVELOPMENTS
     ##################################################################################
     network, limits_variables, generated_points, current_points, current_access_points = \
-        phase_3_infrastructure_developments(innerboundary, runtimes)  
+        phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes)  
 
 
     ##################################################################################
@@ -73,7 +71,7 @@ def infrascanroad():
     ##################################################################################
     # PHASE 7: Aggregation
     ##################################################################################
-    gdf_costs =phase_7_aggregation(runtimes)
+    gdf_costs = phase_7_aggregation(runtimes)
     
     ##################################################################################
     # PHASE 8: Visualization

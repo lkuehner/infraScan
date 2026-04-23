@@ -96,7 +96,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
 
 
 def get_voronoi_status_quo():
-    existing_nodes = gpd.read_file("data/Network/processed/points.gpkg")
+    existing_nodes = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
     existing_nodes = existing_nodes.set_crs("epsg:2056")
 
     existing_nodes = existing_nodes[existing_nodes["intersection"] == 0]
@@ -113,15 +113,15 @@ def get_voronoi_status_quo():
     # df_voronoi["ID"] = 1
     print(df_voronoi.head(10).to_string())
 
-    df_voronoi.to_file("data/Voronoi/voronoi_status_quo_euclidian.gpkg")
+    df_voronoi.to_file("data/infraScanRoad/Voronoi/voronoi_status_quo_euclidian.gpkg")
 
     return
 
 
 def get_voronoi_all_developments():
-    existing_nodes = gpd.read_file("data/Network/processed/points.gpkg")
+    existing_nodes = gpd.read_file("data/infraScanRoad/Network/processed/points.gpkg")
     existing_nodes = existing_nodes.set_crs("epsg:2056")
-    new_nodes = gpd.read_file("data/Network/processed/generated_nodes.gpkg")
+    new_nodes = gpd.read_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
 
     voronoi_developments = pd.DataFrame(columns=['ID', 'geometry'])
     voronoi_developments = gpd.GeoDataFrame(voronoi_developments, geometry="geometry", crs="epsg:2056")
@@ -151,7 +151,7 @@ def get_voronoi_all_developments():
                                       crs="epsg:2056")
         df_voronoi["ID"] = int(i)
 
-        access_within_corridor = gpd.read_file("data/Network/processed/points_corridor.gpkg")
+        access_within_corridor = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor.gpkg")
         #access_within_corridor = access_within_corridor["geometry"].append(new_temp["geometry"])
         access_within_corridor = gpd.GeoDataFrame(pd.concat([pd.DataFrame(access_within_corridor["geometry"]),
                                                             pd.DataFrame(new_temp["geometry"])], ignore_index=True))
@@ -189,7 +189,7 @@ def get_voronoi_all_developments():
         neighboring_points = pd.concat([neighboring_points, points_in_neighbors])
 
     # Store the polygons as gpkg file
-    voronoi_developments.to_file("data/Voronoi/voronoi_developments_euclidian.gpkg")
+    voronoi_developments.to_file("data/infraScanRoad/Voronoi/voronoi_developments_euclidian.gpkg")
 
     # For the next steps of the work the perimeter must be adapted, thus we keep the bound of the points tha lie in the
     # neighbooring polygons of the polygons in the corridor
@@ -236,7 +236,7 @@ def nw_from_osm(limits):
             gdf_edges = gdf_edges.to_crs("EPSG:2056")
 
             # Save only the edges GeoDataFrame to a GeoPackage
-            output_filename = f"data/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
+            output_filename = f"data/infraScanRoad/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
             gdf_edges.to_file(output_filename, driver="GPKG")
 
         except ValueError as e:
@@ -250,7 +250,7 @@ def split_area(limits, num_splits):
     """
     Split the given area defined by 'limits' into 'num_splits' smaller polygons.
 
-    :param limits: Tuple of (min_x, max_x, min_y, max_y) in LV95 coordinates.
+    :param limits: Tuple of (min_x, min_y, max_x, max_y) in LV95 coordinates.
     :param num_splits: The number of splits along each axis (total areas = num_splits^2).
     :return: List of shapely Polygon objects representing the smaller areas.
     """
@@ -269,8 +269,8 @@ def split_area(limits, num_splits):
 
             # Create the sub-polygon and add it to the list
             sub_polygon = box(sub_min_x, sub_min_y, sub_max_x, sub_max_y)
-            #sub_polygons.append(sub_polygon)
-            sub_polygons = gpd.GeoDataFrame(pd.concat([pd.DataFrame(sub_polygons), pd.DataFrame(sub_polygon).T], ignore_index=True))
+            sub_polygons.append(sub_polygon)
+            #sub_polygons = gpd.GeoDataFrame(pd.concat([pd.DataFrame(sub_polygons), pd.DataFrame(sub_polygon).T], ignore_index=True))
 
     return sub_polygons
 
@@ -279,10 +279,10 @@ def osm_nw_to_raster(limits):
     # Add comment
 
     # Folder containing all the geopackages
-    gpkg_folder = "data/Network/OSM_road"
+    gpkg_folder = "data/infraScanRoad/Network/OSM_road"
 
     # List all geopackage files in the folder
-    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')]
+    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')and not f.startswith(".") and not f.startswith("._")]
 
     # Combine all geopackages into one GeoDataFrame
     gdf_combined = gpd.GeoDataFrame(pd.concat([gpd.read_file(f) for f in gpkg_files], ignore_index=True))
@@ -295,11 +295,11 @@ def osm_nw_to_raster(limits):
     gdf_combined['speed_kph'].fillna(30, inplace=True)
     # print(gdf_combined.crs)
     # print(gdf_combined.head(10).to_string())
-    gdf_combined.to_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined.to_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
     print("file stored")
 
 
-    gdf_combined = gpd.read_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined = gpd.read_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
 
     # Define the resolution
     resolution = 100
@@ -368,7 +368,7 @@ def osm_nw_to_raster(limits):
 
 
     with rasterio.open(
-            'data/Network/OSM_tif/speed_limit_raster.tif',
+            'data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif',
             'w',
             driver='GTiff',
             height=raster.shape[0],

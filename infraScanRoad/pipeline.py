@@ -10,11 +10,32 @@ from .OSM_network import *
 from .data_import import *
 from .generate_infrastructure import *
 from .plots import *
+from .random_scenarios import get_random_scenarios
 from .scenarios import *
 from .scoring import *
 from .traveltime_delay import *
 from .voronoi_tiling import *
 from . import settings
+
+# ==================================================================================
+# PIPELIINE SETTINGS
+# ==================================================================================
+TRAVEL_TIME_SAVINGS_PIPELINES = {
+    "aggregate": {
+        "status_quo_fn": tt_optimization_status_quo,
+        "developments_fn": tt_optimization_all_developments,
+        "monetization_fn": monetize_tts,
+        "status_quo_checkpoint": "tt_optimization_status_quo",
+        "developments_checkpoint": "tt_optimization_developments",
+    },
+    "od": {
+        "status_quo_fn": tt_optimization_status_quo_by_od,
+        "developments_fn": tt_optimization_all_developments_by_od,
+        "monetization_fn": monetize_tts_by_od,
+        "status_quo_checkpoint": "tt_optimization_status_quo_by_od",
+        "developments_checkpoint": "tt_optimization_developments_by_od",
+    },
+}
 
 
 # ==================================================================================
@@ -25,17 +46,59 @@ from . import settings
 
 CHECKPOINT_DIR = "checkpoints"
 
+def _phase_label_for_checkpoint(name):
+    phase_map = {
+        "import_raw_data": "PHASE_2",
+        "import_raw_data_corridor": "PHASE_2",
+        "protected_area_corridor": "PHASE_2",
+        "map_access_points": "PHASE_2",
+        "generate_infrastructure": "PHASE_3",
+        "import_scenario_variables": "PHASE_4",
+        "scenario_generation": "PHASE_4",
+        "scenario_generation_generated": "PHASE_4",
+        "scenario_generation_static": "PHASE_4",
+        "import_raw_data_variables": "PHASE_5",
+        "protected_area_variables": "PHASE_5",
+        "osm_network": "PHASE_5",
+        "elevation_tunnel_bridges": "PHASE_5",
+        "construction_costs": "PHASE_5",
+        "externalities": "PHASE_5",
+        "travel_time_voronoi": "PHASE_5",
+        "travel_time_developments": "PHASE_5",
+        "combine_tt_voronoi": "PHASE_5",
+        "accessibility": "PHASE_5",
+        "od_matrices": "PHASE_6",
+        "tt_optimization_status_quo": "PHASE_6",
+        "tt_optimization_developments": "PHASE_6",
+        "tt_optimization_status_quo_by_od": "PHASE_6",
+        "tt_optimization_developments_by_od": "PHASE_6",
+        "aggregate_costs": "PHASE_7",
+    }
+    return phase_map.get(name, "PHASE_UNKNOWN")
+
+def _phase_token_for_checkpoint(name):
+    phase_label = _phase_label_for_checkpoint(name)
+    if phase_label.startswith("PHASE_"):
+        return phase_label.lower()
+    return "phase_unknown"
+
 def _cp_path(name, ext="sentinel"):
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    phase_token = _phase_token_for_checkpoint(name)
+    return os.path.join(CHECKPOINT_DIR, f"{phase_token}_{name}.{ext}")
+
+def _legacy_cp_path(name, ext="sentinel"):
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     return os.path.join(CHECKPOINT_DIR, f"{name}.{ext}")
 
 def checkpoint_exists(name):
-    return os.path.exists(_cp_path(name))
+    return os.path.exists(_cp_path(name)) or os.path.exists(_legacy_cp_path(name))
 
 def save_checkpoint(name):
     """Mark a section as complete (no data to save)."""
     with open(_cp_path(name), "w") as f:
-        f.write("done")
+           phase_token = _phase_token_for_checkpoint(name)
+           f.write(f"{phase_token}_{name}\n")
     print(f"  [CHECKPOINT] Saved: {name}")
 
 def save_data_checkpoint(name, data):
@@ -47,7 +110,11 @@ def save_data_checkpoint(name, data):
 def load_data_checkpoint(name):
     pkl = _cp_path(name, "pkl")
     if not os.path.exists(pkl):
-        raise FileNotFoundError(f"No data checkpoint found for '{name}'")
+        legacy_pkl = _legacy_cp_path(name, "pkl")
+        if os.path.exists(legacy_pkl):
+            pkl = legacy_pkl
+        else:
+            raise FileNotFoundError(f"No data checkpoint found for '{name}'")
     with open(pkl, "rb") as f:
         data = pickle.load(f)
     print(f"  [CHECKPOINT] Loaded: {name}")
@@ -108,23 +175,26 @@ def phase_2_data_import(limits_corridor,runtimes):
     import_locations()
 
     # Define area that is protected for constructing highway links
-    if not checkpoint_exists("import_raw_data"):
-        get_protected_area(limits=limits_corridor)
-        get_unproductive_area(limits=limits_corridor)
-        landuse(limits=limits_corridor)
-        save_checkpoint("import_raw_data")
+    if not checkpoint_exists("import_raw_data_corridor"):
+        get_protected_area(limits=limits_corridor, suffix="corridor")
+        get_unproductive_area(limits=limits_corridor, suffix="corridor")
+        landuse(limits=limits_corridor, suffix="corridor")
+        save_checkpoint("import_raw_data_corridor")
     else:
-        print("  [CHECKPOINT] Skipping: import_raw_data")
+        print("  [CHECKPOINT] Skipping: import_raw_data_corridor")
 
     # Tif file of all unsuitable land cover and protected areas
     # File is stored to 'data\landuse_landcover\processed\zone_no_infra\protected_area_{suffix}.tif'
-
-    #all_protected_area_to_raster(suffix="corridor")
+    if not checkpoint_exists("protected_area_corridor"):
+        all_protected_area_to_raster(suffix="corridor")
+        save_checkpoint("protected_area_corridor")
+    else:
+        print("  [CHECKPOINT] Skipping: protected_area_corridor")
 
     runtimes["Import land use and land cover data"] = time.time() - st
 
 
-def phase_3_infrastructure_developments(innerboundary, runtimes):
+def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
     """
     INFRASTRUCTURE NETWORK
     # 1) Import network
@@ -141,13 +211,13 @@ def phase_3_infrastructure_developments(innerboundary, runtimes):
     # Import the highway network and preprocess it
     # Data are stored as "data/temp/network_highway.gpkg"
     # load_nw()
-
+    
     # Read the network dataset to avoid running the function above
-    network = gpd.read_file(r"data/temp/network_highway.gpkg")
+    network = gpd.read_file(r"data/infraScanRoad/temp/network_highway.gpkg")
 
     # Import manually gathered access points and map them on the highway infrastructure
     # The same point but with adjusted coordinate are saved to "data\access_highway_matched.gpkg"
-    df_access = pd.read_csv(r"data/manually_gathered_data/highway_access.csv", sep=";")
+    df_access = pd.read_csv(r"data/infraScanRoad/manually_gathered_data/highway_access.csv", sep=";")
 
     if not checkpoint_exists("map_access_points"):
         map_access_points_on_network(current_points=df_access, network=network)
@@ -172,26 +242,26 @@ def phase_3_infrastructure_developments(innerboundary, runtimes):
     # Edges are stored in "data\Network\processed\edges.gpkg"
     # Points in simplified network can be intersections ("intersection"==1) or access points ("intersection"==0)
     # Points are stored in "data\Network\processed\points.gpkg"
-    #reformat_network()
+    reformat_network()
 
 
     # Filter the infrastructure elements that lie within a given polygon
     # Points within the corridor are stored in "data\Network\processed\points_corridor.gpkg"
     # Edges within the corridor are stored in "data\Network\processed\edges_corridor.gpkg"
     # Edges crossing the corridor border are stored in "data\Network\processed\edges_on_corridor.gpkg"
-    #network_in_corridor(polygon=outerboundary)
+    network_in_corridor(polygon=outerboundary)
 
 
 
     # Add attributes to nodes within the corridor (mainly access point T/F)
     # Points with attributes saved as "data\Network\processed\points_attribute.gpkg"
-    #map_values_to_nodes()
+    map_values_to_nodes()
 
     # Add attributes to the edges
-    #get_edge_attributes()
+    get_edge_attributes()
 
     # Add specific elements to the network
-    #required_manipulations_on_network()
+    required_manipulations_on_network()
 
     ##################################################################################
     # 3) Generate developments (new access points) and connection to existing infrastructure
@@ -203,13 +273,13 @@ def phase_3_infrastructure_developments(innerboundary, runtimes):
         num_rand = 1000
         random_gdf = generated_access_points(extent=innerboundary, number=num_rand)
         filter_access_points(random_gdf)
-        #filtered_gdf.to_file(r"data/Network/processed/generated_nodes.gpkg")
+        #filtered_gdf.to_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
 
         # Import the generated points as dataframe
-        generated_points = gpd.read_file(r"data/Network/processed/generated_nodes.gpkg")
+        generated_points = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
 
         # Import current points as dataframe and filter only access points (no intersection points)
-        current_points = gpd.read_file(r"data/Network/processed/points_corridor_attribute.gpkg")
+        current_points = gpd.read_file(r"data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
         current_access_points = current_points.loc[current_points["intersection"] == 0]
 
         # Connect the generated points to the existing access points
@@ -251,8 +321,8 @@ def phase_3_infrastructure_developments(innerboundary, runtimes):
         print("  [CHECKPOINT] Skipping: generate_infrastructure")
         limits_variables = load_data_checkpoint("generate_infrastructure")["limits_variables"]
 
-    generated_points = gpd.read_file("data/Network/processed/generated_nodes.gpkg")
-    current_points = gpd.read_file("data/Network/processed/points_corridor_attribute.gpkg")
+    generated_points = gpd.read_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
+    current_points = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
     current_access_points = current_points.loc[current_points["intersection"] == 0]
 
     runtimes["Generate infrastructure developments"] = time.time() - st
@@ -280,32 +350,46 @@ def phase_4_scenario_generation(limits_variables, runtimes):
     runtimes["Import variable for scenario (population and employment)"] = time.time() - st
     st = time.time()
 
-    # 1) Define scenario based on cantonal predictions
-    if not checkpoint_exists("scenario_generation"):
-        # Import the predicted scenario defined by the canton of Zürich
-        scenario_zh = pd.read_csv(r"data/Scenario/KTZH_00000705_00001741.csv", sep=";")
+    # 1) Generate scenarios depending on configured scenario_type
+    scenario_generation_checkpoint = f"scenario_generation_{settings.scenario_type.lower()}"
 
-        # Define the relative growth per scenario and district
-        # The growth rates are stored in "data/temp/data_scenario_n.shp"
-        future_scenario_zuerich_2022(scenario_zh)
-        # Plot the growth rates as computed above for population and employment and over three scenarios
-        #plot_2x3_subplots(scenario_polygon, outerboundary, network, location)
+    if not checkpoint_exists(scenario_generation_checkpoint):
+        if settings.scenario_type == "STATIC":
+            # Import the predicted scenario defined by the canton of Zürich
+            scenario_zh = pd.read_csv(r"data/infraScanRoad/Scenario/KTZH_00000705_00001741.csv", sep=";")
 
-        # Compute the predicted amount of population and employment in each raster cell (hectar) for each scenario
-        # The resulting raster data are stored in "data/independent_variables/scenario/{col}.tif" with col being pop or empl and the scenario
-        scenario_to_raster(limits_variables)
+            # Define the relative growth per scenario and district
+            # The growth rates are stored in "data/temp/data_scenario_n.shp"
+            future_scenario_zuerich_2022(scenario_zh)
 
-        # Aggregate the the scenario data to over the voronoi polygons, here euclidian polygons
-        # Store the resulting file to "data/Voronoi/voronoi_developments_euclidian_values.shp"
-        polygons_gdf = gpd.read_file(r"data/Voronoi/voronoi_developments_euclidian.gpkg")
-        scenario_to_voronoi(polygons_gdf, euclidean=True)
+            # Compute the predicted amount of population and employment in each raster cell (hectar) for each scenario
+            # The resulting raster data are stored in "data/independent_variables/scenario/{col}.tif" with col being pop or empl and the scenario
+            scenario_to_raster(limits_variables)
 
-        # Convert multiple tif files to one same tif with multiple bands
-        stack_tif_files(var="empl")
-        stack_tif_files(var="pop")
-        save_checkpoint("scenario_generation")
+            # Aggregate the scenario data over euclidian Voronoi polygons
+            polygons_gdf = gpd.read_file(r"data/infraScanRoad/Voronoi/voronoi_developments_euclidian.gpkg")
+            scenario_to_voronoi(polygons_gdf, euclidean=True)
+
+            # Convert multiple tif files to one same tif with multiple bands
+            stack_tif_files(var="empl")
+            stack_tif_files(var="pop")
+
+        elif settings.scenario_type == "GENERATED":
+            # Generate stochastic scenarios and export valuation-year OD matrices
+            # (and generated population rasters, if configured in random_scenarios).
+            get_random_scenarios(
+                start_year=settings.start_year_scenario,
+                end_year=settings.end_year_scenario,
+                num_of_scenarios=settings.amount_of_scenarios,
+                use_cache=False,
+                do_plot=False,
+            )
+        else:
+            raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+        save_checkpoint(scenario_generation_checkpoint)
     else:
-        print("  [CHECKPOINT] Skipping: scenario_generation")
+        print(f"  [CHECKPOINT] Skipping: {scenario_generation_checkpoint}")
 
     runtimes["Generate the scenarios"] = time.time() - st
     st = time.time()
@@ -322,9 +406,13 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
     # 1) Redefine protected area for scoring perimeter
 
     # This operation has already been done above for the corridor limits, here it is applied to the voronoi polygon limits which are bigger than the corridor limits
-    #get_protected_area(limits=limits_variables)
-    #get_unproductive_area(limits=limits_variables)
-    #landuse(limits=limits_variables)
+    if not checkpoint_exists("import_raw_data_variables"):
+        get_protected_area(limits=limits_variables, suffix="variables")
+        get_unproductive_area(limits=limits_variables, suffix="variables")
+        landuse(limits=limits_variables, suffix="variables")
+        save_checkpoint("import_raw_data_variables")
+    else:
+        print("  [CHECKPOINT] Skipping: import_raw_data_variables")
 
     # Find possible links considering land cover and protected areas
     if not checkpoint_exists("protected_area_variables"):
@@ -432,8 +520,8 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
     else:
         print("  [CHECKPOINT] Skipping: travel_time_voronoi")
 
-    voronoi_status_quo = gpd.read_file(r"data/Voronoi/voronoi_status_quo_euclidian.gpkg")
-    voronoi_tt = gpd.read_file(r"data/Network/travel_time/Voronoi_statusquo.gpkg")
+    voronoi_status_quo = gpd.read_file(r"data/infraScanRoad/Voronoi/voronoi_status_quo_euclidian.gpkg")
+    voronoi_tt = gpd.read_file(r"data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
 
     # Same operation is made for all developments
     # These are store similarily than above, with id_new beeing the id of the development (ID of generated point)
@@ -454,13 +542,13 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
     # perimeter. Before the polygons are store in an individual dataset for each development
     # The resulting dataframe is stored to "data/Voronoi/combined_developments.gpkg"
     if not checkpoint_exists("combine_tt_voronoi"):
-        folder_path = "data/Network/travel_time/developments"
+        folder_path = "data/infraScanRoad/Network/travel_time/developments"
         single_tt_voronoi_ton_one(folder_path)
 
         # Based on the scenario and the travel time based Voronoi tiling, compute the predicted population and employment
         # in each polygon and for each scenario
         # Resulting dataset is stored to "data/Voronoi/voronoi_developments_tt_values.shp"
-        polygon_gdf = gpd.read_file(r"data/Voronoi/combined_developments.gpkg")
+        polygon_gdf = gpd.read_file(r"data/infraScanRoad/Voronoi/combined_developments.gpkg")
         scenario_to_voronoi(polygon_gdf, euclidean=False)
         save_checkpoint("combine_tt_voronoi")
     else:
@@ -500,14 +588,59 @@ def phase_6_travel_time_savings(runtimes):
     print("="*80 + "\n")
     st = time.time()
 
+    method = settings.travel_time_savings_method
+    pipeline_config = TRAVEL_TIME_SAVINGS_PIPELINES[method] 
+
+    run_status_quo = pipeline_config["status_quo_fn"]
+    run_developments = pipeline_config["developments_fn"]
+    run_monetization = pipeline_config["monetization_fn"]
+
+    status_quo_checkpoint = pipeline_config["status_quo_checkpoint"]
+    developments_checkpoint = pipeline_config["developments_checkpoint"]
+
+    debug_enabled = bool(getattr(settings, "travel_time_debug_enabled", False))
+    debug_scenarios = None
+    if debug_enabled:
+        configured_debug_scenarios = settings.get_travel_time_debug_scenarios()
+        if settings.scenario_type == "STATIC":
+            debug_scenarios = configured_debug_scenarios
+        elif settings.scenario_type == "GENERATED":
+            if configured_debug_scenarios:
+                debug_scenarios = configured_debug_scenarios
+            else:
+                debug_scenarios = settings.get_representative_generated_scenarios(
+                    n_scenarios=settings.amount_of_scenarios,
+                    n_representatives=settings.generated_representative_scenarios_count,
+                )
+
+    max_developments = None
+    if method == "od":
+        max_developments = settings.od_max_developments
+    elif method == "aggregate" and debug_enabled:
+        max_developments = settings.aggregate_debug_max_developments
+
+
+
+    print(f"  -> Using travel time savings method: {method}")
+
     # Travel time delay on highway
     if not checkpoint_exists("od_matrices"):
-        # Compute the OD matrix for the current infrastructure under all scenarios
-        GetVoronoiOD()
-        # od = GetVoronoiOD()
+        if settings.scenario_type == "STATIC":
+            # deterministic/static scenario workflow
+            GetVoronoiOD()
+            GetVoronoiOD_multi()
+        elif settings.scenario_type == "GENERATED":
+            # New stochastic scenario workflow:
+            GetVoronoiOD_generated_status_quo(
+                year=settings.start_valuation_year,
+            )
+            GetVoronoiOD_multi_generated(
+                year=settings.start_valuation_year,
+                max_developments=max_developments,
+            )
+        else:
+            raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
 
-        # Compute the OD matrix for the infrastructure developments under all scenarios
-        GetVoronoiOD_multi()
         save_checkpoint("od_matrices")
     else:
         print("  [CHECKPOINT] Skipping: od_matrices")
@@ -515,30 +648,49 @@ def phase_6_travel_time_savings(runtimes):
     runtimes["Reallocate OD matrices to Voronoi polygons"] = time.time() - st
     st = time.time()
 
-    # NOTE: tt_optimization_status_quo() currently crashes with:
-    #   NameError: name 'n_demand' is not defined
-    #   in scoring.py:1683 inside get_nw_data()
-    # Fix scoring.py first, then delete checkpoints/tt_optimization_status_quo.sentinel
-    # to re-run only from this point onward.
-    if not checkpoint_exists("tt_optimization_status_quo"):
-        tt_optimization_status_quo()
-        save_checkpoint("tt_optimization_status_quo")
+    # To re-run this section only, delete the corresponding phase-prefixed checkpoint,
+    # e.g. checkpoints/phase_6_tt_optimization_status_quo.sentinel.
+    if not checkpoint_exists(status_quo_checkpoint):
+        if method == "od":
+            if debug_scenarios is not None:
+                run_status_quo(scenarios=debug_scenarios, max_developments=max_developments)
+            else:
+                run_status_quo(max_developments=max_developments)
+        elif debug_scenarios is not None:
+            run_status_quo(scenarios=debug_scenarios)
+        else:
+            run_status_quo()
+        save_checkpoint(status_quo_checkpoint)
     else:
-        print("  [CHECKPOINT] Skipping: tt_optimization_status_quo")
+        print(f"  [CHECKPOINT] Skipping: {status_quo_checkpoint}")
 
-    if not checkpoint_exists("tt_optimization_developments"):
-        # check if flow are possible
-        link_traffic_to_map()
-        print('Flag: link_traffic_to_map is complete')
-        # Run travel time optimization for infrastructure developments and all scenarios
-        tt_optimization_all_developments()
+
+    if not checkpoint_exists(developments_checkpoint):
+        if settings.scenario_type == "STATIC":
+            link_traffic_to_map()
+            print('Flag: link_traffic_to_map is complete')
+        else:
+            print('Flag: link_traffic_to_map skipped for GENERATED scenarios')
+
+        if method == "od":
+            if debug_scenarios is not None:
+                run_developments(scenarios=debug_scenarios, max_developments=max_developments)
+            else:
+                run_developments(max_developments=max_developments)
+        else:
+            if debug_scenarios is not None or max_developments is not None:
+                run_developments(scenarios=debug_scenarios, max_developments=max_developments)
+            else:
+                run_developments()
+
         print('Flag: tt_optimization_all_developments is complete')
-        # Monetize travel time savings
-        monetize_tts(VTTS=settings.VTTS, duration=settings.travel_time_duration)
-        save_checkpoint("tt_optimization_developments")
+        run_monetization(VTTS=settings.VTTS, duration=settings.travel_time_duration)
+        save_checkpoint(developments_checkpoint)
     else:
-        print("  [CHECKPOINT] Skipping: tt_optimization_developments")
+        print(f"  [CHECKPOINT] Skipping: {developments_checkpoint}")
 
+
+        runtimes["Compute travel time savings"] = time.time() - st
     return 
  
 
@@ -549,8 +701,7 @@ def phase_7_aggregation(runtimes):
     st = time.time()
 
     # Aggregate the single cost elements to one dataframe
-    # New dataframe is stored in "data/costs/total_costs.gpkg"
-    # New dataframe also stored in "data/costs/total_costs.csv"
+    # Method-specific outputs are stored as total_costs_<method>.gpkg/.csv
     if not checkpoint_exists("aggregate_costs"):
         print(" -> Aggregate costs")
         aggregate_costs()
@@ -558,12 +709,21 @@ def phase_7_aggregation(runtimes):
     else:
         print("  [CHECKPOINT] Skipping: aggregate_costs")
 
-    # Import to the overall cost dataframe
-    gdf_costs = gpd.read_file(r"data/costs/total_costs.gpkg")
+    # Import method-specific overall cost dataframe
+    method = settings.travel_time_savings_method
+    total_costs_path = fr"data/infraScanRoad/costs/total_costs_{method}.gpkg"
+    gdf_costs = gpd.read_file(total_costs_path)
+    print(f"  -> Using total costs input: {total_costs_path}")
+
     # Convert all costs in million CHF
-    gdf_costs["total_low"] = (gdf_costs["total_low"] / 1000000).astype(int)
-    gdf_costs["total_medium"] = (gdf_costs["total_medium"] / 1000000).astype(int)
-    gdf_costs["total_high"] = (gdf_costs["total_high"] / 1000000).astype(int)
+    if settings.scenario_type == "STATIC":
+        for col in ["total_low", "total_medium", "total_high"]:
+            if col in gdf_costs.columns:
+                gdf_costs[col] = (gdf_costs[col] / 1000000).astype(int)
+    else:
+        for col in ["total_mean", "total_median", "total_std"]:
+            if col in gdf_costs.columns:
+                gdf_costs[col] = (gdf_costs[col] / 1000000).astype(int)
 
     runtimes["Aggregate costs"] = time.time() - st
 
@@ -580,18 +740,18 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
     # Import layers to plot
     tif_path_plot = r"data/landuse_landcover/processed/zone_no_infra/protected_area_corridor.tif"
 
-    links_beeline = gpd.read_file(r"data/Network/processed/new_links.gpkg")
-    links_realistic = gpd.read_file(r"data/Network/processed/new_links_realistic.gpkg")
+    links_beeline = gpd.read_file(r"data/infraScanRoad/Network/processed/new_links.gpkg")
+    links_realistic = gpd.read_file(r"data/infraScanRoad/Network/processed/new_links_realistic.gpkg")
     print(links_realistic.head(5).to_string())
 
     # Plot the net benefits for each generated point and interpolate the area in between
-    generated_points = gpd.read_file(r"data/Network/processed/generated_nodes.gpkg")
+    generated_points = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
     # Get a gpd df with points have an ID_new that is not in links_realistic ID_new
     filtered_rand_gdf = generated_points[~generated_points["ID_new"].isin(links_realistic["ID_new"])]
     #plot_points_gen(points=generated_points, edges=links_beeline, banned_area=tif_path_plot, boundary=boundary_plot, network=network, all_zones=True, plot_name="gen_nodes_beeline")
     #plot_points_gen(points=generated_points, points_2=filtered_rand_gdf, edges=links_realistic, banned_area=tif_path_plot, boundary=boundary_plot, network=network, all_zones=False, plot_name="gen_links_realistic")
 
-    voronoi_dev_2 = gpd.read_file(r"data/Network/travel_time/developments/dev779_Voronoi.gpkg")
+    voronoi_dev_2 = gpd.read_file(r"data/infraScanRoad/Network/travel_time/developments/dev779_Voronoi.gpkg")
     plot_voronoi_development(voronoi_tt, voronoi_dev_2, generated_points, boundary=innerboundary, network=network, access_points=current_access_points, plot_name="new_voronoi")
 
     #plot_voronoi_comp(voronoi_status_quo, voronoi_tt, boundary=boundary_plot, network=network, access_points=current_access_points, plot_name="voronoi")
@@ -599,34 +759,79 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
 
     # Plot the net benefits for each generated point and interpolate the area in between
     # if plot_name is not False, then the plot is stored in "plot/results/{plot_name}.png"
-    plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario low growth", boundary=boundary_plot, network=network,
-                     access_points=current_access_points, plot_name="total_costs_low",col="total_low")
-    plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario medium growth", boundary=boundary_plot, network=network,
-                     access_points=current_access_points, plot_name="total_costs_medium",col="total_medium")
-    plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario high growth", boundary=boundary_plot, network=network,
-                     access_points=current_access_points, plot_name="total_costs_high",col="total_high")
+    if settings.scenario_type == "STATIC":
+        plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario low growth", boundary=boundary_plot, network=network,
+                         access_points=current_access_points, plot_name="total_costs_low", col="total_low")
+        plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario medium growth", boundary=boundary_plot, network=network,
+                         access_points=current_access_points, plot_name="total_costs_medium", col="total_medium")
+        plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario high growth", boundary=boundary_plot, network=network,
+                         access_points=current_access_points, plot_name="total_costs_high", col="total_high")
+    else:
+        if "total_mean" in gdf_costs.columns:
+            plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario mean", boundary=boundary_plot, network=network,
+                             access_points=current_access_points, plot_name="total_costs_mean", col="total_mean")
+        if "total_median" in gdf_costs.columns:
+            plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario median", boundary=boundary_plot, network=network,
+                             access_points=current_access_points, plot_name="total_costs_median", col="total_median")
+        if "total_std" in gdf_costs.columns:
+            plot_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="scenario std", boundary=boundary_plot, network=network,
+                             access_points=current_access_points, plot_name="total_costs_std", col="total_std")
 
     # Plot single cost element
+    local_cols = [c for c in gdf_costs.columns if c.startswith("local_")]
+    tt_cols = [c for c in gdf_costs.columns if c.startswith("tt_")]
+    externality_cols = [c for c in gdf_costs.columns if c.startswith("externalities_")]
+
+    local_col = "local_s1" if "local_s1" in gdf_costs.columns else (
+        "local_s1_pop" if "local_s1_pop" in gdf_costs.columns else (local_cols[0] if local_cols else None)
+    )
+    tt_medium_col = "tt_medium" if "tt_medium" in gdf_costs.columns else (tt_cols[0] if tt_cols else None)
+    tt_low_col = "tt_low" if "tt_low" in gdf_costs.columns else tt_medium_col
+    externality_col = "externalities_s1" if "externalities_s1" in gdf_costs.columns else (
+        externality_cols[0] if externality_cols else None
+    )
+
+    if local_col is None or tt_medium_col is None or externality_col is None:
+        missing = []
+        if local_col is None:
+            missing.append("local_*")
+        if tt_medium_col is None:
+            missing.append("tt_*")
+        if externality_col is None:
+            missing.append("externalities_*")
+        raise KeyError(f"Missing required Phase 8 columns: {missing}. Available columns: {list(gdf_costs.columns)}")
+
+    print(f"  [PHASE 8] Using columns -> local: {local_col}, tt: {tt_medium_col}, externalities: {externality_col}")
 
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="construction",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
                             plot_name="construction and maintenance", col="construction_maintenance")
-    # Due to erros when plotting convert values to integer
-    gdf_costs["local_s1"] = gdf_costs["local_s1"].astype(int)
+    # Due to errors when plotting convert values to integer
+    gdf_costs[local_col] = gdf_costs[local_col].astype(int)
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="access time to highway",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
-                            plot_name="access_costs",col="local_s1")
+                            plot_name="access_costs",col=local_col)
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="highway travel time",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
-                            plot_name="tt_costs",col="tt_medium")
+                            plot_name="tt_costs",col=tt_medium_col)
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="noise emissions",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
-                            plot_name="externalities_costs", col="externalities_s1")
+                            plot_name="externalities_costs", col=externality_col)
 
     # Plot uncertainty
-    gdf_costs['mean_costs'] = gdf_costs[["total_low", "total_medium", "total_high"]].mean(axis=1)
-    gdf_costs["std"] = gdf_costs[["total_low", "total_medium", "total_high"]].std(axis=1)
-    gdf_costs['cv'] = gdf_costs[["total_low", "total_medium", "total_high"]].std(axis=1) / abs(gdf_costs['mean_costs'])
+    if settings.scenario_type == "STATIC":
+        uncertainty_cols = ["total_low", "total_medium", "total_high"]
+    else:
+        uncertainty_cols = [c for c in gdf_costs.columns if c.startswith("total_scenario_")]
+
+    if len(uncertainty_cols) >= 2:
+        gdf_costs['mean_costs'] = gdf_costs[uncertainty_cols].mean(axis=1)
+        gdf_costs["std"] = gdf_costs[uncertainty_cols].std(axis=1)
+    else:
+        gdf_costs['mean_costs'] = gdf_costs.get("total_mean", 0)
+        gdf_costs["std"] = gdf_costs.get("total_std", 0)
+
+    gdf_costs['cv'] = gdf_costs["std"] / abs(gdf_costs['mean_costs'])
     gdf_costs['cv'] = gdf_costs['cv'] * 10000000
 
     plot_cost_uncertainty(df_costs=gdf_costs, banned_area=tif_path_plot,
@@ -642,18 +847,35 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
     # Plot the uncertainty of the nbr highest ranked developments as boxplot
     boxplot(gdf_costs, 15)
 
-    plot_benefit_distribution_bar_single(df_costs=gdf_costs, column="total_medium")
+    if settings.scenario_type == "STATIC":
+        overall_bar_col = "total_medium"
+        overall_line_cols = ["total_low", "total_medium", "total_high"]
+        overall_labels = ["low growth", "medium growth", "high growth"]
+    else:
+        overall_bar_col = "total_mean" if "total_mean" in gdf_costs.columns else (
+            "total_median" if "total_median" in gdf_costs.columns else None
+        )
+        generated_total_cols = [c for c in gdf_costs.columns if c.startswith("total_scenario_")]
+        if generated_total_cols:
+            overall_line_cols = generated_total_cols[: min(3, len(generated_total_cols))]
+            overall_labels = overall_line_cols
+        else:
+            overall_line_cols = [c for c in ["total_mean", "total_median", "total_std"] if c in gdf_costs.columns]
+            overall_labels = overall_line_cols
 
-    plot_benefit_distribution_line_multi(df_costs=gdf_costs, columns=["total_low", "total_medium", "total_high"],
-                                         labels=["low growth", "medium growth",
-                                                 "high growth"], plot_name="overall", legend_title="Tested scenario")
+    if overall_bar_col is not None:
+        plot_benefit_distribution_bar_single(df_costs=gdf_costs, column=overall_bar_col)
 
-    single_components = ["construction_maintenance", "local_s1", "tt_low", "externalities_s1"]
+    if overall_line_cols:
+        plot_benefit_distribution_line_multi(df_costs=gdf_costs, columns=overall_line_cols,
+                                             labels=overall_labels, plot_name="overall", legend_title="Tested scenario")
+
+    single_components = ["construction_maintenance", local_col, tt_low_col, externality_col]
     for i in single_components:
         gdf_costs[i] = (gdf_costs[i] / 1000000).astype(int)
     # Plot benefit distribution for all cost elements
     plot_benefit_distribution_line_multi(df_costs=gdf_costs,
-                                         columns=["construction_maintenance", "local_s1", "tt_low", "externalities_s1"],
+                                         columns=["construction_maintenance", local_col, tt_low_col, externality_col],
                                          labels=["construction and maintenance", "access costs", "highway travel time",
                                                  "external costs"], plot_name="single_components",
                                          legend_title="Scoring components")

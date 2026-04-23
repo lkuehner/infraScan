@@ -8,9 +8,10 @@ n_min, n_max = 1237000, 1254000     # 1238000, 1252000 - 1237000, 1252000
 
 # only cross-model settings
 
-
+""""
 scenario_type = "GENERATED"
 amount_of_scenarios = 2
+representative_scenarios_count = 3
 start_year_scenario = 2018
 end_year_scenario = 2100
 start_valuation_year = 2050
@@ -24,3 +25,4 @@ rail_annualization_factor = 0.1 * 1 * 250
 road_annualization_factor = 0.1 * 1 * 250
 
 road_development_sample_size = 1000
+"""

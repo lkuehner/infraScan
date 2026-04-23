@@ -602,4 +602,3 @@ def calculate_flow_on_edges(graph, OD_matrix, points):
                                      direction=direction)
 
     return station_flow_graph, line_flow_graph
-

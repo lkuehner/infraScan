@@ -8,6 +8,9 @@ import rasterio as rio
 from rasterio.session import AWSSession
 
 
+
+
+
 def future_scenario_zuerich_2022(df_input):
     """
     This function represents the changes in population and employment based on data from the canton of Zürich.
@@ -17,7 +20,7 @@ def future_scenario_zuerich_2022(df_input):
     """
 
     # import boundaries of each region
-    boundaries = gpd.read_file("data/Scenario/Boundaries/Gemeindegrenzen/UP_BEZIRKE_F.shp")
+    boundaries = gpd.read_file("data/infraScanRoad/Scenario/Boundaries/Gemeindegrenzen/UP_BEZIRKE_F.shp")
 
     # group per location and time
     df = df_input.copy()
@@ -37,14 +40,14 @@ def future_scenario_zuerich_2022(df_input):
     # plot development per region in one
     boundaries = boundaries.merge(df_rel, left_on="BEZIRK", right_on="bezirk", how="right")
 
-    df_scenario = boundaries[["BEZIRK", "geometry", 2050]]
+    df_scenario = boundaries[["BEZIRK", "geometry", 2050].copy()]
     df_scenario.rename(columns={2050: 's1_pop'}, inplace=True)
 
     # import boundaries of each region
-    empl_dev = pd.read_csv("data/Scenario/KANTON_ZUERICH_596.csv", sep=";", encoding='unicode_escape')
+    empl_dev = pd.read_excel("data/_basic_data/KANTON_ZUERICH_596.xlsx")
     empl_dev = empl_dev[["BFS_NR", "GEBIET_NAME", "INDIKATOR_JAHR", "INDIKATOR_VALUE"]]
 
-    bfs_nr = gpd.read_file("data/Scenario/Boundaries/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
+    bfs_nr = gpd.read_file("data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     bfs_nr = bfs_nr[["BFS", "BEZIRKSNAM"]]
 
     empl_dev = empl_dev.merge(right=bfs_nr, left_on="BFS_NR", right_on="BFS", how="left")
@@ -100,20 +103,20 @@ def future_scenario_zuerich_2022(df_input):
     print(df_scenraio.columns)
     plot_2x3_subplots(df_scenraio, lim, network, location)
     """
-    df_scenario.to_file("data/temp/data_scenario_n.shp")
+    df_scenario.to_file("data/infraScanRoad/temp/data_scenario_n.shp")
     return
 
 
 def scenario_to_raster(frame=False):
     # Load the shapefile
-    scenario_polygon = gpd.read_file("data/temp/data_scenario_n.shp")
+    scenario_polygon = gpd.read_file("data/infraScanRoad/temp/data_scenario_n.shp")
 
     if frame != False:
         # Create a bounding box polygon
         bounding_poly = box(frame[0], frame[1], frame[2], frame[3])
-        len = (frame[2]-frame[0])/100
-        width = (frame[3]-frame[1])/100
-        print(f"frame: {len, width} it should be 377, 437")
+        x_cells = (frame[2] - frame[0]) / 100
+        y_cells = (frame[3] - frame[1]) / 100
+        print(f"frame cells (x, y): ({x_cells}, {y_cells})")
 
         # Calculate the difference polygon
         # This will be the area in the bounding box not covered by existing polygons
@@ -201,8 +204,8 @@ def scenario_to_voronoi(polygons_gdf, euclidean=False):
     # You can save this geodataframe to a new file if desired
     #print(polygons_gdf.head(10).to_string())
     if euclidean:
-        polygons_gdf.to_file("data/Voronoi/voronoi_developments_euclidian_values.shp")
+        polygons_gdf.to_file("data/infraScanRoad/Voronoi/voronoi_developments_euclidian_values.shp")
     else:
-        polygons_gdf.to_file("data/Voronoi/voronoi_developments_tt_values.shp")
+        polygons_gdf.to_file("data/infraScanRoad/Voronoi/voronoi_developments_tt_values.shp")
 
     return
