@@ -42,9 +42,11 @@ start_valuation_year = 2050
 # Optional debug throttles for Phase 6 travel-time computation
 # When enabled, these limits are applied in both aggregate and OD modes.
 travel_time_debug_enabled = True  # True or False
-travel_time_debug_scenarios = "low", "medium", "high"  # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
+travel_time_debug_scenarios = None  # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
 aggregate_debug_max_developments = 10  # e.g. 1
+aggregate_debug_developments_ids = [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
 od_max_developments = 10  # e.g. 1
+od_debug_development_ids = [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for OD debug runs; overrides od_max_developments when set
 
 def get_travel_time_debug_scenarios():
     if not travel_time_debug_enabled:
@@ -55,7 +57,28 @@ def get_travel_time_debug_scenarios():
             return [travel_time_debug_scenarios]
         return list(travel_time_debug_scenarios)
 
-    return ["low", "medium", "high"]
+    if scenario_type == "STATIC":
+        return ["low", "medium", "high"]
+
+
+def get_aggregate_debug_development_ids():
+    if aggregate_debug_developments_ids is None:
+        return None
+
+    if isinstance(aggregate_debug_developments_ids, (int, str)):
+        return [int(aggregate_debug_developments_ids)]
+
+    return [int(x) for x in aggregate_debug_developments_ids]
+
+
+def get_od_debug_development_ids():
+    if od_debug_development_ids is None:
+        return None
+
+    if isinstance(od_debug_development_ids, (int, str)):
+        return [int(od_debug_development_ids)]
+
+    return [int(x) for x in od_debug_development_ids]
 
 
 def get_representative_generated_scenarios(

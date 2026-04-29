@@ -28,12 +28,12 @@ TRAVEL_TIME_SAVINGS_PIPELINES = {
         "status_quo_checkpoint": "tt_optimization_status_quo",
         "developments_checkpoint": "tt_optimization_developments",
     },
-    "od": {
+    "od_raster": {
         "status_quo_fn": tt_optimization_status_quo_by_od,
         "developments_fn": tt_optimization_all_developments_by_od,
-        "monetization_fn": monetize_tts_by_od,
+        "monetization_fn": monetize_tts_by_od_raster,
         "status_quo_checkpoint": "tt_optimization_status_quo_by_od",
-        "developments_checkpoint": "tt_optimization_developments_by_od",
+        "developments_checkpoint": "tt_optimization_developments_by_od_raster",
     },
 }
 
@@ -47,6 +47,8 @@ TRAVEL_TIME_SAVINGS_PIPELINES = {
 CHECKPOINT_DIR = "checkpoints"
 
 def _phase_label_for_checkpoint(name):
+    if name.startswith("od_matrices_"):
+        return "PHASE_6"
     phase_map = {
         "import_raw_data": "PHASE_2",
         "import_raw_data_corridor": "PHASE_2",
@@ -597,53 +599,86 @@ def phase_6_travel_time_savings(runtimes):
 
     status_quo_checkpoint = pipeline_config["status_quo_checkpoint"]
     developments_checkpoint = pipeline_config["developments_checkpoint"]
+    od_matrices_checkpoint = (
+        f"od_matrices_{settings.scenario_type.lower()}"
+    )
 
     debug_enabled = bool(getattr(settings, "travel_time_debug_enabled", False))
-    debug_scenarios = None
+    status_quo_scenarios = None
+    development_scenarios = None
+
     if debug_enabled:
         configured_debug_scenarios = settings.get_travel_time_debug_scenarios()
+
         if settings.scenario_type == "STATIC":
-            debug_scenarios = configured_debug_scenarios
+            if method == "aggregate":
+                status_quo_scenarios = configured_debug_scenarios
+                development_scenarios = (
+                    [s for s in configured_debug_scenarios if str(s) in {"low", "medium", "high"}]
+                    if configured_debug_scenarios is not None else None
+                )
+            else:
+                status_quo_scenarios = configured_debug_scenarios
+                development_scenarios = configured_debug_scenarios
+
         elif settings.scenario_type == "GENERATED":
             if configured_debug_scenarios:
-                debug_scenarios = configured_debug_scenarios
+                status_quo_scenarios = configured_debug_scenarios
+                development_scenarios = configured_debug_scenarios
             else:
-                debug_scenarios = settings.get_representative_generated_scenarios(
+                selected_generated = settings.get_representative_generated_scenarios(
                     n_scenarios=settings.amount_of_scenarios,
                     n_representatives=settings.generated_representative_scenarios_count,
                 )
+                status_quo_scenarios = selected_generated
+                development_scenarios = selected_generated
+
+        else:
+            raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+
 
     max_developments = None
+    selected_developments = None
     if method == "od":
-        max_developments = settings.od_max_developments
+        selected_developments = settings.get_od_debug_development_ids()
+        if selected_developments is None:
+            max_developments = settings.od_max_developments
     elif method == "aggregate" and debug_enabled:
-        max_developments = settings.aggregate_debug_max_developments
-
+        selected_developments = settings.get_aggregate_debug_development_ids()
+        if selected_developments is None:
+            max_developments = settings.aggregate_debug_max_developments
 
 
     print(f"  -> Using travel time savings method: {method}")
 
     # Travel time delay on highway
-    if not checkpoint_exists("od_matrices"):
+    if not checkpoint_exists(od_matrices_checkpoint):
         if settings.scenario_type == "STATIC":
-            # deterministic/static scenario workflow
+            # Compute the OD matrix for the current infrastructure under all scenarios
             GetVoronoiOD()
-            GetVoronoiOD_multi()
+
+            # Compute the OD matrix for the infrastructure developments under all scenarios
+            GetVoronoiOD_multi(selected_developments=selected_developments)
+
         elif settings.scenario_type == "GENERATED":
-            # New stochastic scenario workflow:
+            # Aggregate assignment needs a generated status-quo Voronoi OD.
             GetVoronoiOD_generated_status_quo(
                 year=settings.start_valuation_year,
             )
+                # OD-based comparison uses the development-specific Voronoi OD basis.
             GetVoronoiOD_multi_generated(
-                year=settings.start_valuation_year,
-                max_developments=max_developments,
+            year=settings.start_valuation_year,
+            max_developments=max_developments,
+            selected_developments=selected_developments,
             )
+            
         else:
             raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
 
-        save_checkpoint("od_matrices")
+        save_checkpoint(od_matrices_checkpoint)
     else:
-        print("  [CHECKPOINT] Skipping: od_matrices")
+        print(f"  [CHECKPOINT] Skipping: {od_matrices_checkpoint}")
 
     runtimes["Reallocate OD matrices to Voronoi polygons"] = time.time() - st
     st = time.time()
@@ -652,14 +687,15 @@ def phase_6_travel_time_savings(runtimes):
     # e.g. checkpoints/phase_6_tt_optimization_status_quo.sentinel.
     if not checkpoint_exists(status_quo_checkpoint):
         if method == "od":
-            if debug_scenarios is not None:
-                run_status_quo(scenarios=debug_scenarios, max_developments=max_developments)
+            if status_quo_scenarios is not None:
+                run_status_quo(scenarios=status_quo_scenarios, max_developments=max_developments)
             else:
                 run_status_quo(max_developments=max_developments)
-        elif debug_scenarios is not None:
-            run_status_quo(scenarios=debug_scenarios)
         else:
-            run_status_quo()
+            if status_quo_scenarios is not None:
+                run_status_quo(scenarios=status_quo_scenarios)
+            else:
+                run_status_quo()
         save_checkpoint(status_quo_checkpoint)
     else:
         print(f"  [CHECKPOINT] Skipping: {status_quo_checkpoint}")
@@ -672,16 +708,16 @@ def phase_6_travel_time_savings(runtimes):
         else:
             print('Flag: link_traffic_to_map skipped for GENERATED scenarios')
 
-        if method == "od":
-            if debug_scenarios is not None:
-                run_developments(scenarios=debug_scenarios, max_developments=max_developments)
-            else:
-                run_developments(max_developments=max_developments)
-        else:
-            if debug_scenarios is not None or max_developments is not None:
-                run_developments(scenarios=debug_scenarios, max_developments=max_developments)
-            else:
-                run_developments()
+
+        kwargs = {}
+        if development_scenarios is not None:
+            kwargs["scenarios"] = development_scenarios
+        if selected_developments is not None:
+            kwargs["selected_developments"] = selected_developments
+        if max_developments is not None:
+            kwargs["max_developments"] = max_developments
+        run_developments(**kwargs)
+
 
         print('Flag: tt_optimization_all_developments is complete')
         run_monetization(VTTS=settings.VTTS, duration=settings.travel_time_duration)

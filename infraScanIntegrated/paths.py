@@ -29,6 +29,7 @@ SCENARIO_CACHE_SHARED_DIR = os.path.join("data", "Scenario", "cache", "shared")
 SHARED_COMPONENTS_PATH = os.path.join(SCENARIO_CACHE_SHARED_DIR,"shared_scenario_components.pkl",)
 SHARED_SUMMARY_PATH = os.path.join(SCENARIO_CACHE_SHARED_DIR, "shared_scenario_summary.csv",)
 SHARED_SELECTION_PATH = os.path.join(SCENARIO_CACHE_SHARED_DIR, "shared_representative_scenarios.csv",)
+SHARED_POPULATION_RASTER_DIR = os.path.join(SCENARIO_CACHE_SHARED_DIR, "population_rasters")
 
 # Shared input data for integrated scenario orchestration.
 # Defaults follow the rail path registry, but can be overridden here centrally.

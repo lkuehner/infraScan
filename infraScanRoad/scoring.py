@@ -983,7 +983,6 @@ def aggregate_costs():
     # print(total_costs.sort_values(by="total_medium", ascending=False).head(7).to_string())
 
     # Filter dataframe columns to store the data as csv
-    total_costs[total_output_cols].to_csv(r"data/infraScanRoad/costs/total_costs.csv", index=False)
     total_costs[total_output_cols].to_csv(fr"data/infraScanRoad/costs/total_costs_{method}.csv", index=False)
 
     # Save Results a geodata
@@ -993,7 +992,6 @@ def aggregate_costs():
     total_costs = gpd.GeoDataFrame(total_costs, geometry="geometry")
 
     # Store as file
-    gpd.GeoDataFrame(total_costs).to_file(r"data/infraScanRoad/costs/total_costs.gpkg")
     gpd.GeoDataFrame(total_costs).to_file(fr"data/infraScanRoad/costs/total_costs_{method}.gpkg")
 
 
@@ -1336,7 +1334,7 @@ def GetVoronoiOD():
         print(f"Sum of OD matrix before {temp_sum} and after {temp_sum2} removing diagonal values")
 
         # Save pd df to csv
-        od_grouped.to_csv(fr"data/infraScanRoad/traffic_flow/od/od_matrix_{scen}.csv")
+        od_grouped.to_csv(fr"data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static/od_matrix_{scen}.csv")
         # odmat.to_csv(r"data/infraScanRoad/traffic_flow/od/od_matrix_raw.csv")
 
         # Print sum of all values in od df
@@ -1362,7 +1360,7 @@ def GetVoronoiOD():
         voronoidf_temp = voronoidf_temp.merge(origin, how='left', left_on='ID_point', right_on='voronoi_id')
         voronoidf_temp = voronoidf_temp.merge(destination, how='left', left_on='ID_point', right_on='voronoi_id')
         voronoidf_temp = voronoidf_temp.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-        voronoidf_temp.to_file(fr"data/infraScanRoad/traffic_flow/od/OD_voronoidf_{scen}.gpkg", driver="GPKG")
+        voronoidf_temp.to_file(fr"data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static/OD_voronoidf_{scen}.gpkg", driver="GPKG")
 
         # Same for odmat and commune_df
         if scen == "20":
@@ -1373,12 +1371,12 @@ def GetVoronoiOD():
             commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
             commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
             commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-            commune_df.to_file(r"data/infraScanRoad/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+            commune_df.to_file(r"data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static/OD_commune_filtered.gpkg", driver="GPKG")
 
     return
 
 
-def GetVoronoiOD_multi():
+def GetVoronoiOD_multi(selected_developments=None):
     voronoi_tif_path = r"data/infraScanRoad/Network/travel_time/source_id_raster.tif"
     scen_empl_path = r"data/independent_variable/processed/scenario/scen_empl.tif"
     scen_pop_path = r"data/independent_variable/processed/scenario/scen_pop.tif"
@@ -1427,7 +1425,10 @@ def GetVoronoiOD_multi():
             xx_values.append(xx)
 
     # Convert values to integers if needed
-    xx_values = [int(xx) for xx in xx_values]
+    xx_values = sorted(int(xx) for xx in xx_values)
+    if selected_developments is not None:
+        selected_set = {int(x) for x in selected_developments}
+        xx_values = [xx for xx in xx_values if xx in selected_set]
     print(len(xx_values))
 
     for xx in tqdm(xx_values, desc='Processing Voronoi IDs'):
@@ -1561,7 +1562,7 @@ def GetVoronoiOD_multi():
             np.fill_diagonal(od_grouped.values, 0)
 
             # Save pd df to csv
-            od_grouped.to_csv(fr"data/infraScanRoad/traffic_flow/od/developments/od_matrix_dev{xx}_{scen}.csv")
+            od_grouped.to_csv(fr"data/infraScanRoad/traffic_flow/od/development_voronoi/od_matrix_dev{xx}_{scen}.csv")
             # odmat.to_csv(r"data/infraScanRoad/traffic_flow/od/od_matrix_raw.csv")
 
     return
@@ -1761,7 +1762,7 @@ def GetVoronoiOD_generated_status_quo(year=None):
 
     return
 
-def GetVoronoiOD_multi_generated(year=None, max_developments=None):
+def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_developments=None):
     """
     Build development-specific OD matrices for generated scenarios.
 
@@ -1876,7 +1877,10 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None):
             xx_values.append(int(match.group(1)))
 
     xx_values = sorted(xx_values)
-    if max_developments is not None:
+    if selected_developments is not None:
+        selected_set = {int(x) for x in selected_developments}
+        xx_values = [xx for xx in xx_values if xx in selected_set]
+    elif max_developments is not None:
         max_developments = int(max_developments)
         if max_developments > 0:
             xx_values = xx_values[:max_developments]
@@ -2543,13 +2547,13 @@ def SUE_C_Logit(nroutes, D_od, par, delta_ir, delta_odr, cf_r, theta):
 
     # D_r to be optimized -> demand on each route
     res = minimize(fun, D_r0.flatten(),
-                   # method='trust-constr',
-                  method='SLSQP',
-                   # jac=fun_der,
+                    #method='trust-constr',
+                    method='SLSQP',
+                   #jac=fun_der,
                    constraints=[eq_cons, ineq_cons],
                    options={   'ftol': 1e5,
                        'maxiter': 2,
-                       'verbose': 0,
+                       #'verbose': 0,
                        'disp': True},
                    bounds=bounds
                    )
@@ -2817,23 +2821,16 @@ def travel_flow_optimization_by_od(OD_matrix, points, edges, voronoi, dev, scen)
 
 
 
-def tt_optimization_all_developments(scenarios=None, max_developments=None):
+def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None):
     # Run travel time optimization for infrastructure developments and all scenarios
     # Scenario = OD matrix
     # Development = new network
     if scenarios is None:
-        scenario_files = [
-            f for f in os.listdir("data/infraScanRoad/traffic_flow/od")
-            if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-        ]
-        if scenario_files:
-            scenario = sorted([f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files])
-        else:
-            scenario = ["low", "medium", "high"]
+        scenario = ["low", "medium", "high"]
     else:
         scenario = list(scenarios)
 
-    directory_path = r"data/infraScanRoad/traffic_flow/od/developments"
+    directory_path = r"data/infraScanRoad/traffic_flow/od/development_voronoi"
     # Get the developments
     developments = []
     for filename in os.listdir(directory_path):
@@ -2846,7 +2843,10 @@ def tt_optimization_all_developments(scenarios=None, max_developments=None):
 
     # Convert values to integers if needed
     developments = sorted(set(int(xx) for xx in developments))
-    if max_developments is not None:
+    if selected_developments is not None:
+        selected_set = {int(x) for x in selected_developments}
+        developments = [dev for dev in developments if dev in selected_set]
+    elif max_developments is not None:
         max_developments = int(max_developments)
         if max_developments > 0:
             developments = developments[:max_developments]
@@ -2963,7 +2963,7 @@ def tt_optimization_all_developments(scenarios=None, max_developments=None):
             # print(f"Amount of overlapping points in links_development['new_ID'] and developments: {len(set(links_developments['ID_new']).intersection(developments))}")
 
             # Get path like data/traffic_flow/od/od_matrix_i.csv
-            od_path = fr"data/infraScanRoad/traffic_flow/od/developments/od_matrix_dev{dev}_{scen}.csv"
+            od_path = fr"data/infraScanRoad/traffic_flow/od/development_voronoi/od_matrix_dev{dev}_{scen}.csv"
             if not os.path.exists(od_path):
                 print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
                 continue
@@ -2989,20 +2989,13 @@ def tt_optimization_all_developments(scenarios=None, max_developments=None):
         costs_travel_time.to_csv(fr"data/infraScanRoad/traffic_flow/travel_time.csv", index=False)
 
     # Save results as csv
-    costs_travel_time.to_csv(fr"data/infraScanRoad/traffic_flow/travel_time_2.csv", index=False)
+    costs_travel_time.to_csv(fr"data/infraScanRoad/traffic_flow/travel_time_aggregate.csv", index=False)
 
 
 def tt_optimization_status_quo(scenarios=None):
     # Run travel time optimization for current infrastructure and all scenarios
     if scenarios is None:
-        scenario_files = [
-            f for f in os.listdir("data/infraScanRoad/traffic_flow/od")
-            if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-        ]
-        if scenario_files:
-            scenario = sorted([f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files])
-        else:
-            scenario = ["20", "low", "medium", "high"]
+        scenario = ["20", "low", "medium", "high"]
     else:
         scenario = list(scenarios)
     dev = "status_quo"
@@ -3011,7 +3004,7 @@ def tt_optimization_status_quo(scenarios=None):
     results_status_quo = {}
     for scen in scenario:
         # GEt path like data/traffic_flow/od/od_matrix_i.csv
-        od_path = r"data/infraScanRoad/traffic_flow/od/od_matrix_" + scen + ".csv"
+        od_path = r"data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static/od_matrix_" + scen + ".csv"
         if not os.path.exists(od_path):
             print(f"Missing status-quo OD matrix for scenario {scen} - skipping")
             continue
@@ -3039,10 +3032,89 @@ def tt_optimization_status_quo(scenarios=None):
         print("No aggregate status-quo travel-time results were generated.")
         return
 
-    pd.DataFrame(results_status_quo).to_csv(r"data/infraScanRoad/traffic_flow/travel_time_status_quo.csv", index=False)
+    pd.DataFrame(results_status_quo).to_csv(r"data/infraScanRoad/traffic_flow/travel_time_status_quo_aggregate.csv", index=False)
+
+def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
+    """
+    Compute OD-level travel times for the status-quo network using the
+    status-quo catchment system and corresponding OD matrices.
+
+    Output:
+        One combined CSV with columns:
+        origin, destination, demand, travel_time, development, scenario
+    """
+    if scenarios is None:
+        if settings.scenario_type == "STATIC":
+            scenarios = ["low", "medium", "high"]
+        elif settings.scenario_type == "GENERATED":
+            scenario_files = [
+                f for f in os.listdir("data/infraScanRoad/traffic_flow/od/scenarios_voronoi/generated")
+                if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
+            ]
+            scenarios = sorted(
+                [f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files]
+            )
+        else:
+            raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+    points = gpd.read_file("data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
+    points.index = points.index.astype(int)
+    points = points.sort_index()
+
+    edges = gpd.read_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+    edges["ID_edge"] = edges["ID_edge"].astype(int)
+    edges = edges.sort_values(by=["ID_edge"])
+
+    results_status_quo = {}
+
+    if settings.scenario_type == "STATIC":
+        od_dir = "data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static"
+    elif settings.scenario_type == "GENERATED":
+        od_dir = "data/infraScanRoad/traffic_flow/od/scenarios_voronoi/generated"
+    else:
+        raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+    voronoi_df = gpd.read_file("data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
+
+    for scen in scenarios:
+        print(f"Status quo OD travel times on status-quo Voronoi for scenario: {scen}")
+
+        od_path = os.path.join(od_dir, f"od_matrix_{scen}.csv")
+        if not os.path.exists(od_path):
+            print(f"Missing status-quo OD matrix for scenario {scen} - skipping")
+            continue
+
+        OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
+
+        od_tt_df = travel_flow_optimization_by_od(
+            OD_matrix=OD_matrix,
+            points=points.copy(),
+            edges=edges.copy(),
+            voronoi=voronoi_df,
+            dev="status_quo",
+            scen=scen,
+        )
+
+        results_status_quo[scen] = od_tt_df
+
+    if not results_status_quo:
+        print("No OD travel-time results were generated for status quo.")
+        return results_status_quo
+
+    od_tt_status_quo_df = pd.concat(results_status_quo.values(), ignore_index=True)
+    output_path = "data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv"
+    od_tt_status_quo_df.to_csv(output_path, index=False)
+
+    split_base = "data/infraScanRoad/traffic_flow/od/by_scenario"
+    for scen, scen_df in od_tt_status_quo_df.groupby("scenario"):
+        scen_dir = os.path.join(split_base, str(scen))
+        os.makedirs(scen_dir, exist_ok=True)
+        scen_df.to_csv(os.path.join(scen_dir, "status_quo_od_tt.csv"), index=False)
+
+    return results_status_quo
 
 
-def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None):
+def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None, selected_developments=None):
     """
     Compute OD-level travel times for all infrastructure developments.
 
@@ -3051,15 +3123,22 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
         origin, destination, demand, travel_time, development, scenario
     """
     if scenarios is None:
-        scenario_files = [
-            f for f in os.listdir("data/infraScanRoad/traffic_flow/od")
-            if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-        ]
-        scenarios = sorted(
-            [f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files]
-    )
+        if settings.scenario_type == "STATIC":
+            scenarios = ["low", "medium", "high"]
+        elif settings.scenario_type == "GENERATED":
+            scenario_files = [
+                f for f in os.listdir("data/infraScanRoad/traffic_flow/od/scenarios_voronoi/generated")
+                if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
+            ]
+            scenarios = sorted(
+                [f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files]
+            )
+        else:
+            raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
 
-    directory_path = r"data/infraScanRoad/traffic_flow/od/developments"
+
+    directory_path = r"data/infraScanRoad/traffic_flow/od/development_voronoi"
+
 
     # Get the developments only for the requested scenarios
     developments = []
@@ -3070,7 +3149,10 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
             developments.append(int(match.group(1)))
 
     developments = sorted(set(developments))
-    if max_developments is not None:
+    if selected_developments is not None:
+        selected_set = {int(x) for x in selected_developments}
+        developments = [dev for dev in developments if dev in selected_set]
+    elif max_developments is not None:
         max_developments = int(max_developments)
         if max_developments > 0:
             developments = developments[:max_developments]
@@ -3154,7 +3236,7 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
             points = points.sort_index()
 
             # Get path like data/traffic_flow/od/od_matrix_i.csv
-            od_path = fr"data/infraScanRoad/traffic_flow/od/developments/od_matrix_dev{dev}_{scen}.csv"
+            od_path = fr"data/infraScanRoad/traffic_flow/od/development_voronoi/od_matrix_dev{dev}_{scen}.csv"
             if not os.path.exists(od_path):
                 print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
                 continue
@@ -3200,115 +3282,19 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
 
 
 
-def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
-    """
-    Compute OD-level travel times for the status-quo network using each
-    development-specific scenario OD matrix and Voronoi system.
-
-    This keeps the demand basis and catchment system identical between
-    status quo and development for every (development, scenario) comparison.
-
-    Output:
-        One combined CSV with columns:
-        origin, destination, demand, travel_time, development, scenario
-    """
-    if scenarios is None:
-        scenario_files = [
-            f for f in os.listdir("data/infraScanRoad/traffic_flow/od")
-            if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-        ]
-        scenarios = sorted(
-            [f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files]
-        )
-
-    directory_path = r"data/infraScanRoad/traffic_flow/od/developments"
-
-    developments = []
-    scenario_set = set(scenarios)
-    for filename in os.listdir(directory_path):
-        match = re.match(r'od_matrix_dev(\d+)_(.+)\.csv', filename)
-        if match and match.group(2) in scenario_set:
-            developments.append(int(match.group(1)))
-
-    developments = sorted(set(developments))
-    if max_developments is not None:
-        max_developments = int(max_developments)
-        if max_developments > 0:
-            developments = developments[:max_developments]
-
-    points = gpd.read_file("data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
-    points.index = points.index.astype(int)
-    points = points.sort_index()
-
-    edges = gpd.read_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
-    edges["ID_edge"] = edges["ID_edge"].astype(int)
-    edges = edges.sort_values(by=["ID_edge"])
-
-    results_status_quo = {}
-
-    for dev in tqdm(developments):
-        for scen in scenarios:
-            print(f"Status quo OD travel times on development Voronoi {dev} for scenario: {scen}")
-
-            od_path = fr"data/infraScanRoad/traffic_flow/od/developments/od_matrix_dev{dev}_{scen}.csv"
-            if not os.path.exists(od_path):
-                print(
-                    f"Missing development-based OD matrix for status quo run "
-                    f"(development {dev}, scenario {scen}) - skipping"
-                )
-                continue
-
-            voronoi_path = (
-                fr"data/infraScanRoad/Network/travel_time/developments/dev{dev}_Voronoi.gpkg"
-            )
-            if not os.path.exists(voronoi_path):
-                print(
-                    f"Missing development Voronoi for status quo run "
-                    f"(development {dev}) - skipping"
-                )
-                continue
-
-            OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
-            voronoi_df = gpd.read_file(voronoi_path)
-
-            od_tt_df = travel_flow_optimization_by_od(
-                OD_matrix=OD_matrix,
-                points=points.copy(),
-                edges=edges.copy(),
-                voronoi=voronoi_df,
-                dev=dev,
-                scen=scen,
-            )
-
-            results_status_quo[(dev, scen)] = od_tt_df
-
-    if not results_status_quo:
-        print("No OD travel-time results were generated for status quo.")
-        return results_status_quo
-
-    od_tt_status_quo_df = pd.concat(results_status_quo.values(), ignore_index=True)
-    output_path = "data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv"
-    od_tt_status_quo_df.to_csv(output_path, index=False)
-
-    split_base = "data/infraScanRoad/traffic_flow/od/by_scenario"
-    for scen, scen_df in od_tt_status_quo_df.groupby("scenario"):
-        scen_dir = os.path.join(split_base, str(scen))
-        os.makedirs(scen_dir, exist_ok=True)
-        scen_df.to_csv(os.path.join(scen_dir, "status_quo_od_tt.csv"), index=False)
-
-    return results_status_quo
 
 def monetize_tts(VTTS, duration):
     # Import total travel time for each scenario and each development
-    tt_total = pd.read_csv(r"data/infraScanRoad/traffic_flow/travel_time.csv")
+    tt_total = pd.read_csv(r"data/infraScanRoad/traffic_flow/travel_time_aggregate.csv")
 
     # Import reference travel time for each scenario and current infrastructure
-    tt_status_quo = pd.read_csv(fr"data/infraScanRoad/traffic_flow/travel_time_status_quo.csv")
+    tt_status_quo = pd.read_csv(fr"data/infraScanRoad/traffic_flow/travel_time_status_quo_aggregate.csv")
 
     scenario_cols = [col for col in tt_total.columns if col != "development"]
     if not scenario_cols:
         raise ValueError("travel_time.csv contains no scenario columns to monetize.")
 
+    # convert columns object to float
     def _to_scalar(value):
         if isinstance(value, str):
             stripped = value.strip()
@@ -3329,7 +3315,7 @@ def monetize_tts(VTTS, duration):
     for scen in scenario_cols:
         if scen not in tt_status_quo.columns:
             raise KeyError(
-                f"Scenario '{scen}' missing in travel_time_status_quo.csv. "
+                f"Scenario '{scen}' missing in travel_time_status_quo_aggregate.csv. "
                 f"Available: {list(tt_status_quo.columns)}"
             )
         out_col = f"tt_{scen}"
@@ -3343,13 +3329,13 @@ def monetize_tts(VTTS, duration):
     # drop useless columns
     tt_total = tt_total.drop(columns=scenario_cols)
     method = "aggregate"
-    tt_total.to_csv(r"data/infraScanRoad/costs/traveltime_savings.csv", index=False)
     tt_total.to_csv(fr"data/infraScanRoad/costs/traveltime_savings_{method}.csv", index=False)
 
 
 def monetize_tts_by_od(VTTS, duration):
     """
-    Monetize OD-level travel time savings using demand-weighted OD travel times.
+    Monetize OD-level travel time savings using demand-weighted total travel
+    times per scenario.
 
     Inputs:
         - data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv
@@ -3357,61 +3343,40 @@ def monetize_tts_by_od(VTTS, duration):
 
     Outputs:
         - data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv
-        - data/infraScanRoad/costs/traveltime_savings.csv
+        - data/infraScanRoad/costs/traveltime_savings_od.csv
     """
     # Import OD-level travel times for status quo and developments
     tt_status_quo = pd.read_csv("data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv")
     tt_developments = pd.read_csv("data/infraScanRoad/traffic_flow/od/developments_od_tt.csv")
 
-    # Keep only needed columns and rename for merge clarity
-    tt_status_quo = tt_status_quo.rename(columns={
-        "demand": "demand_status_quo",
-        "travel_time": "travel_time_status_quo"
-    })
-
-    tt_developments = tt_developments.rename(columns={
-        "demand": "demand_development",
-        "travel_time": "travel_time_development"
-    })
-
-    # Merge on development-specific OD pair + scenario
-    merged = tt_developments.merge(
-        tt_status_quo[[
-            "development",
-            "origin",
-            "destination",
-            "scenario",
-            "demand_status_quo",
-            "travel_time_status_quo"
-        ]],
-        on=["development", "origin", "destination", "scenario"],
-        how="left"
+    tt_status_quo["weighted_total_tt"] = (
+        tt_status_quo["demand"] * tt_status_quo["travel_time"]
+    )
+    tt_developments["weighted_total_tt"] = (
+        tt_developments["demand"] * tt_developments["travel_time"]
     )
 
-    # Use development OD demand for weighting
-    merged["demand_used"] = merged["demand_development"]
+    status_quo_total = (
+        tt_status_quo.groupby("scenario", as_index=False)["weighted_total_tt"]
+        .sum()
+        .rename(columns={"weighted_total_tt": "status_quo_total_tt"})
+    )
+    development_total = (
+        tt_developments.groupby(["development", "scenario"], as_index=False)["weighted_total_tt"]
+        .sum()
+        .rename(columns={"weighted_total_tt": "development_total_tt"})
+    )
 
-    # Demand-weighted total travel times per OD pair
-    merged["status_quo_tt_weighted"] = (
-        merged["travel_time_status_quo"] * merged["demand_used"]
-    )
-    merged["development_tt_weighted"] = (
-        merged["travel_time_development"] * merged["demand_used"]
-    )
+    merged = development_total.merge(status_quo_total, on="scenario", how="left")
 
     # Positive value means savings
     # TODO: check if this sign convention is correct and consistent with downstream code
-    merged["tt_savings_daily"] = (
-        merged["status_quo_tt_weighted"] - merged["development_tt_weighted"]
-    )
+    merged["tt_savings_daily"] = merged["status_quo_total_tt"] - merged["development_total_tt"]
 
     # monetization factor of travel time (peak hour * CHF/h * 365 d/a * 30 a)
     # TODO: harmonize with infraScanRail
     mon_factor = VTTS * 2.5 * 250 * duration
-
     merged["monetized_savings"] = merged["tt_savings_daily"] * mon_factor
-
- 
     merged.to_csv("data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv", index=False)
 
     split_base = "data/infraScanRoad/traffic_flow/od/by_scenario"
@@ -3420,14 +3385,7 @@ def monetize_tts_by_od(VTTS, duration):
         os.makedirs(scen_dir, exist_ok=True)
         scen_df.to_csv(os.path.join(scen_dir, "od_tt_savings_detailed.csv"), index=False)
 
-    # Aggregate to one row per development and scenario
-    aggregated = (
-        merged.groupby(["development", "scenario"], as_index=False)["monetized_savings"]
-        .sum()
-    )
-
-    #Wide format: one column per scenario
-    tt_wide = aggregated.pivot(
+    tt_wide = merged.pivot(
         index="development",
         columns="scenario",
         values="monetized_savings"
@@ -3447,14 +3405,307 @@ def monetize_tts_by_od(VTTS, duration):
 
 
     method = "od"
-    tt_wide.to_csv("data/infraScanRoad/costs/traveltime_savings.csv", index=False)
     tt_wide.to_csv(fr"data/infraScanRoad/costs/traveltime_savings_{method}.csv", index=False)
 
     print("Saved detailed OD TT savings to: data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv")
-    print("Saved aggregated TT savings to: data/infraScanRoad/costs/traveltime_savings.csv")
+    print(f"Saved aggregated TT savings to: data/infraScanRoad/costs/traveltime_savings_{method}.csv")
 
     return merged, tt_wide
 
+def monetize_tts_by_od_raster(VTTS, duration):
+    """
+    Monetize raster-basis OD travel-time savings
+
+    Main idea:
+    1. Keep a stable raster basis (same raster cells in SQ and development).
+    2. Keep the original commune-to-commune OD demand as the demand basis.
+    3. Recompute commune-to-catchment shares from raster population/employment
+       separately for the SQ network and for each development network.
+    4. Use routed catchment-pair travel times from phase 6 as tt(c(a), c(b)).
+    5. Weight those catchment-pair travel times with the redistributed commune
+       OD demand to get total weighted travel time per scenario/development.
+
+    Inputs:
+        - data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv
+        - data/infraScanRoad/traffic_flow/od/developments_od_tt.csv
+
+    Outputs:
+        - data/infraScanRoad/traffic_flow/od/od_tt_savings_raster_detailed.csv
+        - data/infraScanRoad/costs/traveltime_savings_od_raster.csv
+    """
+    if settings.scenario_type != "STATIC":
+        raise NotImplementedError(
+            "monetize_tts_by_od_raster currently implements the validated "
+            "STATIC raster-basis workflow only."
+        )
+
+    status_quo_path = "data/infraScanRoad/traffic_flow/od/status_quo_od_tt.csv"
+    developments_path = "data/infraScanRoad/traffic_flow/od/developments_od_tt.csv"
+    sq_source_path = "data/infraScanRoad/Network/travel_time/source_id_raster.tif"
+    pop_raster_path = "data/independent_variable/processed/scenario/scen_pop.tif"
+    empl_raster_path = "data/independent_variable/processed/scenario/scen_empl.tif"
+
+    tt_status_quo = pd.read_csv(status_quo_path)
+    tt_developments = pd.read_csv(developments_path)
+
+    required_sq_cols = {"scenario", "origin", "destination", "travel_time"}
+    required_dev_cols = {"development", "scenario", "origin", "destination", "travel_time"}
+    missing_sq = required_sq_cols.difference(tt_status_quo.columns)
+    missing_dev = required_dev_cols.difference(tt_developments.columns)
+    if missing_sq:
+        raise ValueError(
+            f"Missing required columns in {status_quo_path}: {sorted(missing_sq)}"
+        )
+    if missing_dev:
+        raise ValueError(
+            f"Missing required columns in {developments_path}: {sorted(missing_dev)}"
+        )
+
+    # Keep numeric consistency in the routed catchment-pair TT tables.
+    tt_status_quo["scenario"] = tt_status_quo["scenario"].astype(str)
+    tt_developments["scenario"] = tt_developments["scenario"].astype(str)
+    for col in ["origin", "destination", "travel_time"]:
+        tt_status_quo[col] = pd.to_numeric(tt_status_quo[col], errors="coerce")
+    for col in ["development", "origin", "destination", "travel_time"]:
+        tt_developments[col] = pd.to_numeric(tt_developments[col], errors="coerce")
+
+    # Stable raster basis:
+    # - sq_source gives the SQ road catchment id for each raster cell.
+    # - commune_raster gives the commune id for each raster cell on the same grid.
+    with rasterio.open(sq_source_path) as src:
+        sq_source = src.read(1)
+    commune_raster, _ = GetCommuneShapes(raster_path=sq_source_path)
+
+    # Original commune-to-commune demand basis.
+    od = GetHighwayPHDemandPerCommune()
+    odmat = GetODMatrix(od).astype(float)
+    od_long = odmat.stack().rename("od_demand").reset_index()
+    od_long.columns = ["origin_commune", "destination_commune", "od_demand"]
+    od_long = od_long[
+        (od_long["origin_commune"] != od_long["destination_commune"]) &
+        (od_long["od_demand"] > 0)
+    ].copy()
+
+    # STATIC scenario rasters use fixed bands.
+    band_map = {"medium": 1, "low": 2, "high": 3}
+    scenarios = [scen for scen in ["low", "medium", "high"] if scen in set(tt_developments["scenario"])]
+
+    def shares_by_commune_and_catchment(df):
+        """
+        Convert raster population/employment mass into commune->catchment shares.
+
+        origin_share:
+            share of a commune's origin mass (population) that lies in a given catchment
+        dest_share:
+            share of a commune's destination mass (employment) that lies in a given catchment
+        """
+        origin = (
+            df.groupby(["commune_id", "catchment"], as_index=False)["pop"]
+            .sum()
+            .rename(columns={"catchment": "origin_catchment", "pop": "origin_mass"})
+        )
+        dest = (
+            df.groupby(["commune_id", "catchment"], as_index=False)["empl"]
+            .sum()
+            .rename(columns={"catchment": "destination_catchment", "empl": "dest_mass"})
+        )
+
+        origin["origin_total"] = origin.groupby("commune_id")["origin_mass"].transform("sum")
+        dest["dest_total"] = dest.groupby("commune_id")["dest_mass"].transform("sum")
+
+        origin["origin_share"] = np.where(
+            origin["origin_total"] > 0,
+            origin["origin_mass"] / origin["origin_total"],
+            0.0,
+        )
+        dest["dest_share"] = np.where(
+            dest["dest_total"] > 0,
+            dest["dest_mass"] / dest["dest_total"],
+            0.0,
+        )
+
+        origin = origin.rename(columns={"commune_id": "origin_commune"})[
+            ["origin_commune", "origin_catchment", "origin_share"]
+        ]
+        dest = dest.rename(columns={"commune_id": "destination_commune"})[
+            ["destination_commune", "destination_catchment", "dest_share"]
+        ]
+        return origin, dest
+
+    rows = []
+    development_ids = sorted(
+        int(dev) for dev in tt_developments["development"].dropna().astype(int).unique()
+    )
+
+    for scen in scenarios:
+        band = band_map[scen]
+
+        # Load the scenario-specific population and employment rasters on the stable grid.
+        with rasterio.open(pop_raster_path) as src:
+            pop = src.read(band).astype(float)
+        with rasterio.open(empl_raster_path) as src:
+            empl = src.read(band).astype(float)
+
+        # SQ catchment-pair travel times for this scenario.
+        sq_tt = (
+            tt_status_quo[tt_status_quo["scenario"] == scen][["origin", "destination", "travel_time"]]
+            .rename(
+                columns={
+                    "origin": "origin_catchment",
+                    "destination": "destination_catchment",
+                    "travel_time": "tt_sq",
+                }
+            )
+        )
+
+        # Build raster -> commune -> SQ catchment allocation.
+        valid_sq = (
+            (sq_source > 0) &
+            (commune_raster > 0) &
+            np.isfinite(pop) &
+            np.isfinite(empl) &
+            (pop >= 0) &
+            (empl >= 0)
+        )
+        sq_df = pd.DataFrame(
+            {
+                "commune_id": commune_raster[valid_sq].astype(int),
+                "catchment": sq_source[valid_sq].astype(int),
+                "pop": pop[valid_sq],
+                "empl": empl[valid_sq],
+            }
+        )
+        sq_origin, sq_dest = shares_by_commune_and_catchment(sq_df)
+
+        # Redistribute commune OD demand over SQ catchment pairs.
+        sq_pairs = (
+            od_long
+            .merge(sq_origin, on="origin_commune", how="left")
+            .merge(sq_dest, on="destination_commune", how="left")
+            .merge(sq_tt, on=["origin_catchment", "destination_catchment"], how="left")
+        )
+        sq_pairs = sq_pairs.dropna(subset=["origin_share", "dest_share", "tt_sq"]).copy()
+        sq_pairs["pair_demand"] = (
+            sq_pairs["od_demand"] * sq_pairs["origin_share"] * sq_pairs["dest_share"]
+        )
+        sq_pairs["weighted_tt"] = sq_pairs["pair_demand"] * sq_pairs["tt_sq"]
+        sq_total = float(sq_pairs["weighted_tt"].sum())
+
+        for dev_id in development_ids:
+            dev_source_path = (
+                f"data/infraScanRoad/Network/travel_time/developments/dev{dev_id}_source_id_raster.tif"
+            )
+            if not os.path.exists(dev_source_path):
+                print(f"Missing source_id raster for development {dev_id} - skipping")
+                continue
+
+            with rasterio.open(dev_source_path) as src:
+                dev_source = src.read(1)
+
+            # Development catchment-pair travel times for this development and scenario.
+            dev_tt = (
+                tt_developments[
+                    (tt_developments["development"] == dev_id) &
+                    (tt_developments["scenario"] == scen)
+                ][["origin", "destination", "travel_time"]]
+                .rename(
+                    columns={
+                        "origin": "origin_catchment",
+                        "destination": "destination_catchment",
+                        "travel_time": "tt_dev",
+                    }
+                )
+            )
+            if dev_tt.empty:
+                print(f"No OD TT rows for development {dev_id} in scenario {scen} - skipping")
+                continue
+
+            # Build raster -> commune -> development catchment allocation on the same stable grid.
+            valid_dev = (
+                (dev_source > 0) &
+                (commune_raster > 0) &
+                np.isfinite(pop) &
+                np.isfinite(empl) &
+                (pop >= 0) &
+                (empl >= 0)
+            )
+            dev_df = pd.DataFrame(
+                {
+                    "commune_id": commune_raster[valid_dev].astype(int),
+                    "catchment": dev_source[valid_dev].astype(int),
+                    "pop": pop[valid_dev],
+                    "empl": empl[valid_dev],
+                }
+            )
+            dev_origin, dev_dest = shares_by_commune_and_catchment(dev_df)
+
+            # Redistribute the SAME commune OD demand over development catchment pairs.
+            # Only the within-commune spatial split changes because raster cells may
+            # belong to different catchments in the development.
+            dev_pairs = (
+                od_long
+                .merge(dev_origin, on="origin_commune", how="left")
+                .merge(dev_dest, on="destination_commune", how="left")
+                .merge(dev_tt, on=["origin_catchment", "destination_catchment"], how="left")
+            )
+            dev_pairs = dev_pairs.dropna(subset=["origin_share", "dest_share", "tt_dev"]).copy()
+            if dev_pairs.empty:
+                print(f"No raster-weighted OD pairs for development {dev_id} in scenario {scen} - skipping")
+                continue
+
+            dev_pairs["pair_demand"] = (
+                dev_pairs["od_demand"] * dev_pairs["origin_share"] * dev_pairs["dest_share"]
+            )
+            dev_pairs["weighted_tt"] = dev_pairs["pair_demand"] * dev_pairs["tt_dev"]
+            dev_total = float(dev_pairs["weighted_tt"].sum())
+
+            rows.append(
+                {
+                    "development": int(dev_id),
+                    "scenario": scen,
+                    "sq_total_weighted_tt": sq_total,
+                    "dev_total_weighted_tt": dev_total,
+                    "tt_savings_daily": sq_total - dev_total,
+                    "sq_pair_rows": int(len(sq_pairs)),
+                    "dev_pair_rows": int(len(dev_pairs)),
+                }
+            )
+
+    merged = pd.DataFrame(rows)
+    if merged.empty:
+        raise ValueError("No raster-basis OD TT savings could be computed.")
+
+    # Monetize the daily TT savings with the same factor used elsewhere in road.
+    # TO DO: check
+    mon_factor = VTTS * 2.5 * 250 * duration
+    merged["monetized_savings"] = merged["tt_savings_daily"] * mon_factor
+
+    detailed_out = "data/infraScanRoad/traffic_flow/od/od_tt_savings_raster_detailed.csv"
+    merged.to_csv(detailed_out, index=False)
+
+    split_base = "data/infraScanRoad/traffic_flow/od/by_scenario"
+    for scen, scen_df in merged.groupby("scenario"):
+        scen_dir = os.path.join(split_base, str(scen))
+        os.makedirs(scen_dir, exist_ok=True)
+        scen_df.to_csv(os.path.join(scen_dir, "od_tt_savings_raster_detailed.csv"), index=False)
+
+    tt_wide = (
+        merged.pivot(index="development", columns="scenario", values="monetized_savings")
+        .reset_index()
+    )
+    tt_wide.columns.name = None
+    tt_wide = tt_wide.rename(
+        columns={col: f"tt_{col}" for col in tt_wide.columns if col != "development"}
+    )
+
+    method = "od_raster"
+    wide_out = f"data/infraScanRoad/costs/traveltime_savings_{method}.csv"
+    tt_wide.to_csv(wide_out, index=False)
+
+    print(f"Saved detailed OD-raster TT savings to: {detailed_out}")
+    print(f"Saved aggregated TT savings to: {wide_out}")
+
+    return merged, tt_wide
 
 def discounting(df, discount_rate, base_year=2018):
     """
