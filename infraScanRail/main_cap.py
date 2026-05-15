@@ -559,7 +559,7 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
             failed_developments.append(dev_id)
 
     # Save results
-    capacity_results_path = Path(paths.MAIN) / "data" / "Network" / "capacity" / "capacity_analysis_results.json"
+    capacity_results_path = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "capacity" / "capacity_analysis_results.json"
     capacity_results_path.parent.mkdir(parents=True, exist_ok=True)
     with open(capacity_results_path, 'w') as f:
         json.dump(capacity_analysis_results, f, indent=2)
@@ -588,7 +588,7 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
     )
 
     # Manual verification checkpoint
-    output_csv_path = Path(paths.MAIN) / "data" / "costs" / "capacity_intervention_costs.csv"
+    output_csv_path = Path(paths.MAIN) / "data" / "infraScanRail" / "costs" / "capacity_intervention_costs.csv"
     print("\n" + "="*80)
     print("MANUAL VERIFICATION CHECKPOINT")
     print("="*80)
@@ -1120,7 +1120,7 @@ def export_pipeline_comparison_report_statistics():
     os.makedirs(output_dir, exist_ok=True)
 
     # Load and prepare data using the helper function from plots.py
-    from plots import _prepare_pipeline_data
+    from .plots import _prepare_pipeline_data
 
     print(f"  Loading and preparing pipeline data...")
     df_new = _prepare_pipeline_data(new_data_path, pipeline='new')
@@ -1820,7 +1820,7 @@ def extract_capacity_intervention_costs(
     results_df = pd.DataFrame(results)
 
     # Save to CSV
-    output_path = Path(paths.MAIN) / "data" / "costs" / "capacity_intervention_costs.csv"
+    output_path = Path(paths.MAIN) / "data" / "infraScanRail" / "costs" / "capacity_intervention_costs.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_path, index=False)
 

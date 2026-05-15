@@ -25,13 +25,13 @@ figureoption=1 #0: no figures, otherwise, 1
 
 def convert_data_to_input():
     # Import gpkg file with the network points
-    points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
+    points = gpd.read_file("data/infraScanRail/Network/processed/points_with_attribute.gpkg")
 
 
-    #point_in_corridor = gpd.read_file("data/Network/processed/points_corridor.gpkg")
-    #points_on_border = gpd.read_file("data/Network/processed/points_corridor_border.gpkg")
+    #point_in_corridor = gpd.read_file("data/infraScanRail/Network/processed/points_corridor.gpkg")
+    #points_on_border = gpd.read_file("data/infraScanRail/Network/processed/points_corridor_border.gpkg")
     # Import gpkg file with the network edges
-    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/infraScanRail/Network/processed/edges_with_attribute.gpkg")
 
 
     # Set crs for points and edges to epsg:2056
@@ -103,15 +103,15 @@ def get_nw_data():
     ### Check for 2050
 
     # Import OD matrix and flatten it (D_od)
-    OD_matrix = pd.read_csv("data/traffic_flow/od/od_matrix_2020.csv", sep=",", index_col=0)
+    OD_matrix = pd.read_csv("data/infraScanRail/traffic_flow/od/od_matrix_2020.csv", sep=",", index_col=0)
     print(OD_matrix.head(5).to_string())
     # Import polygons of the corridor
-    #voronoi_OD = gpd.read_file("data/traffic_flow/od/OD_voronoidf.gpkg")
-    voronoi_OD = gpd.read_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
+    #voronoi_OD = gpd.read_file("data/infraScanRail/traffic_flow/od/OD_voronoidf.gpkg")
+    voronoi_OD = gpd.read_file("data/infraScanRail/Network/travel_time/Voronoi_statusquo.gpkg")
     print(voronoi_OD.head(5).to_string())
 
     # Import gpkg file with the network points
-    points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
+    points = gpd.read_file("data/infraScanRail/Network/processed/points_with_attribute.gpkg")
     points = points.sort_values(by=["ID_point"])
 
     # Filter points to only keep those within the corridor or on border
@@ -146,7 +146,7 @@ def get_nw_data():
     # nodes within perimeter and on border
     # Get nodes in zones -> then build network with these nodes
     # Import edges
-    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/infraScanRail/Network/processed/edges_with_attribute.gpkg")
     edges = edges.sort_values(by=["ID_edge"])
 
     print(edges.head(5).to_string())
@@ -389,7 +389,7 @@ def get_nw_data():
 
 
 def Topology(network):
-    filename = 'data/traffic_flow/mat/'+network+'.mat'
+    filename = 'data/infraScanRail/traffic_flow/mat/'+network+'.mat'
     matfile = scipy.io.loadmat(filename)
     #Network topography
     #load([network,'.mat'],'nodes','Infolinks') #Infolinks:[Node i Node j Length(km) fftt_i(hr) Capacity(pcu/h/lane) typeroad]
@@ -405,7 +405,7 @@ def Topology(network):
 
 
 def CostFunctionParm(network):
-    filename = 'data/traffic_flow/mat/'+network+'.mat'
+    filename = 'data/infraScanRail/traffic_flow/mat/'+network+'.mat'
     matfile = scipy.io.loadmat(filename)
     #Definition of cost function and free-flow travel times
     #load([network,'.mat'],'Infolinks','alpha','gamma') #Infolinks:[Node i Node j Length(km) fftt_i(hr) Capacity(pcu/h/lane) typeroad]
@@ -785,7 +785,7 @@ print(connected_sets)
 
 """
 #--- Definition of ODs and Routes
-filename = 'data/traffic_flow/mat/'+network+'_RoutesOD.mat'
+filename = 'data/infraScanRail/traffic_flow/mat/'+network+'_RoutesOD.mat'
 matfile = scipy.io.loadmat(filename)
 #load([network,'_RoutesOD.mat'],'D_od','nOD','routelinks','nroutes','delta_ir','delta_odr')
 
@@ -837,13 +837,13 @@ if not done:
     Xi_sum = np.sum(Xi, axis=1)
 
     # Store Xi_sum as csv but using number through pd df
-    pd.DataFrame(Xi_sum).to_csv("data/traffic_flow/Xi_sum.csv", header=False, index=False)
+    pd.DataFrame(Xi_sum).to_csv("data/infraScanRail/traffic_flow/Xi_sum.csv", header=False, index=False)
 
     # Store D_r1 as csv but using number through pd df
-    pd.DataFrame(D_r1).to_csv("data/traffic_flow/D_r1.csv", header=False, index=False)
+    pd.DataFrame(D_r1).to_csv("data/infraScanRail/traffic_flow/D_r1.csv", header=False, index=False)
 
     # Store intTrec_i as csv using pd df
-    pd.DataFrame(intTrec_i).to_csv("data/traffic_flow/intTrec_i.csv", header=False, index=False)
+    pd.DataFrame(intTrec_i).to_csv("data/infraScanRail/traffic_flow/intTrec_i.csv", header=False, index=False)
 
 
     #--- Damaging link by link
@@ -865,8 +865,8 @@ if not done:
     print(f'CPU time (seconds): {comptime}')
     #
     print(Results)
-    scipy.io.savemat('data/traffic_flow/mat/Critical_v01.mat',Results)
+    scipy.io.savemat('data/infraScanRail/traffic_flow/mat/Critical_v01.mat',Results)
 else: #thus, it is done
-    Results = scipy.io.loadmat('data/traffic_flow/mat/Critical_v01',Results)
+    Results = scipy.io.loadmat('data/infraScanRail/traffic_flow/mat/Critical_v01',Results)
  #done
 

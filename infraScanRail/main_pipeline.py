@@ -207,17 +207,17 @@ def infrascanrail_cap():
     ##################################################################################
     # PHASE 10 OLD: CONSTRUCTION & MAINTENANCE COSTS (8 trains/track)
     ##################################################################################
-    phase_10_old_construction_maintenance_costs(monetized_tt, runtimes)
+    #phase_10_old_construction_maintenance_costs(monetized_tt, runtimes)
 
     ##################################################################################
     # PHASE 11 OLD: COST-BENEFIT INTEGRATION (8 trains/track)
     ##################################################################################
-    phase_11_old_cost_benefit_integration(runtimes)
+    #phase_11_old_cost_benefit_integration(runtimes)
 
     ##################################################################################
     # PHASE 12 OLD: COST AGGREGATION (8 trains/track)
     ##################################################################################
-    phase_12_old_cost_aggregation(runtimes)
+    #phase_12_old_cost_aggregation(runtimes)
 
     ##################################################################################
     # PHASE 10 NEW: CONSTRUCTION & MAINTENANCE COSTS (Capacity Interventions)

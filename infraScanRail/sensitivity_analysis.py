@@ -153,7 +153,7 @@ def load_scenario_data(scenario_key):
     try:
         # Get absolute path from infraScanRail directory
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        combined_network_path = os.path.join(base_dir, "data", "Network", "processed", "combined_network_with_all_modifications.gpkg")
+        combined_network_path = os.path.join(base_dir, "data", "infraScanRail", "Network", "processed", "combined_network_with_all_modifications.gpkg")
 
         sline_data = gpd.read_file(combined_network_path)[['dev_id', 'Sline']]
         sline_data = sline_data.groupby('dev_id')['Sline'].first().reset_index()
@@ -228,7 +228,7 @@ def load_network_graph():
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
     network_path = os.path.join(base_dir, settings.infra_generation_rail_network)
-    points_path = os.path.join(base_dir, 'data/Network/processed/points.gpkg')
+    points_path = os.path.join(base_dir, 'data/infraScanRail/Network/processed/points.gpkg')
 
     # Check if files exist
     if not os.path.exists(network_path):
@@ -239,11 +239,11 @@ def load_network_graph():
     df_network = gpd.read_file(network_path)
     df_points = gpd.read_file(points_path)
 
-    generate_infrastructure = importlib.import_module('generate_infrastructure')
+    generate_infrastructure = importlib.import_module('.generate_infrastructure', package=__package__)
 
     # Ensure the output directory exists for the pickle file
     # prepare_Graph tries to save a pickle file, so we need the directory to exist
-    pickle_dir = os.path.join(base_dir, 'data', 'Network', 'processed')
+    pickle_dir = os.path.join(base_dir, 'data', 'infraScanRail', 'Network', 'processed')
     os.makedirs(pickle_dir, exist_ok=True)
 
     # Prepare graph - this builds the graph from network and points data
@@ -277,7 +277,7 @@ def build_railway_line_representations(top_dev_ids, df_combined, color_map):
 
     # Get absolute path from infraScanRail directory
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    combined_network_path = os.path.join(base_dir, "data", "Network", "processed", "combined_network_with_all_modifications.gpkg")
+    combined_network_path = os.path.join(base_dir, "data", "infraScanRail", "Network", "processed", "combined_network_with_all_modifications.gpkg")
 
     # Load combined network for ALL developments (100xxx and 101xxx)
     combined_network = gpd.read_file(combined_network_path)

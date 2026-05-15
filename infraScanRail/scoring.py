@@ -149,12 +149,19 @@ def read_development_files():
     Returns:
         list of pd.DataFrame: A list of DataFrames, each containing filtered data for a development.
     """
-    development_dir = 'data/Network/processed/developments'
+    development_dir = 'data/infraScanRail/Network/processed/developments'
     # List to store filtered DataFrames for each development
     developments = []
 
-    # Read all `.gpkg` files in the directory
-    for file_path in glob.glob(f"{development_dir}/*.gpkg"):
+    # Ignore macOS metadata files like "._101000.0.gpkg" on external drives.
+    development_files = sorted(
+        file_path
+        for file_path in glob.glob(f"{development_dir}/*.gpkg")
+        if not os.path.basename(file_path).startswith("._")
+    )
+
+    # Read all valid `.gpkg` files in the directory
+    for file_path in development_files:
         try:
             # Load the GeoPackage file
             dev_gdf = gpd.read_file(file_path)
@@ -531,7 +538,7 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
     # ================================================================
     if not use_old_capacity_logic:
         # NEW METHOD: Load capacity intervention costs from Phase 4.3
-        capacity_intervention_costs_path = "data/costs/capacity_intervention_costs.csv"
+        capacity_intervention_costs_path = "data/infraScanRail/costs/capacity_intervention_costs.csv"
 
         try:
             cap_int_costs_df = pd.read_csv(capacity_intervention_costs_path)
@@ -609,7 +616,7 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
     combined_costs_df = combined_costs_df[output_columns]
 
     # Save to CSV with appropriate suffix
-    output_csv_path = f"data/costs/construction_cost{output_suffix}.csv"
+    output_csv_path = f"data/infraScanRail/costs/construction_cost{output_suffix}.csv"
     combined_costs_df.to_csv(output_csv_path, index=False)
     print(f"Construction costs saved to: {output_csv_path}")
 
@@ -646,7 +653,7 @@ def aggregate_costs(cost_and_benefits, valuation_period=(2050, 2100), output_pre
 
     # Load travel time savings for compatibility with existing structure
     # This provides the necessary structure for the output DataFrame
-    travel_time_path = "data/costs/traveltime_savings.csv"
+    travel_time_path = "data/infraScanRail/costs/traveltime_savings.csv"
     c_travel_time = pd.read_csv(travel_time_path)
     total_costs = c_travel_time[c_travel_time['year'].between(valuation_period[0], valuation_period[1])]
     # Initialize total costs DataFrame with the existing structure
@@ -705,7 +712,7 @@ def aggregate_costs(cost_and_benefits, valuation_period=(2050, 2100), output_pre
     total_costs = total_costs.drop(columns=columns_to_drop, errors='ignore')
 
     # Save results to CSV with appropriate filename
-    output_path = f"data/costs/total_costs_raw{output_prefix}.csv"
+    output_path = f"data/infraScanRail/costs/total_costs_raw{output_prefix}.csv"
     total_costs.to_csv(output_path, index=False)
 
     print(f"Total costs raw saved to {output_path}")
@@ -728,7 +735,7 @@ def transform_and_reshape_cost_df(output_prefix="", csv_only=False):
         gpd.GeoDataFrame: Transformed GeoDataFrame with geometry column (or None if csv_only=True and no geometry needed)
     """
     # Load the dataframe
-    input_path = f"data/costs/total_costs_raw{output_prefix}.csv"
+    input_path = f"data/infraScanRail/costs/total_costs_raw{output_prefix}.csv"
     df = pd.read_csv(input_path)
 
     # Reshaping the dataframe
@@ -796,7 +803,7 @@ def transform_and_reshape_cost_df(output_prefix="", csv_only=False):
     # Only load geometry if not csv_only
     if not csv_only:
         # Lade die Geometrie und zusätzliche Daten
-        geometry_data = gpd.read_file("data/Network/processed/updated_new_links.gpkg")[['dev_id', 'geometry', 'Sline']]
+        geometry_data = gpd.read_file("data/infraScanRail/Network/processed/updated_new_links.gpkg")[['dev_id', 'geometry', 'Sline']]
         geometry_data['dev_id'] = geometry_data['dev_id']
 
         # 2. Gruppiere nach dev_id, fasse alle Liniengeometrien zusammen,
@@ -873,7 +880,7 @@ def transform_and_reshape_cost_df(output_prefix="", csv_only=False):
     reshaped_df = reshaped_df[columns_order]
 
     # Save outputs based on csv_only flag
-    csv_output_path = f"data/costs/total_costs{output_prefix}.csv"
+    csv_output_path = f"data/infraScanRail/costs/total_costs{output_prefix}.csv"
     reshaped_df.to_csv(csv_output_path, index=False)
     print(f"Transformed dataframe saved to CSV: '{csv_output_path}'")
 
@@ -882,7 +889,7 @@ def transform_and_reshape_cost_df(output_prefix="", csv_only=False):
         gdf = gpd.GeoDataFrame(reshaped_df, geometry='geometry', crs=geometry_data.crs)
 
         # Speichere GeoPackage
-        gpkg_output_path = f"data/costs/total_costs{output_prefix}_with_geometry.gpkg"
+        gpkg_output_path = f"data/infraScanRail/costs/total_costs{output_prefix}_with_geometry.gpkg"
         gdf.to_file(gpkg_output_path, driver="GPKG")
         print(f"Transformed dataframe saved to GeoPackage: '{gpkg_output_path}'")
 
@@ -1187,8 +1194,8 @@ def GetCatchmentOD(use_cache = False):
     if use_cache == True:
         return
     # Import the required data or define the path to access it
-    catchment_tif_path = 'data/catchment_pt/catchement.tif'
-    catchmentdf = gpd.read_file("data/catchment_pt/catchement.gpkg")
+    catchment_tif_path = 'data/infraScanRail/catchment_pt/catchement.tif'
+    catchmentdf = gpd.read_file("data/infraScanRail/catchment_pt/catchement.gpkg")
 
     # Paths to input and output files
     pop_combined_file = "data/independent_variable/processed/scenario/pop_combined.tif"
@@ -1422,8 +1429,8 @@ def GetCatchmentOD(use_cache = False):
 
         # Save pd df to csv
 
-        od_grouped.to_csv(f"data/traffic_flow/od/rail/od_matrix_{pop_scenarios[i],empl_scenarios[i]}.csv")
-        # odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
+        od_grouped.to_csv(f"data/infraScanRail/traffic_flow/od/rail/od_matrix_{pop_scenarios[i],empl_scenarios[i]}.csv")
+        # odmat.to_csv("data/infraScanRail/traffic_flow/od/od_matrix_raw.csv")
 
         # Print sum of all values in od df
         # Sum over all values in pd df
@@ -1449,7 +1456,7 @@ def GetCatchmentOD(use_cache = False):
         catchmentdf_temp = catchmentdf_temp.merge(origin, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.merge(destination, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-        catchmentdf_temp.to_file(f"data/traffic_flow/od/catchment_id_{pop_scenarios[i]}.gpkg", driver="GPKG") #only output
+        catchmentdf_temp.to_file(f"data/infraScanRail/traffic_flow/od/catchment_id_{pop_scenarios[i]}.gpkg", driver="GPKG") #only output
 
         """        # Same for odmat and commune_df
         if scen == "20":
@@ -1460,7 +1467,7 @@ def GetCatchmentOD(use_cache = False):
             commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
             commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
             commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-            commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+            commune_df.to_file("data/infraScanRail/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
             """
     return
 
@@ -1639,16 +1646,16 @@ def link_traffic_to_map():
         - Outputs a file containing the geospatial links enriched with traffic flow data.
 
     File Output:
-        Generates a processed geopackage file at "data/Network/processed/edges_only_flow.gpkg".
+        Generates a processed geopackage file at "data/infraScanRail/Network/processed/edges_only_flow.gpkg".
     """
     # Import travel flows from matrix to df, no index, set column name to flow
-    # flow = pd.read_csv("data/traffic_flow/Xi_sum.csv", header=None, index_col=False)
-    flow = pd.read_csv("data/traffic_flow/developments/D_i/Xi_sum_status_quo_20.csv", header=None, index_col=False)
+    # flow = pd.read_csv("data/infraScanRail/traffic_flow/Xi_sum.csv", header=None, index_col=False)
+    flow = pd.read_csv("data/infraScanRail/traffic_flow/developments/D_i/Xi_sum_status_quo_20.csv", header=None, index_col=False)
     flow.columns = ['flow']
     print(flow.head(10).to_string())
 
     # Import data with links
-    edges = gpd.read_file("data/Network/processed/edges_with_attribute.gpkg")
+    edges = gpd.read_file("data/infraScanRail/Network/processed/edges_with_attribute.gpkg")
     print(edges.head(10).to_string())
 
     # Compare lenght of dataframes
@@ -1667,7 +1674,7 @@ def link_traffic_to_map():
     # Only keep column capacity, flow and geometry
     edges = edges[['ID_edge', 'geometry', 'flow']]
     # Safe file
-    edges.to_file("data/Network/processed/edges_only_flow.gpkg")
+    edges.to_file("data/infraScanRail/Network/processed/edges_only_flow.gpkg")
 
     # Compare values to calibrate to tau value when creating the OD matrix
     # Edge ID 94 -> Tagesverkehr 3028 (DTV 54014)
@@ -1704,14 +1711,14 @@ def monetize_tts(VTTS, duration):
         ValueError: If input data cannot be converted to the required types.
     """
     # Import total travel time for each scenario and each development
-    tt_total = pd.read_csv("data/traffic_flow/travel_time.csv")
+    tt_total = pd.read_csv("data/infraScanRail/traffic_flow/travel_time.csv")
 
     tt_total["low"] = tt_total["low"].apply(lambda x: float(x[1:-1]))
     tt_total["medium"] = tt_total["medium"].apply(lambda x: float(x[1:-1]))
     tt_total["high"] = tt_total["high"].apply(lambda x: float(x[1:-1]))
 
     # Import reference travel time for each scenario and current infrastructure
-    tt_status_quo = pd.read_csv(f"data/traffic_flow/travel_time_status_quo.csv")
+    tt_status_quo = pd.read_csv(f"data/infraScanRail/traffic_flow/travel_time_status_quo.csv")
 
     # monetization factor of travel time (peak hour * CHF/h * 365 d/a * 50 a)
     mon_factor = VTTS * 365 * duration
@@ -1728,7 +1735,7 @@ def monetize_tts(VTTS, duration):
 
     # drop useless columns
     tt_total = tt_total.drop(columns=["low", "medium", "high"])
-    tt_total.to_csv("data/costs/traveltime_savings.csv")
+    tt_total.to_csv("data/infraScanRail/costs/traveltime_savings.csv")
 
 def discounting(df, discount_rate, base_year=2018):
     """
@@ -1854,12 +1861,12 @@ def create_cost_and_benefit_df(scenario_start_year=2018, end_year=2100, start_va
     ]
 
     # Save OLD version (WITHOUT capacity interventions)
-    costs_benefits_old_path = "data/costs/costs_and_benefits_old.csv"
+    costs_benefits_old_path = "data/infraScanRail/costs/costs_and_benefits_old.csv"
     print(f"Saving costs and benefits (WITHOUT capacity interventions) to {costs_benefits_old_path}")
     costs_and_benefits_baseline.to_csv(costs_benefits_old_path)
 
     # Save current version (WITH capacity interventions)
-    costs_benefits_path = "data/costs/costs_and_benefits.csv"
+    costs_benefits_path = "data/infraScanRail/costs/costs_and_benefits.csv"
     print(f"Saving costs and benefits (WITH capacity interventions) to {costs_benefits_path}")
     costs_and_benefits_with_interventions.reset_index().to_csv(costs_benefits_path, index=False)
 
@@ -1943,7 +1950,7 @@ def create_cost_summary(output_prefix="", include_geometry=True):
     from shapely.geometry import LineString
     
     # Load the full total_costs file
-    input_path = f"data/costs/total_costs{output_prefix}.csv"
+    input_path = f"data/infraScanRail/costs/total_costs{output_prefix}.csv"
     df = pd.read_csv(input_path)
     
     # Extract development ID for merging with geometry
@@ -1963,7 +1970,7 @@ def create_cost_summary(output_prefix="", include_geometry=True):
     # Add Sline if geometry is included
     if include_geometry:
         # Load geometry data
-        geometry_data = gpd.read_file("data/Network/processed/updated_new_links.gpkg")[['dev_id', 'geometry', 'Sline']]
+        geometry_data = gpd.read_file("data/infraScanRail/Network/processed/updated_new_links.gpkg")[['dev_id', 'geometry', 'Sline']]
         
         # Merge and group geometries
         def merge_grouped_lines(geoms):
@@ -2061,7 +2068,7 @@ def create_cost_summary(output_prefix="", include_geometry=True):
     summary_df = summary_df[column_order]
     
     # Save to CSV
-    output_path = f"data/costs/total_costs_summary{output_prefix}.csv"
+    output_path = f"data/infraScanRail/costs/total_costs_summary{output_prefix}.csv"
     
     if include_geometry:
         # Convert to GeoDataFrame and save

@@ -247,7 +247,7 @@ class _MultiTrackLegendHandler(HandlerBase):
         return artists
 
 
-CAPACITY_DIR = Path(paths.MAIN) / "data" / "Network" / "capacity"
+CAPACITY_DIR = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "capacity"
 DEFAULT_OUTPUT_DIR = Path(paths.MAIN) / "plots" / "network"
 DEFAULT_OUTPUT = DEFAULT_OUTPUT_DIR / f"{settings.rail_network}_network_infrastructure.png"
 DEFAULT_CAPACITY_OUTPUT = DEFAULT_OUTPUT_DIR / f"{settings.rail_network}_network_capacity.png"
@@ -482,14 +482,14 @@ def _resolve_workbook_path(network_label: str = None, output_dir: Path = None) -
         if dev_match:
             # Development network
             dev_id = dev_match.group(1)
-            from capacity_calculator import CAPACITY_ROOT
+            from .capacity_calculator import CAPACITY_ROOT
             output_dir = CAPACITY_ROOT / "Developments" / dev_id
         elif is_enhanced:
             # Enhanced network - capacity_output_path will handle this
             # Just pass through to capacity_output_path
             pass
 
-    from capacity_calculator import capacity_output_path
+    from .capacity_calculator import capacity_output_path
     base_path = capacity_output_path(network_label=network_label, output_dir=output_dir)
     return base_path.with_name(f"{base_path.stem}_prep{base_path.suffix}")
 
@@ -926,11 +926,11 @@ def _load_capacity_sections(
             if dev_match:
                 # Development network
                 dev_id = dev_match.group(1)
-                from capacity_calculator import CAPACITY_ROOT
+                from .capacity_calculator import CAPACITY_ROOT
                 output_dir = CAPACITY_ROOT / "Developments" / dev_id
             elif is_enhanced:
                 # Enhanced network
-                from capacity_calculator import CAPACITY_ROOT
+                from .capacity_calculator import CAPACITY_ROOT
                 output_dir = CAPACITY_ROOT / "Enhanced" / safe_network_tag
 
         if output_dir is not None:

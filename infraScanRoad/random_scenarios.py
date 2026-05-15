@@ -12,6 +12,7 @@ import rasterio
 
 from .scoring import GetCommuneShapes
 from . import settings
+from infraScan.infraScanIntegrated import settings as integrated_settings
 
 def get_bezirk_population_scenarios():
     # Read the Swiss population scenario CSV with "," separator
@@ -704,26 +705,26 @@ def generate_od_growth_scenarios(
         # 2) Modal-Split- & Distance-per-Person-Szenarien
         # for road
         modal_split_scenarios = generate_modal_split_scenarios(
-            avg_growth_rate= settings.avg_growth_rate,
-            start_value=settings.start_value,
+            avg_growth_rate=integrated_settings.road_modal_split_avg_growth_rate,
+            start_value=integrated_settings.road_modal_split_start,
             start_year=start_year,
             end_year=end_year,
             n_scenarios=num_of_scenarios,
-            start_std_dev= settings.start_std_dev,
-            end_std_dev= settings.end_std_dev,
-            std_dev_shocks= settings.std_dev_shocks
+            start_std_dev=integrated_settings.road_modal_split_start_std_dev,
+            end_std_dev=integrated_settings.road_modal_split_end_std_dev,
+            std_dev_shocks=integrated_settings.road_modal_split_std_dev_shocks
         )
 
         # same for road and rail
         distance_per_person_scenarios = generate_distance_per_person_scenarios(
-            avg_growth_rate=-0.0027,
-            start_value=39.79,
+            avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
+            start_value=integrated_settings.distance_per_person_start,
             start_year=start_year,
             end_year=end_year,
             n_scenarios=num_of_scenarios,
-            start_std_dev=0.005,
-            end_std_dev=0.015,
-            std_dev_shocks=0.015
+            start_std_dev=integrated_settings.distance_per_person_start_std_dev,
+            end_std_dev=integrated_settings.distance_per_person_end_std_dev,
+            std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
         )
     if do_plot:
         first_three_bezirk = list(population_scenarios.keys())[:3]
@@ -1014,7 +1015,7 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
             exported_scenarios = export_scenario_year_to_status_quo_csvs(
                 scenarios=scenarios,
                 year=settings.start_valuation_year,
-                output_dir="data/infraScanRoad/traffic_flow/od",
+                output_dir="data/infraScanRoad/traffic_flow/od/scenarios_zone",
             )
 
             if exported_scenarios:
@@ -1070,7 +1071,7 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
     exported_scenarios = export_scenario_year_to_status_quo_csvs(
         scenarios=scenarios,
         year=settings.start_valuation_year,
-        output_dir="data/infraScanRoad/traffic_flow/od",
+        output_dir="data/infraScanRoad/traffic_flow/od/scenarios_zone",
     )
 
     export_generated_population_rasters(

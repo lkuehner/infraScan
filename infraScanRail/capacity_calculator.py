@@ -27,7 +27,7 @@ from . import paths
 # Paths and constants
 # ---------------------------------------------------------------------------
 
-DATA_ROOT = Path(paths.MAIN) / "data" / "Network"
+DATA_ROOT = Path(paths.MAIN) / "data" / "infraScanRail" / "Network"
 PROCESSED_ROOT = DATA_ROOT / "processed"
 CAPACITY_ROOT = DATA_ROOT / "capacity"
 

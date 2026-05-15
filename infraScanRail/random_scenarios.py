@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from joblib import Parallel, delayed
 import pickle
 import os
+from infraScan.infraScanIntegrated import settings as integrated_settings
 
 def get_bezirk_population_scenarios():
     # Read the Swiss population scenario CSV with "," separator
@@ -612,24 +613,24 @@ def generate_od_growth_scenarios(
 
         # 2) Modal-Split- & Distance-per-Person-Szenarien
         modal_split_scenarios = generate_modal_split_scenarios(
-            avg_growth_rate=0.0045,
-            start_value=0.209,
+            avg_growth_rate=integrated_settings.rail_modal_split_avg_growth_rate,
+            start_value=integrated_settings.rail_modal_split_start,
             start_year=start_year,
             end_year=end_year,
             n_scenarios=num_of_scenarios,
-            start_std_dev=0.015,
-            end_std_dev=0.045,
-            std_dev_shocks=0.02
+            start_std_dev=integrated_settings.rail_modal_split_start_std_dev,
+            end_std_dev=integrated_settings.rail_modal_split_end_std_dev,
+            std_dev_shocks=integrated_settings.rail_modal_split_std_dev_shocks
         )
         distance_per_person_scenarios = generate_distance_per_person_scenarios(
-            avg_growth_rate=-0.0027,
-            start_value=39.79,
+            avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
+            start_value=integrated_settings.distance_per_person_start,
             start_year=start_year,
             end_year=end_year,
             n_scenarios=num_of_scenarios,
-            start_std_dev=0.005,
-            end_std_dev=0.015,
-            std_dev_shocks=0.015
+            start_std_dev=integrated_settings.distance_per_person_start_std_dev,
+            end_std_dev=integrated_settings.distance_per_person_end_std_dev,
+            std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
         )
     if do_plot:
         os.chdir(paths.MAIN)

@@ -116,8 +116,8 @@ def compute_TT():
 
     # Directories containing CSV files (relative paths since the working directory is now set)
     directories = [
-        "data/traffic_flow/od/rail",
-        "data/Network/travel_time/developments"
+        "data/infraScanRail/traffic_flow/od/rail",
+        "data/infraScanRail/Network/travel_time/developments"
     ]
 
     # Loop through each directory
@@ -364,8 +364,8 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     print(f"Sum of OD matrix before {temp_sum} and after {temp_sum2}")
 
     # Save pd df to csv
-    od_grouped.to_csv("data/traffic_flow/od/od_matrix_2020.csv")
-    #odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
+    od_grouped.to_csv("data/infraScanRail/traffic_flow/od/od_matrix_2020.csv")
+    #odmat.to_csv("data/infraScanRail/traffic_flow/od/od_matrix_raw.csv")
 
     # Print sum of all values in od df
     # Sum over all values in pd df
@@ -386,7 +386,7 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     voronoidf = voronoidf.merge(origin, how='left', left_on='ID_point', right_on='voronoi_id')
     voronoidf = voronoidf.merge(destination, how='left', left_on='ID_point', right_on='voronoi_id')
     voronoidf = voronoidf.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-    voronoidf.to_file("data/traffic_flow/od/OD_voronoidf.gpkg", driver="GPKG")
+    voronoidf.to_file("data/infraScanRail/traffic_flow/od/OD_voronoidf.gpkg", driver="GPKG")
 
 
     # Same for odmat and commune_df
@@ -397,7 +397,7 @@ def GetVoronoiOD_old(voronoidf, scen_empl_path, scen_pop_path, voronoi_tif_path)
     commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
     commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
     commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-    commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+    commune_df.to_file("data/infraScanRail/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
 
 
     #potential = np.outer(scen_pop_medium_tif.flatten().reshape(1, -1), scen_empl_medium_tif.flatten().reshape(1, -1))
@@ -501,7 +501,7 @@ def GetVoronoiOD_multi_old(scen_empl_path, scen_pop_path, voronoi_tif_path):
     cout_r = odmat / np.outer(popvec, jobvec)
 
     # Directory path to developments
-    directory_path = "data/Network/travel_time/developments/"
+    directory_path = "data/infraScanRail/Network/travel_time/developments/"
 
     # List to hold extracted values
     xx_values = []
@@ -613,8 +613,8 @@ def GetVoronoiOD_multi_old(scen_empl_path, scen_pop_path, voronoi_tif_path):
         np.fill_diagonal(od_grouped.values, 0)
 
         # Save pd df to csv
-        od_grouped.to_csv(f"data/traffic_flow/od/developments/od_matrix_dev{xx}.csv")
-        #odmat.to_csv("data/traffic_flow/od/od_matrix_raw.csv")
+        od_grouped.to_csv(f"data/infraScanRail/traffic_flow/od/developments/od_matrix_dev{xx}.csv")
+        #odmat.to_csv("data/infraScanRail/traffic_flow/od/od_matrix_raw.csv")
 
     return
 
@@ -632,7 +632,7 @@ def GetCatchmentOD_old():
             od_matrix_temp.loc[:, polygon_id] *= row[f'{scen}']
 
         # Save the ungrouped OD matrix as a CSV
-        ungrouped_od_matrix_path = f"data/traffic_flow/od/rail/od_matrix_temp_{scen}.csv"
+        ungrouped_od_matrix_path = f"data/infraScanRail/traffic_flow/od/rail/od_matrix_temp_{scen}.csv"
         od_matrix_temp.to_csv(ungrouped_od_matrix_path)
         print(f"Saved ungrouped OD matrix for scenario {scen} at {ungrouped_od_matrix_path}")
 
@@ -663,7 +663,7 @@ def GetCatchmentOD_old():
         print(f"Sum of OD matrix before {temp_sum} and after {temp_sum2} removing diagonal values")
 
         # Save the grouped OD matrix
-        grouped_od_matrix_path = f"data/traffic_flow/od/rail/od_matrix_{scen}.csv"
+        grouped_od_matrix_path = f"data/infraScanRail/traffic_flow/od/rail/od_matrix_{scen}.csv"
         od_grouped.to_csv(grouped_od_matrix_path)
         print(f"Saved grouped OD matrix for scenario {scen} at {grouped_od_matrix_path}")
 
@@ -691,7 +691,7 @@ def GetCatchmentOD_old():
         catchmentdf_temp = catchmentdf_temp.merge(origin, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.merge(destination, how='left', left_on='ID_point', right_on='catchment_id')
         catchmentdf_temp = catchmentdf_temp.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-        catchmentdf_temp.to_file(f"data/traffic_flow/od/catchment_id_{scen}.gpkg", driver="GPKG")
+        catchmentdf_temp.to_file(f"data/infraScanRail/traffic_flow/od/catchment_id_{scen}.gpkg", driver="GPKG")
 
         # Same for odmat and commune_df
         if scen == "20":
@@ -702,6 +702,6 @@ def GetCatchmentOD_old():
             commune_df = commune_df.merge(origin_commune, how='left', left_on='BFS', right_on='quelle_code')
             commune_df = commune_df.merge(destination_commune, how='left', left_on='BFS', right_on='ziel_code')
             commune_df = commune_df.rename(columns={'0_x': 'origin', '0_y': 'destination'})
-            commune_df.to_file("data/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
+            commune_df.to_file("data/infraScanRail/traffic_flow/od/OD_commune_filtered.gpkg", driver="GPKG")
 
     return

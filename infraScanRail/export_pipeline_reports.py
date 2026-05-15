@@ -56,7 +56,7 @@ def export_pipeline_comparison_report_statistics():
     os.makedirs(output_dir, exist_ok=True)
 
     # Load and prepare data using the helper function from plots.py
-    from plots import _prepare_pipeline_data
+    from .plots import _prepare_pipeline_data
 
     print(f"  Loading and preparing pipeline data...")
     df_new = _prepare_pipeline_data(new_data_path, pipeline='new')

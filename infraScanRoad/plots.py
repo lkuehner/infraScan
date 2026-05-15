@@ -3,6 +3,7 @@ import rasterio
 from scipy.interpolate import griddata
 from scipy.spatial import QhullError
 import matplotlib
+import re
 import os
 os.environ['USE_PYGEOS'] = '0'
 if not hasattr(matplotlib.rcParams, "_get"):
@@ -33,6 +34,65 @@ def _safe_interpolate_grid(points, values, grid_x, grid_y):
         return griddata(points, values, (grid_x, grid_y), method='linear')
     except QhullError:
         return griddata(points, values, (grid_x, grid_y), method='nearest')
+
+
+def _sorted_scenario_columns(columns, prefix):
+    pattern = re.compile(rf"^{prefix}scenario_(\d+)$")
+    matches = []
+    for col in columns:
+        m = pattern.match(col)
+        if m:
+            matches.append((int(m.group(1)), col))
+    matches.sort(key=lambda x: x[0])
+    return [col for _, col in matches]
+
+
+def _get_total_columns(df):
+    static_cols = ["total_low", "total_medium", "total_high"]
+    if all(col in df.columns for col in static_cols):
+        return static_cols
+
+    generated_cols = _sorted_scenario_columns(df.columns, "total_")
+    if generated_cols:
+        return generated_cols
+
+    fallback_cols = [
+        col for col in df.columns
+        if col.startswith("total_") and col not in {"total_cost", "total_costs"}
+    ]
+    return sorted(fallback_cols)
+
+
+def _resolve_primary_total_column(df, requested_col):
+    if requested_col and requested_col in df.columns:
+        return requested_col
+
+    total_cols = _get_total_columns(df)
+    if not total_cols:
+        raise KeyError("No scenario-specific total columns found (expected total_low/high or total_scenario_*).")
+
+    # Use medium in STATIC, center scenario in GENERATED.
+    if "total_medium" in total_cols:
+        return "total_medium"
+    if "total_scenario_45" in total_cols:
+        return "total_scenario_45"
+    return total_cols[len(total_cols) // 2]
+
+
+def _resolve_component_column(df, preferred_name, scenario_suffix=None):
+    if preferred_name in df.columns:
+        return preferred_name
+
+    if scenario_suffix:
+        candidate = f"{preferred_name.split('_')[0]}_{scenario_suffix}"
+        if candidate in df.columns:
+            return candidate
+
+    prefix = f"{preferred_name.split('_')[0]}_"
+    candidates = [col for col in df.columns if col.startswith(prefix)]
+    if candidates:
+        return sorted(candidates)[0]
+    return None
 
 
 class CustomBasemap:
@@ -114,6 +174,8 @@ class CustomBasemap:
 
 def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=None, access_points=None, plot_name=False, col="total_medium"):
     # cmap = "viridis"
+
+    col = _resolve_primary_total_column(df_costs, col)
 
     # Determine the range of your data
     min_val = df_costs[col].min()
@@ -251,6 +313,7 @@ def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=No
 
 def plot_single_cost_result(df_costs, banned_area , title_bar, boundary=None, network=None, access_points=None, plot_name=False, col="total_medium"):
     #cmap = "viridis"
+    col = _resolve_primary_total_column(df_costs, col)
     df_costs[col] = df_costs[col] / 10**6
 
     # Determine the range of your data
@@ -713,13 +776,27 @@ def plot_benefit_distribution_line_multi(df_costs, columns, labels, plot_name, l
 
 def plot_best_worse(df):
 
+    reference_total_col = _resolve_primary_total_column(df, "total_medium")
+    total_suffix = reference_total_col.replace("total_", "")
+
     # Sort the DataFrame by "total_medium" in ascending and descending order
-    df_top5 = df.nlargest(5, 'total_medium')
-    df_bottom5 = df.nsmallest(5, 'total_medium')
+    df_top5 = df.nlargest(5, reference_total_col)
+    df_bottom5 = df.nsmallest(5, reference_total_col)
 
     # Specify the columns to plot
     print(df.columns)
-    columns_to_plot = ['building_costs', 'local_s1', 'externalities', 'tt_medium', 'noise_s1']
+    tt_col = _resolve_component_column(df, "tt_medium", scenario_suffix=total_suffix)
+    local_col = _resolve_component_column(df, "local_s1", scenario_suffix=total_suffix)
+    noise_col = _resolve_component_column(df, "noise_s1", scenario_suffix=total_suffix)
+
+    columns_to_plot = ["building_costs"]
+    if local_col:
+        columns_to_plot.append(local_col)
+    columns_to_plot.append("externalities")
+    if tt_col:
+        columns_to_plot.append(tt_col)
+    if noise_col:
+        columns_to_plot.append(noise_col)
 
     # Create a figure with two subplots
     fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
@@ -762,14 +839,20 @@ def plot_best_worse(df):
 
 def boxplot(df, nbr):
     # Calculate the mean for each development
-    df["mean"] = df[['total_low', 'total_medium', 'total_high']].mean(axis=1)
+    total_cols = _get_total_columns(df)
+    if not total_cols:
+        raise KeyError("No scenario-specific total columns available for boxplot.")
+
+    df["mean"] = df[total_cols].mean(axis=1)
     #mean_values = df.groupby('ID_new')['total_low', 'total_medium', 'total_high'].mean()
 
     # sort df by mean and keep to nbr rows
     df = df.sort_values(by=['mean'], ascending=False)
     df_top = df.head(nbr)
 
-    df_top = df_top[['ID_new', 'total_low', 'total_medium', 'total_high']]
+    df_top = df_top[['ID_new'] + total_cols].copy()
+    # Convert CHF to million CHF so values match y-axis label.
+    df_top[total_cols] = df_top[total_cols] / 1_000_000
     # set ID_new as index and transpose df
     df_top = df_top.set_index('ID_new').T
 

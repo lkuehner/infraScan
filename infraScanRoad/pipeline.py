@@ -27,13 +27,15 @@ TRAVEL_TIME_SAVINGS_PIPELINES = {
         "monetization_fn": monetize_tts,
         "status_quo_checkpoint": "tt_optimization_status_quo",
         "developments_checkpoint": "tt_optimization_developments",
+        "monetization_checkpoint": "tt_monetization_aggregate",
     },
-    "od_raster": {
+    "od": {
         "status_quo_fn": tt_optimization_status_quo_by_od,
         "developments_fn": tt_optimization_all_developments_by_od,
-        "monetization_fn": monetize_tts_by_od_raster,
+        "monetization_fn": monetize_tts_network,
         "status_quo_checkpoint": "tt_optimization_status_quo_by_od",
         "developments_checkpoint": "tt_optimization_developments_by_od_raster",
+        "monetization_checkpoint": "tt_monetization_od",
     },
 }
 
@@ -74,6 +76,9 @@ def _phase_label_for_checkpoint(name):
         "tt_optimization_developments": "PHASE_6",
         "tt_optimization_status_quo_by_od": "PHASE_6",
         "tt_optimization_developments_by_od": "PHASE_6",
+        "tt_optimization_developments_by_od_raster": "PHASE_6",
+        "tt_monetization_aggregate": "PHASE_6",
+        "tt_monetization_od": "PHASE_6",
         "aggregate_costs": "PHASE_7",
     }
     return phase_map.get(name, "PHASE_UNKNOWN")
@@ -599,6 +604,7 @@ def phase_6_travel_time_savings(runtimes):
 
     status_quo_checkpoint = pipeline_config["status_quo_checkpoint"]
     developments_checkpoint = pipeline_config["developments_checkpoint"]
+    monetization_checkpoint = pipeline_config["monetization_checkpoint"]
     od_matrices_checkpoint = (
         f"od_matrices_{settings.scenario_type.lower()}"
     )
@@ -686,6 +692,7 @@ def phase_6_travel_time_savings(runtimes):
     # To re-run this section only, delete the corresponding phase-prefixed checkpoint,
     # e.g. checkpoints/phase_6_tt_optimization_status_quo.sentinel.
     if not checkpoint_exists(status_quo_checkpoint):
+        #print(f"  [DEBUG] Running status_quo with scenarios: {status_quo_scenarios}")
         if method == "od":
             if status_quo_scenarios is not None:
                 run_status_quo(scenarios=status_quo_scenarios, max_developments=max_developments)
@@ -720,13 +727,17 @@ def phase_6_travel_time_savings(runtimes):
 
 
         print('Flag: tt_optimization_all_developments is complete')
-        run_monetization(VTTS=settings.VTTS, duration=settings.travel_time_duration)
         save_checkpoint(developments_checkpoint)
     else:
         print(f"  [CHECKPOINT] Skipping: {developments_checkpoint}")
 
+    if not checkpoint_exists(monetization_checkpoint):
+        run_monetization(VTTS=settings.VTTS, duration=settings.travel_time_duration)
+        save_checkpoint(monetization_checkpoint)
+    else:
+        print(f"  [CHECKPOINT] Skipping: {monetization_checkpoint}")
 
-        runtimes["Compute travel time savings"] = time.time() - st
+    runtimes["Compute travel time savings"] = time.time() - st
     return 
  
 
@@ -814,39 +825,31 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
                              access_points=current_access_points, plot_name="total_costs_std", col="total_std")
 
     # Plot single cost element
-    local_cols = [c for c in gdf_costs.columns if c.startswith("local_")]
     tt_cols = [c for c in gdf_costs.columns if c.startswith("tt_")]
     externality_cols = [c for c in gdf_costs.columns if c.startswith("externalities_")]
 
-    local_col = "local_s1" if "local_s1" in gdf_costs.columns else (
-        "local_s1_pop" if "local_s1_pop" in gdf_costs.columns else (local_cols[0] if local_cols else None)
-    )
     tt_medium_col = "tt_medium" if "tt_medium" in gdf_costs.columns else (tt_cols[0] if tt_cols else None)
-    tt_low_col = "tt_low" if "tt_low" in gdf_costs.columns else tt_medium_col
     externality_col = "externalities_s1" if "externalities_s1" in gdf_costs.columns else (
         externality_cols[0] if externality_cols else None
     )
 
-    if local_col is None or tt_medium_col is None or externality_col is None:
+    if tt_medium_col is None or externality_col is None:
         missing = []
-        if local_col is None:
-            missing.append("local_*")
         if tt_medium_col is None:
             missing.append("tt_*")
         if externality_col is None:
             missing.append("externalities_*")
         raise KeyError(f"Missing required Phase 8 columns: {missing}. Available columns: {list(gdf_costs.columns)}")
 
-    print(f"  [PHASE 8] Using columns -> local: {local_col}, tt: {tt_medium_col}, externalities: {externality_col}")
+    print(f"  [PHASE 8] Using columns -> tt: {tt_medium_col}, externalities: {externality_col}")
 
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="construction",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
                             plot_name="construction and maintenance", col="construction_maintenance")
-    # Due to errors when plotting convert values to integer
-    gdf_costs[local_col] = gdf_costs[local_col].astype(int)
-    plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="access time to highway",
-                            boundary=boundary_plot, network=network, access_points=current_access_points,
-                            plot_name="access_costs",col=local_col)
+    # Local accessibility is intentionally excluded from the active model.
+    # plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="access time to highway",
+    #                         boundary=boundary_plot, network=network, access_points=current_access_points,
+    #                         plot_name="access_costs", col=local_col)
     plot_single_cost_result(df_costs=gdf_costs, banned_area=tif_path_plot, title_bar="highway travel time",
                             boundary=boundary_plot, network=network, access_points=current_access_points,
                             plot_name="tt_costs",col=tt_medium_col)
@@ -901,20 +904,22 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
 
     if overall_bar_col is not None:
         plot_benefit_distribution_bar_single(df_costs=gdf_costs, column=overall_bar_col)
-
+    """
+    
     if overall_line_cols:
         plot_benefit_distribution_line_multi(df_costs=gdf_costs, columns=overall_line_cols,
                                              labels=overall_labels, plot_name="overall", legend_title="Tested scenario")
 
-    single_components = ["construction_maintenance", local_col, tt_low_col, externality_col]
-    for i in single_components:
-        gdf_costs[i] = (gdf_costs[i] / 1000000).astype(int)
+    # single_components = ["construction_maintenance", local_col, tt_low_col, externality_col]
+    # for i in single_components:
+    #     gdf_costs[i] = (gdf_costs[i] / 1000000).astype(int)
     # Plot benefit distribution for all cost elements
-    plot_benefit_distribution_line_multi(df_costs=gdf_costs,
-                                         columns=["construction_maintenance", local_col, tt_low_col, externality_col],
-                                         labels=["construction and maintenance", "access costs", "highway travel time",
-                                                 "external costs"], plot_name="single_components",
-                                         legend_title="Scoring components")
+    # plot_benefit_distribution_line_multi(df_costs=gdf_costs,
+    #                                      columns=["construction_maintenance", local_col, tt_low_col, externality_col],
+    #                                      labels=["construction and maintenance", "access costs", "highway travel time",
+    #                                              "external costs"], plot_name="single_components",
+    #                                      legend_title="Scoring components")
+    """
     #todo plot the uncertainty
     #plot_best_worse(df=gdf_costs)
 

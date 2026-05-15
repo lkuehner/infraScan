@@ -20,7 +20,7 @@ import geopandas as gpd
 from main import import_process_network
 import paths
 
-PROCESSED_DIR = Path(paths.MAIN) / "data" / "Network" / "processed"
+PROCESSED_DIR = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "processed"
 
 
 def build_processed_network(use_cache: bool) -> gpd.GeoDataFrame:

@@ -129,12 +129,12 @@ def future_scenario_pop(n):
         crs="EPSG:2056")  # Replace with the Swiss coordinates system
 
     # Save the GeoDataFrame to a shapefile
-    merged_scenarios.to_file("data/temp/data_scenario_pop.shp")
+    merged_scenarios.to_file("data/infraScanRail/temp/data_scenario_pop.shp")
     return
 
 def scenario_to_raster_pop(frame=False):
     # Load the shapefile
-    scenario_polygon = gpd.read_file("data/temp/data_scenario_pop.shp")
+    scenario_polygon = gpd.read_file("data/infraScanRail/temp/data_scenario_pop.shp")
     #frame = [2680600, 1227700, 2724300, 1265600]
 
     if frame != False:
@@ -291,14 +291,14 @@ def future_scenario_empl(n):
 
     # Save to shapefile
     merged_scenarios = merged_scenarios.drop_duplicates(subset=['GEMEINDE'])
-    merged_scenarios.to_file("data/temp/data_scenario_empl.shp")
+    merged_scenarios.to_file("data/infraScanRail/temp/data_scenario_empl.shp")
     return
 
 ####################################################################################################################################################
 
 def scenario_to_raster_emp(frame=False):
     # Load the shapefile
-    scenario_polygon = gpd.read_file("data/temp/data_scenario_empl.shp")
+    scenario_polygon = gpd.read_file("data/infraScanRail/temp/data_scenario_empl.shp")
     #frame = [2680600, 1227700, 2724300, 1265600]
 
     if frame != False:

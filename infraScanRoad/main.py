@@ -21,7 +21,7 @@ def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
     #os.chdir(r"C:\Users\Fabrice\Desktop\HS23\Thesis\Code")
     #os.chdir(r"G:\IM\09 - Teaching\11 - Masters - Projects\2023 - FS\Marggi\04_Submission\Submission\FS2023 - MScProject - Marggi\06 - Developments\01 - Code\01 - Python")
-    os.chdir("/Volumes/WD_Windows/MSc_Thesis/infraScanRoad")
+    os.chdir(settings.Main + "infraScanRoad")
     # os.chdir(r"/local/home/earnor/infraScan/")
     #os.chdir(r"/home/earnor/infraScan/")
 

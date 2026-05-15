@@ -365,7 +365,7 @@ def analyze_travel_times(od_times_status_quo, od_times_dev, od_nodes, dev_id_loo
     """
 
     # Define file paths
-    savings_path = "data/Network/travel_time/TravelTime_Savings"
+    savings_path = "data/infraScanRail/Network/travel_time/TravelTime_Savings"
     report_path = os.path.join(savings_path, "for_report")
 
     # Ensure directories exist

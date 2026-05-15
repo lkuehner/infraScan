@@ -53,7 +53,7 @@ def plotting(input_file, output_file, node_file):
     gdf = gpd.read_file(input_file)
 
     # Read the mapping file
-    mapping_file = gpd.read_file("data/Network/processed/updated_new_links.gpkg")
+    mapping_file = gpd.read_file("data/infraScanRail/Network/processed/updated_new_links.gpkg")
 
     # Correct regex for extracting numeric part of 'ID_new'
     gdf['dev_numeric'] = gdf['development'].str.extract(r'Development_(\d+)', expand=False)
@@ -203,7 +203,7 @@ def plot_developments_and_table_for_scenarios(input_dir, output_dir):
     roads = osm.get_network(network_type="all")  # Options: "driving", "walking", etc.
 
     # Save the roads data as a GeoPackage
-    output_gpkg = "data/osm_map.gpkg"
+    output_gpkg = "data/infraScanRail/osm_map.gpkg"
     roads.to_file(output_gpkg, driver="GPKG")
     print(f"Converted OSM data saved to {output_gpkg}")
     
@@ -1421,8 +1421,8 @@ def plot_rail_network(graph_dict):
 
 def plot_scenarios():
     # File paths
-    pop_file = "data/temp/data_scenario_pop.shp"
-    empl_file = "data/temp/data_scenario_empl.shp"
+    pop_file = "data/infraScanRail/temp/data_scenario_pop.shp"
+    empl_file = "data/infraScanRail/temp/data_scenario_empl.shp"
     cities_file = "data/manually_gathered_data/cities.shp"
     output_path = "plots/scenarios.png"
 
@@ -1496,11 +1496,11 @@ def plot_scenarios():
 
 def create_plot_catchement():
     # File paths
-    raster_tif = "data/catchment_pt/catchement.tif"
+    raster_tif = "data/infraScanRail/catchment_pt/catchement.tif"
     water_bodies_path = "data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp"
     location_path = "data/manually_gathered_data/Cities.shp"
-    points_path = "data/Network/processed/points.gpkg"
-    s_bahn_lines_path = "data/Network/processed/split_s_bahn_lines.gpkg"
+    points_path = "data/infraScanRail/Network/processed/points.gpkg"
+    s_bahn_lines_path = "data/infraScanRail/Network/processed/split_s_bahn_lines.gpkg"
     output_path = "plots/catchement.png"
 
     # Load data
@@ -1633,11 +1633,11 @@ def create_plot_catchement():
 
 def create_catchement_plot_time():
     # File paths
-    raster_path = "data/catchment_pt/old_catchements/catchement.tif"
+    raster_path = "data/infraScanRail/catchment_pt/old_catchements/catchement.tif"
     cities_path = "data/manually_gathered_data/cities.shp"
-    s_bahn_path = "data/Network/processed/split_s_bahn_lines.gpkg"
+    s_bahn_path = "data/infraScanRail/Network/processed/split_s_bahn_lines.gpkg"
     lakes_path = "data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp"
-    points_path = "data/Network/processed/points.gpkg"
+    points_path = "data/infraScanRail/Network/processed/points.gpkg"
     boundary_path = "data/_basic_data/innerboundary.shp"
     output_path = "plots/Catchement_Time.png"
 
@@ -1788,11 +1788,11 @@ def create_catchement_plot_time():
 
 def plot_developments_expand_by_one_station():
     # File paths
-    trainstations_path = "data/Network/processed/points.gpkg"
+    trainstations_path = "data/infraScanRail/Network/processed/points.gpkg"
     lakes_path = "data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp"
-    s_bahn_lines_path = "data/Network/processed/split_s_bahn_lines.gpkg"
-    developments_path = "data/costs/total_costs_with_geometry.gpkg"
-    endnodes_path = "data/Network/processed/endnodes.gpkg"
+    s_bahn_lines_path = "data/infraScanRail/Network/processed/split_s_bahn_lines.gpkg"
+    developments_path = "data/infraScanRail/costs/total_costs_with_geometry.gpkg"
+    endnodes_path = "data/infraScanRail/Network/processed/endnodes.gpkg"
     boundary_path = "data/_basic_data/outerboundary.shp"
     output_path = "plots/developments.png"
 
@@ -1934,8 +1934,8 @@ def plot_selected_lines(selected_lines, color_dict = None):
     railway_lines = gpd.read_file(paths.NEW_RAILWAY_LINES_PATH)
     zvv_colors = pp.zvv_colors
     df_network = gpd.read_file(settings.infra_generation_rail_network)
-    df_points = gpd.read_file('data/Network/processed/points.gpkg')
-    generate_infrastructure = importlib.import_module('generate_infrastructure')
+    df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
+    generate_infrastructure = importlib.import_module('.generate_infrastructure', package=__package__)
     G, pos = generate_infrastructure.prepare_Graph(df_network, df_points)
 
     # Liniennamen aus selected_lines verwenden und Subset erzeugen
@@ -2009,7 +2009,7 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
     if 'Sline' not in df.columns:
         try:
             # Load Sline from updated_new_links.gpkg
-            sline_data = gpd.read_file("data/Network/processed/updated_new_links.gpkg")[['dev_id', 'Sline']]
+            sline_data = gpd.read_file("data/infraScanRail/Network/processed/updated_new_links.gpkg")[['dev_id', 'Sline']]
             # Get unique Sline per dev_id (they should all be the same for each dev_id)
             sline_data = sline_data.groupby('dev_id')['Sline'].first().reset_index()
             # Merge into df
@@ -2298,8 +2298,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
             # Load network data if not already loaded
             if 'G' not in locals() or 'pos' not in locals():
                 df_network = gpd.read_file(settings.infra_generation_rail_network)
-                df_points = gpd.read_file('data/Network/processed/points.gpkg')
-                generate_infrastructure = importlib.import_module('generate_infrastructure')
+                df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
+                generate_infrastructure = importlib.import_module('.generate_infrastructure', package=__package__)
                 G, pos = generate_infrastructure.prepare_Graph(df_network, df_points)
 
             # Get all line names for expand developments
@@ -2407,8 +2407,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
         print("  → Generating plots grouped by missing connection...")
         
         df_network = gpd.read_file(settings.infra_generation_rail_network)
-        df_points = gpd.read_file('data/Network/processed/points.gpkg')
-        generate_infrastructure = importlib.import_module('generate_infrastructure')
+        df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
+        generate_infrastructure = importlib.import_module('.generate_infrastructure', package=__package__)
         G, pos = generate_infrastructure.prepare_Graph(df_network, df_points)
 
         for conn in large_dev_data['missing_connection'].dropna().unique():
@@ -2503,8 +2503,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
         # Load network data if not already loaded (might be loaded from grouped section)
         if not plot_preferences['grouped_by_connection']:
             df_network = gpd.read_file(settings.infra_generation_rail_network)
-            df_points = gpd.read_file('data/Network/processed/points.gpkg')
-            generate_infrastructure = importlib.import_module('generate_infrastructure')
+            df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
+            generate_infrastructure = importlib.import_module('.generate_infrastructure', package=__package__)
             G, pos = generate_infrastructure.prepare_Graph(df_network, df_points)
 
         global_mean_benefit = large_dev_data.groupby('development')['total_net_benefit'].mean().sort_values(ascending=False)
@@ -4084,8 +4084,8 @@ def create_ranked_pipeline_comparison_plots(
     os.makedirs(comparison_dir, exist_ok=True)
 
     # Load data from both pipelines
-    new_data_path = "data/costs/total_costs_raw.csv"
-    old_data_path = "data/costs/total_costs_raw_old.csv"
+    new_data_path = "data/infraScanRail/costs/total_costs_raw.csv"
+    old_data_path = "data/infraScanRail/costs/total_costs_raw_old.csv"
 
     if not os.path.exists(new_data_path):
         print(f"  ⚠ New pipeline data not found: {new_data_path}")
@@ -4195,7 +4195,7 @@ def _prepare_pipeline_data(file_path, pipeline='new'):
 
     # Load Sline data for line_name generation
     try:
-        sline_data = gpd.read_file("data/Network/processed/updated_new_links.gpkg")[['dev_id', 'Sline']]
+        sline_data = gpd.read_file("data/infraScanRail/Network/processed/updated_new_links.gpkg")[['dev_id', 'Sline']]
         sline_data = sline_data.groupby('dev_id')['Sline'].first().reset_index()
         df = df.merge(sline_data, left_on='development', right_on='dev_id', how='left')
         if 'dev_id' in df.columns:
@@ -4820,8 +4820,8 @@ def create_all_developments_pipeline_comparison_plots(plot_directory="plots"):
     os.makedirs(comparison_dir, exist_ok=True)
 
     # Load data from both pipelines
-    new_data_path = "data/costs/total_costs_raw.csv"
-    old_data_path = "data/costs/total_costs_raw_old.csv"
+    new_data_path = "data/infraScanRail/costs/total_costs_raw.csv"
+    old_data_path = "data/infraScanRail/costs/total_costs_raw_old.csv"
 
     if not os.path.exists(new_data_path):
         print(f"  ⚠ New pipeline data not found: {new_data_path}")

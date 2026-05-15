@@ -12,7 +12,7 @@ MAIN = "/Volumes/WD_Windows/MSc_Thesis/"
 # Define settings 
 TRAVEL_TIME_METHODS = {"aggregate": "Aggregate travel time savings on network level",
                         "od": "OD demand-weighted travel timae savings"}
-travel_time_savings_method = "aggregate" # TODO: od or aggregate
+travel_time_savings_method = "od" # TODO: od or aggregate
 
 
 ##################################################################################
@@ -28,7 +28,7 @@ n_min, n_max = 1237000, 1254000     # 1238000, 1252000 - 1237000, 1252000
 #
 SCENARIO_TYPE = {"GENERATED": "Generated scenarios based on random sampling of the input parameters",
                  "STATIC": "Existing scenarios based on the Swiss population scenario of the BFS"}
-scenario_type = "STATIC"  # TODO: GENERATED or STATIC
+scenario_type = "GENERATED"  # TODO: GENERATED or STATIC
 
 
 # Optional local cap for GENERATED runs (set to None to disable cap)
@@ -42,7 +42,7 @@ start_valuation_year = 2050
 # Optional debug throttles for Phase 6 travel-time computation
 # When enabled, these limits are applied in both aggregate and OD modes.
 travel_time_debug_enabled = True  # True or False
-travel_time_debug_scenarios = None  # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
+travel_time_debug_scenarios = ("scenario_76", "scenario_45", "scenario_67")  # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
 aggregate_debug_max_developments = 10  # e.g. 1
 aggregate_debug_developments_ids = [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
 od_max_developments = 10  # e.g. 1
@@ -151,15 +151,6 @@ def get_representative_generated_scenarios(
     positions = sorted(set(int(pos) for pos in positions))
     return [f"scenario_{idx}" for idx in positions]
 
-
-##################################################################################
-# Define Modal Split settings
-# based on Verkehrsperspektiven 2050
-avg_growth_rate=-0.0024
-start_value=0.731
-start_std_dev=0.015
-end_std_dev=0.045
-std_dev_shocks=0.02
 
 ##################################################################################
 # Define variables for monetisation

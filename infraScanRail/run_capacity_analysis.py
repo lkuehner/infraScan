@@ -35,7 +35,7 @@ from . import settings
 from . import paths
 
 # Define absolute paths (consistent with capacity_calculator.py)
-DATA_ROOT = Path(paths.MAIN) / "data" / "Network"
+DATA_ROOT = Path(paths.MAIN) / "data" / "infraScanRail" / "Network"
 CAPACITY_ROOT = DATA_ROOT / "capacity"
 
 
@@ -97,7 +97,7 @@ def run_baseline_workflow(network_label: str = None, visualize: bool = True) -> 
         if visualize:
             print("\nStep 2: Generating visualizations...")
             try:
-                from network_plot import (
+                from .network_plot import (
                     plot_capacity_network,
                     plot_speed_profile_network,
                     plot_service_network
@@ -197,7 +197,7 @@ def run_baseline_extended_workflow(network_label: str = None, visualize: bool = 
         if visualize:
             print("\nStep 2: Generating visualizations...")
             try:
-                from network_plot import (
+                from .network_plot import (
                     plot_capacity_network,
                     plot_speed_profile_network,
                     plot_service_network
@@ -325,7 +325,7 @@ def run_development_workflow(
         if visualize:
             print("\nStep 2: Generating visualizations...")
             try:
-                from network_plot import (
+                from .network_plot import (
                     plot_capacity_network,
                     plot_speed_profile_network,
                     plot_service_network
