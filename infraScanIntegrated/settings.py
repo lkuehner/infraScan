@@ -30,16 +30,18 @@ rail_modal_split_start = 0.209
 road_modal_split_start = 0.731
 other_modal_split_start = 0.06
 
-# Verkehrsperspektiven 2050 anchor values used to extend all three modal split paths
-# up to 2100 with a constant annual growth rate.
+# Verkehrsperspektiven 2050 anchor values.
+# In the integrated joint model, all three modal drifts are calibrated from the
+# 2018 start shares to these 2050 anchors and then extended with the same yearly
+# rate up to 2100.
 rail_modal_split_target = 0.243
 other_modal_split_target = 0.081
 road_modal_split_target = 0.676
 
 # Growth assumptions used for sampling the modal behaviour scenarios.
-# Rail follows the original infraScanRail assumption directly. Road and other use
-# the same setup, calibrated from the corresponding Verkehrsperspektiven anchor
-# values over the 2018-2100 horizon.
+# The symmetric integrated setup derives the mean drift for rail, road and other
+# directly from the 2018 start values and the Verkehrsperspektiven-2050 anchors.
+# This keeps the three-mode implementation internally consistent.
 
 def _annualized_growth_rate(start_value: float, target_value: float, start_year: int, target_year: int) -> float:
 	horizon = max(1, int(target_year) - int(start_year))
@@ -48,34 +50,42 @@ def _annualized_growth_rate(start_value: float, target_value: float, start_year:
 	return (target_value / start_value) ** (1.0 / horizon) - 1.0
 
 
-rail_modal_split_avg_growth_rate = 0.0045
+rail_modal_split_avg_growth_rate = _annualized_growth_rate(
+	rail_modal_split_start,
+	rail_modal_split_target,
+	start_year_scenario,
+	start_valuation_year,
+)
 road_modal_split_avg_growth_rate = _annualized_growth_rate(
 	road_modal_split_start,
 	road_modal_split_target,
 	start_year_scenario,
-	end_year_scenario,
+	start_valuation_year,
 )
 other_modal_split_avg_growth_rate = _annualized_growth_rate(
 	other_modal_split_start,
 	other_modal_split_target,
 	start_year_scenario,
-	end_year_scenario,
+	start_valuation_year,
 )
 
 # These per-mode volatility inputs are still used, but no longer as direct share
 # noise like in the rail-only generator. In the current logistic-normal setup
-# they are combined into the latent joint-process volatility.
+# they are combined into the latent joint-process volatility. The values mirror
+# the original rail calibration idea: sigma grows from 0.015 in 2018 to 0.045
+# in 2100 and tau is fixed at 0.02, so the Verkehrsperspektiven anchors should
+# remain inside the central 90% of the generated sample.
 rail_modal_split_start_std_dev = 0.015
 rail_modal_split_end_std_dev = 0.045
 rail_modal_split_std_dev_shocks = 0.02
 
 road_modal_split_start_std_dev = 0.015
-road_modal_split_end_std_dev = 0.015
-road_modal_split_std_dev_shocks = 0.01
+road_modal_split_end_std_dev = 0.045
+road_modal_split_std_dev_shocks = 0.02
 
-other_modal_split_start_std_dev = 0.005
-other_modal_split_end_std_dev = 0.015
-other_modal_split_std_dev_shocks = 0.01
+other_modal_split_start_std_dev = 0.015
+other_modal_split_end_std_dev = 0.045
+other_modal_split_std_dev_shocks = 0.02
 
 # Parameters used only by the current joint logistic-normal modal split model.
 modal_split_latent_correlation = 0.15

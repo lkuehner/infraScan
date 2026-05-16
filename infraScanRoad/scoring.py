@@ -1565,6 +1565,35 @@ def GetVoronoiOD_multi(selected_developments=None):
     return
 
 
+def _load_generated_road_scenario_factors():
+    from infraScan.infraScanIntegrated import paths as integrated_paths
+    from .random_scenarios import precompute_modal_distance_factors
+    import pickle
+
+    shared_components_path = integrated_paths.SHARED_COMPONENTS_PATH
+    if not os.path.exists(shared_components_path):
+        raise FileNotFoundError(
+            "Generated road Voronoi OD export requires shared integrated scenario components at "
+            f"{shared_components_path}."
+        )
+
+    with open(shared_components_path, "rb") as handle:
+        shared_components = pickle.load(handle)
+
+    modal_split_road = shared_components["modal_split_road"]
+    distance_per_person = shared_components["distance_per_person"]
+    shared_start_year = int(shared_components["meta"]["start_year"])
+    num_of_scenarios = int(shared_components["meta"]["num_of_scenarios"])
+    scenario_names = [f"scenario_{idx + 1}" for idx in range(num_of_scenarios)]
+
+    modal_factors, distance_factors = precompute_modal_distance_factors(
+        modal_split_road,
+        distance_per_person,
+        shared_start_year,
+    )
+    return scenario_names, modal_factors, distance_factors
+
+
 def GetVoronoiOD_generated_status_quo(year=None):
     """
     Build status-quo Voronoi OD matrices for generated scenarios.
@@ -1577,14 +1606,7 @@ def GetVoronoiOD_generated_status_quo(year=None):
     if year is None:
         year = settings.start_valuation_year
 
-    scenario_files = [
-        f for f in os.listdir("data/infraScanRoad/traffic_flow/od/scenarios_zone")
-        if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-    ]
-    scenarios = sorted([f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files])
-    if not scenarios:
-        print("No generated scenario OD matrices found for status-quo Voronoi export.")
-        return
+    scenarios, modal_factors, distance_factors = _load_generated_road_scenario_factors()
 
     output_dir = os.path.join(
         "data", "infraScanRoad", "traffic_flow", "od", "scenarios_voronoi", "generated"
@@ -1627,39 +1649,8 @@ def GetVoronoiOD_generated_status_quo(year=None):
     with rasterio.open(base_raster_path) as src:
         voronoi_tif = src.read(1)
 
-    from .random_scenarios import (
-        generate_modal_split_scenarios,
-        generate_distance_per_person_scenarios,
-        precompute_modal_distance_factors,
-    )
-
-    modal_split_scenarios = generate_modal_split_scenarios(
-        avg_growth_rate=integrated_settings.road_modal_split_avg_growth_rate,
-        start_value=integrated_settings.road_modal_split_start,
-        start_year=settings.start_year_scenario,
-        end_year=settings.end_year_scenario,
-        n_scenarios=settings.amount_of_scenarios,
-        start_std_dev=integrated_settings.road_modal_split_start_std_dev,
-        end_std_dev=integrated_settings.road_modal_split_end_std_dev,
-        std_dev_shocks=integrated_settings.road_modal_split_std_dev_shocks
-    )
-    distance_per_person_scenarios = generate_distance_per_person_scenarios(
-        avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
-        start_value=integrated_settings.distance_per_person_start,
-        start_year=settings.start_year_scenario,
-        end_year=settings.end_year_scenario,
-        n_scenarios=settings.amount_of_scenarios,
-        start_std_dev=integrated_settings.distance_per_person_start_std_dev,
-        end_std_dev=integrated_settings.distance_per_person_end_std_dev,
-        std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
-    )
-    modal_factors, distance_factors = precompute_modal_distance_factors(
-        modal_split_scenarios,
-        distance_per_person_scenarios,
-        settings.start_year_scenario
-    )
-
     scenario_pop_rasters = {}
+    available_scenarios = []
     for scen_name in scenarios:
         pop_raster_path = os.path.join(
             "data",
@@ -1669,12 +1660,14 @@ def GetVoronoiOD_generated_status_quo(year=None):
             f"{scen_name}_pop.tif",
         )
         if not os.path.exists(pop_raster_path):
-            raise FileNotFoundError(
-                f"Missing generated population raster for scenario '{scen_name}': "
-                f"{pop_raster_path}"
-            )
+            continue
         with rasterio.open(pop_raster_path) as src:
             scenario_pop_rasters[scen_name] = src.read(1)
+        available_scenarios.append(scen_name)
+
+    if not available_scenarios:
+        raise FileNotFoundError("No generated population rasters were found for generated Voronoi OD export.")
+    scenarios = available_scenarios
 
     unique_voronoi_id = np.sort(np.unique(voronoi_tif))
     unique_commune_id = np.sort(np.unique(commune_raster))
@@ -1770,14 +1763,7 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
 
     if year is None:
         year = settings.start_valuation_year
-    scenario_files = [
-        f for f in os.listdir("data/infraScanRoad/traffic_flow/od/scenarios_zone")
-        if f.startswith("od_matrix_scenario_") and f.endswith(".csv")
-    ]
-    scenarios = sorted([f.replace("od_matrix_", "").replace(".csv", "") for f in scenario_files])
-    if not scenarios:
-        print("No generated scenario OD matrices found for development OD export.")
-        return
+    scenarios, modal_factors, distance_factors = _load_generated_road_scenario_factors()
 
 
     for filename in os.listdir("data/infraScanRoad/traffic_flow/od/development_voronoi/generated"):
@@ -1818,39 +1804,8 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
     # Shared commune raster on the road reference grid
     commune_raster, _ = GetCommuneShapes(raster_path=base_raster_path)
 
-    from .random_scenarios import (
-        generate_modal_split_scenarios,
-        generate_distance_per_person_scenarios,
-        precompute_modal_distance_factors,
-    )
-
-    modal_split_scenarios = generate_modal_split_scenarios(
-        avg_growth_rate=integrated_settings.road_modal_split_avg_growth_rate,
-        start_value=integrated_settings.road_modal_split_start,
-        start_year=settings.start_year_scenario,
-        end_year=settings.end_year_scenario,
-        n_scenarios=settings.amount_of_scenarios,
-        start_std_dev=integrated_settings.road_modal_split_start_std_dev,
-        end_std_dev=integrated_settings.road_modal_split_end_std_dev,
-        std_dev_shocks=integrated_settings.road_modal_split_std_dev_shocks
-    )
-    distance_per_person_scenarios = generate_distance_per_person_scenarios(
-        avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
-        start_value=integrated_settings.distance_per_person_start,
-        start_year=settings.start_year_scenario,
-        end_year=settings.end_year_scenario,
-        n_scenarios=settings.amount_of_scenarios,
-        start_std_dev=integrated_settings.distance_per_person_start_std_dev,
-        end_std_dev=integrated_settings.distance_per_person_end_std_dev,
-        std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
-    )
-    modal_factors, distance_factors = precompute_modal_distance_factors(
-        modal_split_scenarios,
-        distance_per_person_scenarios,
-        settings.start_year_scenario
-    )
-
     scenario_pop_rasters = {}
+    available_scenarios = []
     for scen_name in scenarios:
         pop_raster_path = os.path.join(
             "data",
@@ -1860,12 +1815,14 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
             f"{scen_name}_pop.tif",
         )
         if not os.path.exists(pop_raster_path):
-            raise FileNotFoundError(
-                f"Missing generated population raster for scenario '{scen_name}': "
-                f"{pop_raster_path}"
-            )
+            continue
         with rasterio.open(pop_raster_path) as src:
             scenario_pop_rasters[scen_name] = src.read(1)
+        available_scenarios.append(scen_name)
+
+    if not available_scenarios:
+        raise FileNotFoundError("No generated population rasters were found for generated development OD export.")
+    scenarios = available_scenarios
 
     xx_values = []
     for filename in os.listdir(directory_path):

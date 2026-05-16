@@ -23,7 +23,6 @@ ROAD_VORONOI_TIF_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRo
 ROAD_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad", "traffic_flow", "od", "od_matrix_20.csv")
 ROAD_POPULATION_BY_COMMUNE_PATH = os.path.join(integrated_paths.MAIN, "data", "Scenario", "population_by_gemeinde_2018.csv")
 ROAD_SCENARIO_CACHE_DIR = os.path.join(integrated_paths.MAIN, "data", "Scenario", "cache", "road", "random")
-ROAD_OD_SCENARIO_EXPORT_DIR = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad", "traffic_flow", "od", "scenarios_zone")
 ROAD_POPULATION_RASTER_OUTPUT_DIR = os.path.join(integrated_paths.MAIN, "data", "independent_variable", "processed", "scenario")
 RAIL_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "traffic_flow", "od", "rail", "ktzh", "od_matrix_stations_ktzh_20.csv")
 RAIL_COMMUNE_TO_STATION_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "Network", "processed", "Communes_to_railway_stations_ZH.xlsx")
@@ -59,7 +58,7 @@ def get_bezirk_population_scenarios():
     # Compute the growth factor: population_2050 / population_2018
     swiss_growth_factor_18_50 = pop_2050[0] / pop_2018[0]
     # Read the CSV file with ";" as separator
-    df = pd.read_csv(integrated_paths.POPULATION_SCENARIO_CANTON_ZH_2050, sep=';')
+    df = pd.read_csv(integrated_paths.POPULATION_SCENARIO_CANTON_ZH_2050, sep=';', encoding='utf-8')
     # Step 1: Aggregate total population per district and year
     population_summary = (
         df.groupby(['bezirk', 'jahr'])['anzahl']
@@ -237,76 +236,6 @@ def generate_population_scenarios(ref_df: pd.DataFrame,
             })
 
     return pd.DataFrame(scenario_data)
-
-
-def generate_modal_split_scenarios(avg_growth_rate: float,
-                                   start_value: float,
-                                   start_year: int,
-                                   end_year: int,
-                                   n_scenarios: int = 1000,
-                                   start_std_dev: float = 0.01,
-                                   end_std_dev: float = 0.03,
-                                   std_dev_shocks: float = 0.02) -> pd.DataFrame:
-    """
-    Generate stochastic modal split scenarios using Latin Hypercube Sampling and a random walk process.
-
-    Note:
-    - This is the old direct single-mode generator from the rail-style approach.
-    - It is still used as a helper/reference implementation.
-    - The current integrated three-mode pipeline does not call this function for
-      modal split generation anymore; it uses generate_joint_modal_split_scenarios().
-
-    Parameters:
-    - avg_growth_rate: average annual growth rate to apply (can be positive or negative)
-    - start_value: initial modal split value at start_year
-    - start_year: year to begin scenario generation
-    - end_year: year to end scenario generation
-    - n_scenarios: number of scenarios to generate
-    - start_std_dev: starting std deviation applied to growth rate perturbation
-    - end_std_dev: ending std deviation applied to growth rate perturbation
-    - std_dev_shocks: std deviation of yearly additive shocks
-
-    Returns:
-    - DataFrame with columns: "scenario", "year", "modal_split", "growth_rate", "growth_index"
-    """
-    # Erstelle temporären Referenzdatensatz mit konstanter Wachstumsrate
-    years = np.arange(start_year, end_year + 1)
-    n_years = len(years)
-
-    # Berechne die Werte mit konstanter Wachstumsrate
-    growth_factors = np.ones(n_years) * (1 + avg_growth_rate)
-    growth_factors[0] = 1  # Erster Faktor ist 1, da es der Startwert ist
-
-    # Kumulatives Wachstum berechnen
-    cumulative_growth = np.cumprod(growth_factors)
-    modal_split_values = start_value * cumulative_growth
-
-    # Erstelle Array von Wachstumsraten (erster Wert ist 0, danach konstant)
-    growth_rates = np.zeros(n_years)
-    growth_rates[1:] = avg_growth_rate  # Konstante Wachstumsrate für alle Jahre außer dem ersten
-
-    # Erstelle temporären DataFrame
-    ref_df = pd.DataFrame({
-        "jahr": years,
-        "total_population": modal_split_values,
-        "growth_rate": growth_rates
-    })
-
-    # Verwende die bestehende Funktion
-    modal_split_scenarios_df = generate_population_scenarios(
-        ref_df=ref_df,
-        start_year=start_year,
-        end_year=end_year,
-        n_scenarios=n_scenarios,
-        start_std_dev=start_std_dev,
-        end_std_dev=end_std_dev,
-        std_dev_shocks=std_dev_shocks
-    )
-
-    # Umbenennen der Spalte "population" in "modal_split"
-    modal_split_scenarios_df = modal_split_scenarios_df.rename(columns={"population": "modal_split"})
-
-    return modal_split_scenarios_df
 
 
 def _finalize_modal_split_frame(
@@ -514,10 +443,27 @@ def generate_distance_per_person_scenarios(avg_growth_rate: float,
     Returns:
     - DataFrame with columns: "scenario", "year", "trips_per_person", "growth_rate", "growth_index"
     """
-    # Nutze die bestehende Funktion für Modal-Split-Szenarien
-    scenarios_df = generate_modal_split_scenarios(
-        avg_growth_rate=avg_growth_rate,
-        start_value=start_value,
+    # Distance per person still uses the single-series setup:
+    # deterministic drift + LHS perturbations + cumulative shocks.
+    years = np.arange(start_year, end_year + 1)
+    n_years = len(years)
+
+    growth_factors = np.ones(n_years) * (1 + avg_growth_rate)
+    growth_factors[0] = 1
+    cumulative_growth = np.cumprod(growth_factors)
+    distance_values = start_value * cumulative_growth
+
+    growth_rates = np.zeros(n_years)
+    growth_rates[1:] = avg_growth_rate
+
+    ref_df = pd.DataFrame({
+        "jahr": years,
+        "total_population": distance_values,
+        "growth_rate": growth_rates
+    })
+
+    scenarios_df = generate_population_scenarios(
+        ref_df=ref_df,
         start_year=start_year,
         end_year=end_year,
         n_scenarios=n_scenarios,
@@ -526,8 +472,7 @@ def generate_distance_per_person_scenarios(avg_growth_rate: float,
         std_dev_shocks=std_dev_shocks
     )
 
-    # Benenne die Spalte "modal_split" in "trips_per_person" um
-    scenarios_df = scenarios_df.rename(columns={"modal_split": "distance_per_person"})
+    scenarios_df = scenarios_df.rename(columns={"population": "distance_per_person"})
 
     return scenarios_df
 
@@ -562,8 +507,8 @@ def compute_growth_od_matrix_rail_optimized(
     Optimierte Version von compute_growth_od_matrix
     """
     # --- 1) Struktur aufsetzen
-    stations = initial_od.columns.tolist()
-    from_stations = initial_od.index.tolist()
+    stations = [int(station) for station in initial_od.columns.tolist()]
+    from_stations = [int(station) for station in initial_od.index.tolist()]
 
     # --- 2) Wachstumsindex für alle Stationen berechnen
     station_growth = {}
@@ -596,7 +541,7 @@ def compute_growth_od_matrix_rail_optimized(
 
         for commune, district, pop_start_commune in station_commune_lookup[station]:
             # Population im Szenario für Start- und Ziel-Jahr
-            scen = population_scenarios[district]
+            scen = population_scenarios[str(district) if str(district) in population_scenarios else district]
 
             # Effizienterer Zugriff mit vorgefilterten Daten
             scenario_data = scen[(scen['scenario'] == scenario)]
@@ -618,8 +563,8 @@ def compute_growth_od_matrix_rail_optimized(
     sqrt_factors = {station: np.sqrt(factor) for station, factor in station_growth.items()}
 
     # Zeilenweise Multiplikation
-    for station in set(list(map(str, from_stations))).intersection(sqrt_factors.keys()):
-        growth_od.loc[int(station), :] *= sqrt_factors[station]
+    for station in set(from_stations).intersection(sqrt_factors.keys()):
+        growth_od.loc[station, :] *= sqrt_factors[station]
 
     # Spaltenweise Multiplikation
     for station in set(stations).intersection(sqrt_factors.keys()):
@@ -750,7 +695,7 @@ def compute_growth_od_matrix_optimized(
 
         for commune, district, pop_start_commune in station_commune_lookup[station]:
             # Population im Szenario für Start- und Ziel-Jahr
-            scen = population_scenarios[district]
+            scen = population_scenarios[str(district) if str(district) in population_scenarios else district]
 
             # Effizienterer Zugriff mit vorgefilterten Daten
             scenario_data = scen[(scen['scenario'] == scenario)]
@@ -773,7 +718,7 @@ def compute_growth_od_matrix_optimized(
 
     # Zeilenweise Multiplikation
     for station in set(list(map(str, from_stations))).intersection(sqrt_factors.keys()):
-        growth_od.loc[int(station), :] *= sqrt_factors[station]
+        growth_od.loc[station, :] *= sqrt_factors[station]
 
     # Spaltenweise Multiplikation
     for station in set(stations).intersection(sqrt_factors.keys()):
@@ -931,49 +876,29 @@ def generate_rail_od_growth_scenarios(
     start_year: int,
     end_year: int,
     num_of_scenarios: int,
-    scenario_components: Dict[str, Any] | None = None,
+    scenario_components: Dict[str, Any] | None,
     do_plot: bool = False,
     n_jobs: int = -1,
 ) -> Dict[str, Dict[int, pd.DataFrame]]:
     """
     Optimierte Version von generate_od_growth_scenarios mit Multiprocessing
     """
+    initial_od_matrix = initial_od_matrix.copy()
+    initial_od_matrix["from_station"] = initial_od_matrix["from_station"].astype(int)
+    initial_od_matrix.columns = [
+        "from_station" if col == "from_station" else int(col)
+        for col in initial_od_matrix.columns
+    ]
     initial_od_matrix = initial_od_matrix.set_index('from_station')
-    if scenario_components is not None:
-        population_scenarios = scenario_components["population_scenarios"]
-        modal_split_scenarios = scenario_components["modal_split_rail"]
-        distance_per_person_scenarios = scenario_components["distance_per_person"]
-    else:
-        # 1) Bezirkspopulationsszenarien
-        bezirk_pop_scenarios = get_bezirk_population_scenarios()
-        population_scenarios = {
-            bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
-            for bezirk, df in bezirk_pop_scenarios.items()
-        }
+    if scenario_components is None:
+        raise ValueError(
+            "Rail OD generation in the integrated pipeline requires shared scenario components. "
+            "Pass the saved shared_components_path from generate_and_apply_shared_scenarios()."
+        )
 
-        # 2) Modal-Split- & Distance-per-Person-Szenarien
-        # This fallback keeps the old rail-only behaviour available when the
-        # shared integrated components are not passed in.
-        modal_split_scenarios = generate_modal_split_scenarios(
-            avg_growth_rate=integrated_settings.rail_modal_split_avg_growth_rate,
-            start_value=integrated_settings.rail_modal_split_start,
-            start_year=start_year,
-            end_year=end_year,
-            n_scenarios=num_of_scenarios,
-            start_std_dev=integrated_settings.rail_modal_split_start_std_dev,
-            end_std_dev=integrated_settings.rail_modal_split_end_std_dev,
-            std_dev_shocks=integrated_settings.rail_modal_split_std_dev_shocks
-        )
-        distance_per_person_scenarios = generate_distance_per_person_scenarios(
-            avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
-            start_value=integrated_settings.distance_per_person_start,
-            start_year=start_year,
-            end_year=end_year,
-            n_scenarios=num_of_scenarios,
-            start_std_dev=integrated_settings.distance_per_person_start_std_dev,
-            end_std_dev=integrated_settings.distance_per_person_end_std_dev,
-            std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
-        )
+    population_scenarios = scenario_components["population_scenarios"]
+    modal_split_scenarios = scenario_components["modal_split_rail"]
+    distance_per_person_scenarios = scenario_components["distance_per_person"]
     if do_plot:
         pass
 
@@ -1030,33 +955,13 @@ def load_scenarios_from_cache(cache_dir: str):
     return scenarios
 
 
-def export_scenario_year_to_status_quo_csvs(scenarios: dict, year: int, output_dir: str) -> list[str]:
-    os.makedirs(output_dir, exist_ok=True)
-
-    for filename in os.listdir(output_dir):
-        if filename.startswith("od_matrix_scenario_") and filename.endswith(".csv"):
-            os.remove(os.path.join(output_dir, filename))
-
-    exported = []
-    for scenario_name, yearly_data in scenarios.items():
-        if year not in yearly_data:
-            continue
-
-        od_df = yearly_data[year].copy()
-        od_df = od_df.reset_index().rename(columns={"index": "from_zone"})
-        out_path = os.path.join(output_dir, f"od_matrix_{scenario_name}.csv")
-        od_df.to_csv(out_path, index=False)
-        exported.append(scenario_name)
-
-    return exported
-
-
 def export_generated_population_rasters(
     scenarios: dict,
     start_year: int,
     end_year: int,
     num_of_scenarios: int,
     valuation_year: int,
+    scenario_components: Dict[str, Any] | None = None,
     output_dir: str = ROAD_POPULATION_RASTER_OUTPUT_DIR,
 ) -> int:
     del end_year, num_of_scenarios
@@ -1088,8 +993,14 @@ def export_generated_population_rasters(
     communes_population = communes_population.dropna(subset=["gemeinde_bfs_nr", "bezirk", "anzahl"])
     communes_population["gemeinde_bfs_nr"] = communes_population["gemeinde_bfs_nr"].astype(int)
 
-    bezirk_pop_scenarios = get_bezirk_population_scenarios()
-    population_scenarios = {bezirk: generate_population_scenarios(df, start_year, valuation_year, num_of_scenarios) for bezirk, df in bezirk_pop_scenarios.items()}
+    if scenario_components is not None:
+        population_scenarios = scenario_components["population_scenarios"]
+    else:
+        bezirk_pop_scenarios = get_bezirk_population_scenarios()
+        population_scenarios = {
+            bezirk: generate_population_scenarios(df, start_year, valuation_year, num_of_scenarios)
+            for bezirk, df in bezirk_pop_scenarios.items()
+        }
 
     scenario_indices = []
     for scenario_name in scenarios.keys():
@@ -1115,7 +1026,8 @@ def export_generated_population_rasters(
         for row in communes_population.itertuples(index=False):
             bfs = int(row.gemeinde_bfs_nr)
             district = row.bezirk
-            scenario_df = population_scenarios.get(district)
+            district_key = str(district) if str(district) in population_scenarios else district
+            scenario_df = population_scenarios.get(district_key)
             if scenario_df is None:
                 continue
             scen_slice = scenario_df[scenario_df["scenario"] == scenario_idx]
@@ -1161,20 +1073,15 @@ def get_random_scenarios(
     if use_cache:
         scenarios = load_scenarios_from_cache(cache_dir)
         if scenarios:
-            exported_scenarios = export_scenario_year_to_status_quo_csvs(
+            export_generated_population_rasters(
                 scenarios=scenarios,
-                year=integrated_settings.start_valuation_year,
-                output_dir=ROAD_OD_SCENARIO_EXPORT_DIR,
+                start_year=start_year,
+                end_year=end_year,
+                num_of_scenarios=num_of_scenarios,
+                valuation_year=road_settings.start_valuation_year,
+                scenario_components=scenario_components,
             )
-            if exported_scenarios:
-                export_generated_population_rasters(
-                    scenarios=scenarios,
-                    start_year=start_year,
-                    end_year=end_year,
-                    num_of_scenarios=num_of_scenarios,
-                    valuation_year=road_settings.start_valuation_year,
-                )
-                return scenarios
+            return scenarios
 
     communes_to_zones = load_or_create_commune_to_zone_mapping(
         mapping_path=ROAD_COMMUNE_TO_ZONE_MAPPING_PATH,
@@ -1205,17 +1112,13 @@ def get_random_scenarios(
         with open(os.path.join(cache_dir, f"{scenario_name}.pkl"), "wb") as handle:
             pickle.dump(scenario_data, handle)
 
-    export_scenario_year_to_status_quo_csvs(
-        scenarios=scenarios,
-        year=integrated_settings.start_valuation_year,
-        output_dir=ROAD_OD_SCENARIO_EXPORT_DIR,
-    )
     export_generated_population_rasters(
         scenarios=scenarios,
         start_year=start_year,
         end_year=end_year,
         num_of_scenarios=num_of_scenarios,
         valuation_year=integrated_settings.start_valuation_year,
+        scenario_components=scenario_components,
     )
 
     return scenarios
@@ -1240,6 +1143,10 @@ def get_rail_random_scenarios(
     if shared_components_path and os.path.exists(shared_components_path):
         with open(shared_components_path, "rb") as handle:
             scenario_components = pickle.load(handle)
+    else:
+        raise FileNotFoundError(
+            "Integrated rail scenario generation requires a valid shared_components_path."
+        )
 
     scenarios = generate_rail_od_growth_scenarios(
         pd.read_csv(RAIL_OD_MATRIX_PATH),
@@ -1361,6 +1268,10 @@ def build_shared_scenario_summary(
     components: Dict[str, Any],
     valuation_year: int,
 ) -> pd.DataFrame:
+    """
+    Determines a set of key indicators for all generated scenarios in the valuation year and compares them to the start year.
+    Is used to select a representative subset of scenarios for the road and rail scenario generation steps.
+    """
     meta = components["meta"]
     start_year = int(meta["start_year"])
     num_of_scenarios = int(meta["num_of_scenarios"])

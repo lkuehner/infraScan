@@ -13,6 +13,7 @@ import rasterio
 from .scoring import GetCommuneShapes
 from . import settings
 from infraScan.infraScanIntegrated import settings as integrated_settings
+from infraScan.infraScanIntegrated import paths as integrated_paths
 
 def get_bezirk_population_scenarios():
     # Read the Swiss population scenario CSV with "," separator
@@ -23,7 +24,7 @@ def get_bezirk_population_scenarios():
     # Compute the growth factor: population_2050 / population_2018
     swiss_growth_factor_18_50 = pop_2050[0] / pop_2018[0]
     # Read the CSV file with ";" as separator
-    df = pd.read_csv("data/Scenario/KTZH_00000705_00001741.csv", sep=';')
+    df = pd.read_csv("data/Scenario/KTZH_00000705_00001741.csv", sep=';', encoding='utf-8')
     # Step 1: Aggregate total population per district and year
     population_summary = (
         df.groupby(['bezirk', 'jahr'])['anzahl']
@@ -556,7 +557,7 @@ def compute_growth_od_matrix_optimized(
 
         for commune, district, pop_start_commune, weight in zone_commune_lookup[zone]:
             # Population im Szenario für Start- und Ziel-Jahr
-            scen = population_scenarios[district]
+            scen = population_scenarios[str(district) if str(district) in population_scenarios else district]
 
             # Effizienterer Zugriff mit vorgefilterten Daten
             scenario_data = scen[(scen['scenario'] == scenario)]
@@ -579,7 +580,7 @@ def compute_growth_od_matrix_optimized(
     sqrt_factors = {zone: np.sqrt(factor) for zone, factor in zone_growth.items()}
 
     # Row-wise scaling
-    for zone in from_zones:
+    for zone in map(str, from_zones):
         if zone in sqrt_factors:
             growth_od.loc[zone, :] *= sqrt_factors[zone]
 
@@ -689,43 +690,15 @@ def generate_od_growth_scenarios(
     # Ensure commone columns are strings and remove any potential BOM characters
     communes_population.columns = communes_population.columns.str.replace("\ufeff", "", regex=False)
 
-
-    if scenario_components is not None:
-        population_scenarios = scenario_components["population_scenarios"]
-        modal_split_scenarios = scenario_components["modal_split_road"]
-        distance_per_person_scenarios = scenario_components["distance_per_person"]
-    else:
-        # 1) Bezirkspopulationsszenarien
-        bezirk_pop_scenarios = get_bezirk_population_scenarios()
-        population_scenarios = {
-            bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
-            for bezirk, df in bezirk_pop_scenarios.items()
-        }
-
-        # 2) Modal-Split- & Distance-per-Person-Szenarien
-        # for road
-        modal_split_scenarios = generate_modal_split_scenarios(
-            avg_growth_rate=integrated_settings.road_modal_split_avg_growth_rate,
-            start_value=integrated_settings.road_modal_split_start,
-            start_year=start_year,
-            end_year=end_year,
-            n_scenarios=num_of_scenarios,
-            start_std_dev=integrated_settings.road_modal_split_start_std_dev,
-            end_std_dev=integrated_settings.road_modal_split_end_std_dev,
-            std_dev_shocks=integrated_settings.road_modal_split_std_dev_shocks
+    if scenario_components is None:
+        raise ValueError(
+            "Road OD generation requires shared scenario components so the tessellated road demand "
+            "uses the same integrated modal split and distance assumptions."
         )
 
-        # same for road and rail
-        distance_per_person_scenarios = generate_distance_per_person_scenarios(
-            avg_growth_rate=integrated_settings.distance_per_person_avg_growth_rate,
-            start_value=integrated_settings.distance_per_person_start,
-            start_year=start_year,
-            end_year=end_year,
-            n_scenarios=num_of_scenarios,
-            start_std_dev=integrated_settings.distance_per_person_start_std_dev,
-            end_std_dev=integrated_settings.distance_per_person_end_std_dev,
-            std_dev_shocks=integrated_settings.distance_per_person_std_dev_shocks
-        )
+    population_scenarios = scenario_components["population_scenarios"]
+    modal_split_scenarios = scenario_components["modal_split_road"]
+    distance_per_person_scenarios = scenario_components["distance_per_person"]
     if do_plot:
         first_three_bezirk = list(population_scenarios.keys())[:3]
         first_three_scenarios = {bezirk: population_scenarios[bezirk] for bezirk in first_three_bezirk}
@@ -828,43 +801,13 @@ def load_scenarios_from_cache(cache_dir):
         print(f"Loaded {len(scenarios)} scenarios from {cache_dir}")
     return scenarios
 
-def export_scenario_year_to_status_quo_csvs(
-        scenarios: dict,
-        year: int,
-        output_dir: str,
-) -> list[str]:
-    """
-    Exportiert die OD-Matrix eines bestimmten Jahres für alle Szenarien als CSV-Dateien
-    """
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Remove previously exported generated scenario files to avoid mixing runs
-    for filename in os.listdir(output_dir):
-        if filename.startswith("od_matrix_scenario_") and filename.endswith(".csv"):
-            os.remove(os.path.join(output_dir, filename))
-
-    exported = []
-
-    for scenario_name, yearly_data in scenarios.items():
-        if year not in yearly_data:
-            continue
-
-        od_df = yearly_data[year].copy()
-        od_df = od_df.reset_index().rename(columns={"index": "from_zone"})
-        out_path = os.path.join(output_dir, f"od_matrix_{scenario_name}.csv")
-        od_df.to_csv(out_path, index=False)
-        exported.append(scenario_name)
-
-    return exported
-
-
 def export_generated_population_rasters(
         scenarios: dict,
         start_year: int,
         end_year: int,
         num_of_scenarios: int,
         valuation_year: int,
+        scenario_components: Optional[Dict[str, Any]] = None,
         output_dir: str = "data/independent_variable/processed/scenario",
 ) -> int:
     """
@@ -912,12 +855,15 @@ def export_generated_population_rasters(
     communes_population = communes_population.dropna(subset=["gemeinde_bfs_nr", "bezirk", "anzahl"])
     communes_population["gemeinde_bfs_nr"] = communes_population["gemeinde_bfs_nr"].astype(int)
 
-    # Build district population scenarios (same stochastic engine as OD generation)
-    bezirk_pop_scenarios = get_bezirk_population_scenarios()
-    population_scenarios = {
-        bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
-        for bezirk, df in bezirk_pop_scenarios.items()
-    }
+    if scenario_components is not None:
+        population_scenarios = scenario_components["population_scenarios"]
+    else:
+        # Build district population scenarios (same stochastic engine as OD generation)
+        bezirk_pop_scenarios = get_bezirk_population_scenarios()
+        population_scenarios = {
+            bezirk: generate_population_scenarios(df, start_year, end_year, num_of_scenarios)
+            for bezirk, df in bezirk_pop_scenarios.items()
+        }
 
     # Infer which scenario indices are present
     scenario_indices = []
@@ -950,7 +896,8 @@ def export_generated_population_rasters(
             bfs = int(row.gemeinde_bfs_nr)
             district = row.bezirk
 
-            scenario_df = population_scenarios.get(district)
+            district_key = str(district) if str(district) in population_scenarios else district
+            scenario_df = population_scenarios.get(district_key)
             if scenario_df is None:
                 continue
 
@@ -1007,28 +954,41 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
     - scenarios: Dict of generated scenarios.
     """
     cache_dir = "data/Scenario/cache/road/random"
+    resolved_shared_components_path = shared_components_path or integrated_paths.SHARED_COMPONENTS_PATH
+    scenario_components = None
+
+    if os.path.exists(resolved_shared_components_path):
+        with open(resolved_shared_components_path, "rb") as f:
+            scenario_components = pickle.load(f)
+    else:
+        from infraScan.infraScanIntegrated.random_scenarios import (
+            build_shared_scenario_components,
+            save_shared_scenario_components,
+        )
+
+        scenario_components = build_shared_scenario_components(
+            start_year=start_year,
+            end_year=end_year,
+            num_of_scenarios=num_of_scenarios,
+        )
+        save_shared_scenario_components(
+            scenario_components,
+            output_path=resolved_shared_components_path,
+        )
 
     if use_cache:
         scenarios = load_scenarios_from_cache(cache_dir)
 
         if scenarios:
-            exported_scenarios = export_scenario_year_to_status_quo_csvs(
+            export_generated_population_rasters(
                 scenarios=scenarios,
-                year=settings.start_valuation_year,
-                output_dir="data/infraScanRoad/traffic_flow/od/scenarios_zone",
+                start_year=start_year,
+                end_year=end_year,
+                num_of_scenarios=num_of_scenarios,
+                valuation_year=settings.start_valuation_year,
+                scenario_components=scenario_components,
             )
-
-            if exported_scenarios:
-                export_generated_population_rasters(
-                    scenarios=scenarios,
-                    start_year=start_year,
-                    end_year=end_year,
-                    num_of_scenarios=num_of_scenarios,
-                    valuation_year=settings.start_valuation_year,
-                )
-                return scenarios
-
-            print("Cache loaded but no scenarios matched valuation year; regenerating scenarios.")
+            return scenarios
         else:
             print("Scenario cache is empty; regenerating scenarios.")
 
@@ -1037,11 +997,6 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
         mapping_path= "data/infraScanRoad/Scenario/commune_to_zone_mapping.csv",
         voronoi_tif_path= "data/infraScanRoad/Network/travel_time/source_id_raster.tif"
     )
-
-    scenario_components = None
-    if shared_components_path and os.path.exists(shared_components_path):
-        with open(shared_components_path, "rb") as f:
-            scenario_components = pickle.load(f)
 
     scenarios = generate_od_growth_scenarios(
         pd.read_csv("data/infraScanRoad/traffic_flow/od/od_matrix_20.csv"),
@@ -1068,18 +1023,13 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
             pickle.dump(scenario_data, f)
     print(f"Saved {len(scenarios)} scenarios to {cache_dir}")
 
-    exported_scenarios = export_scenario_year_to_status_quo_csvs(
-        scenarios=scenarios,
-        year=settings.start_valuation_year,
-        output_dir="data/infraScanRoad/traffic_flow/od/scenarios_zone",
-    )
-
     export_generated_population_rasters(
         scenarios=scenarios,
         start_year=start_year,
         end_year=end_year,
         num_of_scenarios=num_of_scenarios,
         valuation_year=settings.start_valuation_year,
+        scenario_components=scenario_components,
     )
 
     return scenarios
