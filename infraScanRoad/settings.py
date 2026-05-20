@@ -5,8 +5,7 @@ import time
 
 import pandas as pd
 
-MAIN = "/Volumes/WD_Windows/MSc_Thesis/"
-
+MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
 
 ##################################################################################
 # Define settings 
