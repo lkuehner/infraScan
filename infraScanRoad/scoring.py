@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import re
 import networkx as nx
 from itertools import islice
+from joblib import Parallel, delayed
 
 from . import settings
 
@@ -2773,8 +2774,212 @@ def travel_flow_optimization_by_od(OD_matrix, points, edges, voronoi, dev, scen)
     return od_tt_df
 
 
+def process_development_travel_time_aggregate(dev, scenarios):
+    """
+    Compute aggregate travel times for one development across all scenarios.
 
-def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None):
+    The helper is intentionally scoped to one development so it can be used as
+    the parallel work unit on Euler.
+    """
+    # Import generated links that describe all candidate developments.
+    links_developments = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
+    if dev not in links_developments["ID_new"].values:
+        print(f"Development {dev} not in links_developments['ID_new'] - skipping")
+        return None
+
+    # Import generated points and the current network.
+    points_developments = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
+    points_current = gpd.read_file(r"data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
+    links_current = gpd.read_file(r"data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+
+    # Filter the generated point that belongs to this development ID.
+    point_temp = points_developments[points_developments["ID_new"] == dev]
+    if point_temp.empty:
+        print(f"Development {dev} not in points_developments['ID_new'] - skipping")
+        return None
+
+    # Start from the current network points and append the new access point.
+    points = points_current.copy()
+    new_point_row = {
+        "intersection": 0,
+        "ID_point": 9999,
+        "geometry": point_temp.geometry.iloc[0],
+        "open_ends": None,
+        "within_corridor": True,
+        "on_corridor_border": False,
+        "generate_traffic": 0,
+    }
+    temp = pd.Series(new_point_row)
+    points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+    points.index = points.index.astype(int)
+    points = points.sort_index()
+    points["id_dummy"] = points.index.values
+
+    # Filter the development edge and append it to the existing edge table.
+    edge_temp = links_developments[links_developments["ID_new"] == dev]
+    edges = links_current.copy()
+    edge_ID_max = edges["ID_edge"].astype(int).max()
+    index_point_start = points[points["id_dummy"] == edge_temp["ID_current"].values[0]].index[0]
+
+    new_edge_row = {
+        "start": index_point_start,
+        "end": 9999,
+        "geometry": edge_temp["geometry"].iloc[0],
+        "ffs": 120,
+        "capacity": 2200,
+        "start_access": False,
+        "end_access": True,
+        "polygon_border": False,
+        "ID_edge": edge_ID_max + 1,
+    }
+    temp = pd.Series(new_edge_row)
+    edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+    edges["ID_edge"] = edges["ID_edge"].astype(int)
+    edges = edges.sort_values(by=["ID_edge"])
+
+    # Select the folder that stores development-specific OD matrices.
+    if settings.scenario_type == "STATIC":
+        od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/static"
+    elif settings.scenario_type == "GENERATED":
+        od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/generated"
+    else:
+        raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+    # Reuse the development-specific Voronoi inside the job for all scenarios.
+    voronoi_df = gpd.read_file(fr"data/infraScanRoad/Network/travel_time/developments/dev{dev}_Voronoi.gpkg")
+
+    results = {}
+    for scen in scenarios:
+        print(f"Development: {dev} in scenario: {scen}")
+
+        # Load the OD matrix for this development-scenario combination.
+        od_path = f"{od_base_path}/od_matrix_dev{dev}_{scen}.csv"
+        if not os.path.exists(od_path):
+            print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
+            continue
+
+        OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
+
+        # Run the flow optimization and store the total travel time for this scenario.
+        results[scen] = travel_flow_optimization(
+            OD_matrix=OD_matrix,
+            points=points.copy(),
+            edges=edges.copy(),
+            voronoi=voronoi_df,
+            dev=dev,
+            scen=scen,
+        )
+
+    row = {"development": dev}
+    for scen in scenarios:
+        row[scen] = results.get(scen, np.nan)
+    return row
+
+
+def process_development_travel_time_by_od(dev, scenarios):
+    """
+    Compute OD-level travel times for one development across all scenarios.
+
+    Each parallel job owns one development and loops through that
+    development's scenario files.
+    """
+    # Import generated links that describe all candidate developments.
+    links_developments = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
+    if dev not in links_developments["ID_new"].values:
+        print(f"Development {dev} not in links_developments['ID_new'] - skipping")
+        return []
+
+    # Import generated points and the current network.
+    points_developments = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
+    points_current = gpd.read_file(r"data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
+    links_current = gpd.read_file(r"data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+
+    # Filter the generated point that belongs to this development ID.
+    point_temp = points_developments[points_developments["ID_new"] == dev]
+    if point_temp.empty:
+        print(f"Development {dev} not in points_developments['ID_new'] - skipping")
+        return []
+
+    # Start from the current network points and append the new access point.
+    points = points_current.copy()
+    new_point_row = {
+        "intersection": 0,
+        "ID_point": 9999,
+        "geometry": point_temp.geometry.iloc[0],
+        "open_ends": None,
+        "within_corridor": True,
+        "on_corridor_border": False,
+        "generate_traffic": 0,
+    }
+    temp = pd.Series(new_point_row)
+    points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+    points.index = points.index.astype(int)
+    points = points.sort_index()
+    points["id_dummy"] = points.index.values
+
+    # Filter the development edge and append it to the existing edge table.
+    edge_temp = links_developments[links_developments["ID_new"] == dev]
+    edges = links_current.copy()
+    edge_ID_max = edges["ID_edge"].astype(int).max()
+    index_point_start = points[points["id_dummy"] == edge_temp["ID_current"].values[0]].index[0]
+
+    new_edge_row = {
+        "start": index_point_start,
+        "end": 9999,
+        "geometry": edge_temp["geometry"].iloc[0],
+        "ffs": 120,
+        "capacity": 2200,
+        "start_access": False,
+        "end_access": True,
+        "polygon_border": False,
+        "ID_edge": edge_ID_max + 1,
+    }
+    temp = pd.Series(new_edge_row)
+    edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+    edges["ID_edge"] = edges["ID_edge"].astype(int)
+    edges = edges.sort_values(by=["ID_edge"])
+
+    # Select the folder that stores development-specific OD matrices.
+    if settings.scenario_type == "STATIC":
+        od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/static"
+    elif settings.scenario_type == "GENERATED":
+        od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/generated"
+    else:
+        raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
+
+    # Load development Voronoi once and reuse it across all scenarios in the job.
+    voronoi_df = gpd.read_file(
+        fr"data/infraScanRoad/Network/travel_time/developments/dev{dev}_Voronoi.gpkg"
+    )
+
+    scenario_results = []
+    for scen in scenarios:
+        print(f"Development: {dev} in scenario: {scen}")
+
+        # Load the OD matrix for this development-scenario combination.
+        od_path = f"{od_base_path}/od_matrix_dev{dev}_{scen}.csv"
+        if not os.path.exists(od_path):
+            print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
+            continue
+
+        OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
+
+        # Run the flow optimization and keep the OD-level output table.
+        od_tt_df = travel_flow_optimization_by_od(
+            OD_matrix=OD_matrix,
+            points=points.copy(),
+            edges=edges.copy(),
+            voronoi=voronoi_df,
+            dev=dev,
+            scen=scen,
+        )
+        scenario_results.append(od_tt_df)
+
+    return scenario_results
+
+
+
+def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None, n_jobs=-1):
     # Run travel time optimization for infrastructure developments and all scenarios
     # Scenario = OD matrix
     # Development = new network
@@ -2815,150 +3020,18 @@ def tt_optimization_all_developments(scenarios=None, max_developments=None, sele
         max_developments = int(max_developments)
         if max_developments > 0:
             developments = developments[:max_developments]
-    # print development and its length
-    # print(f"Developments: {developments} and length: {len(developments)}")
 
-    costs_travel_time = pd.DataFrame(columns=["development"] + scenario)
 
-    for dev in tqdm(developments):
-        # Import generated links
-        # links_developments = gpd.read_file(fr"data/infraScanRoad/Network/processed/new_links_realistic_costs.gpkg")
-        links_developments = gpd.read_file(fr"data/infraScanRoad/costs/construction.gpkg")
-        # Check "dev" is in links_developments['ID_new']
-        if dev not in links_developments['ID_new'].values:
-            print(f"Development {dev} not in links_developments['ID_new'] - skipping")
-            # continue with next for loop
-            continue
+    # Parallelize over developments so each job can reuse the development-
+    # specific network and Voronoi data across all scenarios it handles.
+    rows = Parallel(n_jobs=n_jobs)(
+        delayed(process_development_travel_time_aggregate)(dev, scenario)
+        for dev in tqdm(developments, desc="Aggregate TT by development")
+    )
+    rows = [row for row in rows if row is not None]
 
-        results = {}
-        for scen in scenario:
-            # if scen == "medium":
-            #    results[scen] = 0
-            #    continue
-
-            # if scen == "high":
-            #    results[scen] = 0
-            #    continue
-
-            print(f"Development: {dev} in scenario: {scen}")
-
-            # Import generated points
-            points_developments = gpd.read_file(fr"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
-            # print(points_developments.head(5).to_string())
-
-            # Import points of current network
-            points_current = gpd.read_file(fr"data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
-
-            # Filter generated point of development using ID_new
-            point_temp = points_developments[points_developments["ID_new"] == dev]
-            # Check if point_temp is empty, if so continur with next scen
-            if point_temp.empty:
-                print(f"Development {dev} not in points_developments['ID_new'] - skipping")
-                continue
-            # try geometry[0] otherwise geometry
-            points = points_current.copy()
-            # Add point of development to network
-            new_point_row = {"intersection": 0,
-                             "ID_point": 9999,
-                             "geometry": point_temp.geometry.iloc[0],
-                             "open_ends": None,
-                             "within_corridor": True,
-                             "on_corridor_border": False,
-                             "generate_traffic": 0
-                             }
-            # points = points.append(new_point_row, ignore_index=True)
-            temp = pd.Series(new_point_row)
-            points = gpd.GeoDataFrame(
-                pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
-            # sort points in ascending point ID
-            points.index = points.index.astype(int)
-            points = points.sort_index()
-            # points = points.sort_values(by=["ID_point"])
-            points['id_dummy'] = points.index.values
-
-            # Import current links
-            links_current = gpd.read_file(fr"data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
-            # print(links_current.head(5).to_string())
-
-            # Filter edge of development
-            edge_temp = links_developments[links_developments["ID_new"] == dev]
-            edges = links_current.copy()
-            # Get ID for new edge
-            # edge_ID_max = edges["ID_edge"].max()
-            edge_ID_max = edges["ID_edge"].astype(int).max()
-            # Get index of point with ID_points = 999
-            # index_point_9999 = points[points["id_dummy"] == 9999].index[0]
-            index_point_start = points[points["id_dummy"] == edge_temp["ID_current"].values[0]].index[0]
-
-            # Add edge of development to network
-            new_edge_row = {"start": index_point_start,
-                            "end": 9999,
-                            "geometry": edge_temp["geometry"].iloc[0],
-                            "ffs": 120,
-                            "capacity": 2200,
-                            "start_access": False,
-                            "end_access": True,
-                            "polygon_border": False,
-                            "ID_edge": edge_ID_max + 1
-                            }
-            # edges = edges.append(new_edge_row, ignore_index=True)
-            temp = pd.Series(new_edge_row)
-            edges = gpd.GeoDataFrame(
-                pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
-
-            # sort edges in ascending edge ID
-            edges["ID_edge"] = edges["ID_edge"].astype(int)
-            edges = edges.sort_values(by=["ID_edge"])
-            # sort points in ascending point ID
-            # points = points.sort_values(by=["ID_point"])
-            points.index = points.index.astype(int)
-            points = points.sort_index()
-
-            # print last 3 rows of edges
-            # print(edges.tail(3).to_string())
-            # print(points.tail(3).to_string())
-
-            # Generates traffic?
-            # Print stats for values in point["generate_traffic"]
-            # print(points["generate_traffic"].value_counts())
-            # ID of developments?
-            # Count amount of rows in generated_points
-            # print(f"Amount of rows in points: {len(points_developments)}, links: {len(links_developments)} and developments in OD matrix: {len(developments)}")
-            # Get amount number of overlapping points in links_development["new_ID"] and develpments
-            # print(f"Amount of overlapping points in links_development['new_ID'] and developments: {len(set(links_developments['ID_new']).intersection(developments))}")
-
-            # Get path like data/traffic_flow/od/od_matrix_i.csv
-            if settings.scenario_type == "STATIC":
-                od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/static"
-            elif settings.scenario_type == "GENERATED":
-                od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/generated"
-            else:
-              raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
-
-            od_path = f"{od_base_path}/od_matrix_dev{dev}_{scen}.csv"
-            if not os.path.exists(od_path):
-                print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
-                continue
-            OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
-
-            # Import voronoi_df based on development
-            voronoi_df = gpd.read_file(fr"data/infraScanRoad/Network/travel_time/developments/dev{dev}_Voronoi.gpkg")
-
-            tt = travel_flow_optimization(OD_matrix=OD_matrix, points=points, edges=edges, voronoi=voronoi_df, dev=dev,
-                                          scen=scen)
-            # add tt to dict with key dev
-            results[scen] = tt
-        # print(results)
-
-        # Append the result dict and add dev as values for thats row development column
-        # costs_travel_time = costs_travel_time.append({"development":dev, "low":results["low"], "medium":results["medium"], "high":results["high"]}, ignore_index=True)
-        row = {"development": dev}
-        for scen in scenario:
-            row[scen] = results.get(scen, np.nan)
-        temp = pd.Series(row)
-        costs_travel_time = pd.concat([costs_travel_time, pd.DataFrame(temp).T], ignore_index=True)
-        # print(costs_travel_time.head(5).to_string())
-        costs_travel_time.to_csv(fr"data/infraScanRoad/traffic_flow/travel_time.csv", index=False)
+    costs_travel_time = pd.DataFrame(rows, columns=["development"] + scenario)
+    costs_travel_time.to_csv(r"data/infraScanRoad/traffic_flow/travel_time.csv", index=False)
 
     # Save results as csv
     costs_travel_time.to_csv(fr"data/infraScanRoad/traffic_flow/travel_time_aggregate.csv", index=False)
@@ -3105,9 +3178,12 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
     return results_status_quo
 
 
-def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None, selected_developments=None):
+def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None, selected_developments=None, n_jobs=16):
     """
     Compute OD-level travel times for all infrastructure developments.
+
+    Parameters:
+        n_jobs: number of parallel jobs to use. -1 means all available cores.
 
     Output:
         One combined CSV with columns:
@@ -3147,121 +3223,27 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
         max_developments = int(max_developments)
         if max_developments > 0:
             developments = developments[:max_developments]
-    results_developments = {}
 
-    for dev in tqdm(developments):
-        # Import generated links
-        links_developments = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
-        # Check "dev" is in links_developments['ID_new']
-        if dev not in links_developments["ID_new"].values:
-            print(f"Development {dev} not in links_developments['ID_new'] - skipping")
-            continue
 
-        for scen in scenarios:
-            print(f"Development: {dev} in scenario: {scen}")
-            # Import generated points
-            points_developments = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")
-            # Import points of current network
-            points_current = gpd.read_file(r"data/infraScanRoad/Network/processed/points_with_attribute.gpkg")
+    # Parallelize over developments to avoid reloading the same development
+    # inputs for every scenario
+    development_results = Parallel(n_jobs=n_jobs)(
+        delayed(process_development_travel_time_by_od)(dev, scenarios)
+        for dev in tqdm(developments, desc="OD TT by development")
+    )
 
-            # Filter generated point of development using ID_new
-            point_temp = points_developments[points_developments["ID_new"] == dev]
+    scenario_frames = [
+        frame
+        for per_development in development_results
+        for frame in per_development
+        if frame is not None and not frame.empty
+    ]
 
-            # Check if point_temp is empty, if so continue with next scen
-            if point_temp.empty:
-                print(f"Development {dev} not in points_developments['ID_new'] - skipping")
-                continue
-
-            points = points_current.copy()
-
-            # Add point of development to network
-            new_point_row = {
-                "intersection": 0,
-                "ID_point": 9999,
-                "geometry": point_temp.geometry.iloc[0],
-                "open_ends": None,
-                "within_corridor": True,
-                "on_corridor_border": False,
-                "generate_traffic": 0
-            }
-
-            temp = pd.Series(new_point_row)
-            points = gpd.GeoDataFrame(
-                pd.concat([points, pd.DataFrame(temp).T], ignore_index=True)
-            )
-            points.index = points.index.astype(int)
-            points = points.sort_index()
-            points["id_dummy"] = points.index.values
-
-            links_current = gpd.read_file(r"data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
-
-            # Filter edge of development
-            edge_temp = links_developments[links_developments["ID_new"] == dev]
-            edges = links_current.copy()
-            # Get ID for new edge
-            edge_ID_max = edges["ID_edge"].astype(int).max()
-            # Get index of point with ID_points = 999
-            index_point_start = points[points["id_dummy"] == edge_temp["ID_current"].values[0]].index[0]
-
-            new_edge_row = {
-                "start": index_point_start,
-                "end": 9999,
-                "geometry": edge_temp["geometry"].iloc[0],
-                "ffs": 120,
-                "capacity": 2200,
-                "start_access": False,
-                "end_access": True,
-                "polygon_border": False,
-                "ID_edge": edge_ID_max + 1
-            }
-
-            temp = pd.Series(new_edge_row)
-            edges = gpd.GeoDataFrame(
-                pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True)
-            )
-
-            edges["ID_edge"] = edges["ID_edge"].astype(int)
-            edges = edges.sort_values(by=["ID_edge"])
-
-            points.index = points.index.astype(int)
-            points = points.sort_index()
-
-            # Get path like data/traffic_flow/od/od_matrix_i.csv
-            if settings.scenario_type == "STATIC":
-                od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/static"
-            elif settings.scenario_type == "GENERATED":
-                od_base_path = "data/infraScanRoad/traffic_flow/od/development_voronoi/generated"
-            else:
-              raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
-
-            od_path = f"{od_base_path}/od_matrix_dev{dev}_{scen}.csv"
-            if not os.path.exists(od_path):
-                print(f"Missing OD matrix for development {dev}, scenario {scen} - skipping")
-                continue
-            OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
-            
-            # Import voronoi_df based on development
-            voronoi_df = gpd.read_file(
-                fr"data/infraScanRoad/Network/travel_time/developments/dev{dev}_Voronoi.gpkg"
-            )
-
-            od_tt_df = travel_flow_optimization_by_od(
-                OD_matrix=OD_matrix,
-                points=points,
-                edges=edges,
-                voronoi=voronoi_df,
-                dev=dev,
-                scen=scen,
-            )
-
-            # Store OD-level travel times in dict with key (dev, scen)
-            results_developments[(dev, scen)] = od_tt_df
-
-    if not results_developments:
+    if not scenario_frames:
         print("No OD travel-time results were generated for developments.")
-        return results_developments
+        return {}
 
-    combined_od_tt_df = pd.concat(results_developments.values(), ignore_index=True)
+    combined_od_tt_df = pd.concat(scenario_frames, ignore_index=True)
     output_path = "data/infraScanRoad/traffic_flow/od/developments_od_tt.csv"
     combined_od_tt_df.to_csv(output_path, index=False)
 
@@ -3271,7 +3253,10 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
         os.makedirs(scen_dir, exist_ok=True)
         scen_df.to_csv(os.path.join(scen_dir, "developments_od_tt.csv"), index=False)
 
-    return results_developments
+    return {
+        (dev, scen): group.copy()
+        for (dev, scen), group in combined_od_tt_df.groupby(["development", "scenario"])
+    }
 
 
 
