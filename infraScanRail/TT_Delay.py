@@ -65,7 +65,7 @@ def create_directed_graph(df, change_time):
     return G
 
 
-def create_graphs_from_directories(directories, n_jobs=-1):
+def create_graphs_from_directories(directories, n_jobs=16):
     """
     Create a list of directed graphs from a list of file directories using parallel processing.
 
