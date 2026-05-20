@@ -26,7 +26,6 @@ import networkx as nx
 from itertools import islice
 
 from . import settings
-from infraScan.infraScanIntegrated import settings as integrated_settings
 
 
 
@@ -3443,6 +3442,14 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     tt_developments = tt_developments.dropna(
         subset=["development", "origin", "destination", "travel_time"]
     ).copy()
+
+    # OD network travel times are produced by the flow-optimization routines from
+    # link costs based on `fftt_i = length / ffs`, which is defined in hours.
+    # The access/egress rasters below are minutes, so the routed OD network times are converted 
+    # to minutes here to keep the units consistent for the generalized travel time decomposition and monetization.
+    #   total_tt = access_min + network_min + egress_min
+    tt_status_quo["travel_time"] = tt_status_quo["travel_time"] * 60.0
+    tt_developments["travel_time"] = tt_developments["travel_time"] * 60.0
 
     tt_status_quo["origin"] = tt_status_quo["origin"].astype(int)
     tt_status_quo["destination"] = tt_status_quo["destination"].astype(int)
