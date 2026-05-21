@@ -3,7 +3,8 @@ from pathlib import Path
 
 # Use relative path from the script location
 # MAIN = str(Path(__file__).parent.resolve()) 
-MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+# MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+MAIN = '/cluster/home/lkuehner/MSc_Thesis'
 
 
 RAIL_SERVICES_AK2035_PATH= 'data/infraScanRail/temp/railway_services_ak2035.gpkg'

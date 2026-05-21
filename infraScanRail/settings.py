@@ -9,11 +9,11 @@ rail_network = 'AK_2035'
 use_cache_network = True #Phase 3.1: Baseline network (current + AK2035)
 use_cache_pt_catchment = True #Phase 2.2: Public transport catchment areas (OD matrix)
 use_cache_developments = True #Phase 4.1: Infrastructure developments (new networks)
-use_cache_catchmentOD = False #Phase 5
-use_cache_stationsOD = False #Phase 5
-use_cache_traveltime_graph = False #Phase 6: travel time graph with developments
+use_cache_catchmentOD = True #Phase 5
+use_cache_stationsOD = True #Phase 5
+use_cache_traveltime_graph = True #Phase 6: travel time graph with developments
 use_cache_scenarios = True #Phase 8: Scenario generation (OD matrices for generated scenarios)
-use_cache_tts_calc = True #Phase 9: Travel time savings calculation
+use_cache_tts_calc = False #Phase 9: Travel time savings calculation
 
 # Infrastructure generation modules: Choose either 'EXTEND_LINES', 'NEW_DIRECT_CONNECTIONS' or 'ALL'
 infra_generation_modification_type = 'ALL' 
