@@ -1062,33 +1062,43 @@ def GetODMatrix(od):
     return odmat
 
 
-def GetCommuneShapes(raster_path):  # todo this might be unnecessary if you already have these shapes.
+def GetCommuneShapes(raster_path):  
     communalraw = gpd.read_file(r"data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp")
     communalraw = communalraw.loc[(communalraw['ART_TEXT'] == 'Gemeinde')]
     communedf = gpd.GeoDataFrame(data=communalraw, geometry=communalraw['geometry'], columns=['BFS', 'GEMEINDENA'],
                                  crs="epsg:2056").sort_values(by='BFS')
 
+    commune_raster_path = r"data/_basic_data/Gemeindegrenzen/gemeinde_zh.tif"
+
     # Read the reference TIFF file
     with rasterio.open(raster_path) as src:
         profile = src.profile
         profile.update(count=1)
-        crs = src.crs
+        reference_shape = (src.height, src.width)
+        reference_transform = src.transform
 
-    # Rasterize
-    with rasterio.open('data/_basic_data/Gemeindegrenzen/gemeinde_zh.tif', 'w', **profile) as dst:
-        rasterized_image = rasterize(
-            [(shape, value) for shape, value in zip(communedf.geometry, communedf['BFS'])],
-            out_shape=(src.height, src.width),
-            transform=src.transform,
-            fill=0,
-            all_touched=False,
-            dtype=rasterio.int32
-        )
+    # Reuse an existing commune raster when it already matches the reference grid.
+    if os.path.exists(commune_raster_path):
+        with rasterio.open(commune_raster_path) as src:
+            if (src.height, src.width) == reference_shape and src.transform == reference_transform:
+                return src.read(1), communedf
+
+    # Rasterize only when no matching cached raster exists yet.
+    rasterized_image = rasterize(
+        [(shape, value) for shape, value in zip(communedf.geometry, communedf['BFS'])],
+        out_shape=reference_shape,
+        transform=reference_transform,
+        fill=0,
+        all_touched=False,
+        dtype=rasterio.int32
+    )
+
+    os.makedirs(os.path.dirname(commune_raster_path), exist_ok=True)
+    with rasterio.open(commune_raster_path, 'w', **profile) as dst:
         dst.write(rasterized_image, 1)
 
     # Convert the rasterized image to a numpy array
     commune_raster = np.array(rasterized_image)
-
     return commune_raster, communedf
 
 

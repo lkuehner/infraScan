@@ -43,26 +43,26 @@ road_modal_split_target = 0.676
 # directly from the 2018 start values and the Verkehrsperspektiven-2050 anchors.
 # This keeps the three-mode implementation internally consistent.
 
-def _annualized_growth_rate(start_value: float, target_value: float, start_year: int, target_year: int) -> float:
+def annualized_growth_rate(start_value: float, target_value: float, start_year: int, target_year: int) -> float:
 	horizon = max(1, int(target_year) - int(start_year))
 	if start_value <= 0:
 		return 0.0
 	return (target_value / start_value) ** (1.0 / horizon) - 1.0
 
 
-rail_modal_split_avg_growth_rate = _annualized_growth_rate(
+rail_modal_split_avg_growth_rate = annualized_growth_rate(
 	rail_modal_split_start,
 	rail_modal_split_target,
 	start_year_scenario,
 	start_valuation_year,
 )
-road_modal_split_avg_growth_rate = _annualized_growth_rate(
+road_modal_split_avg_growth_rate = annualized_growth_rate(
 	road_modal_split_start,
 	road_modal_split_target,
 	start_year_scenario,
 	start_valuation_year,
 )
-other_modal_split_avg_growth_rate = _annualized_growth_rate(
+other_modal_split_avg_growth_rate = annualized_growth_rate(
 	other_modal_split_start,
 	other_modal_split_target,
 	start_year_scenario,

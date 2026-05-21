@@ -18,6 +18,9 @@ DEFAULT_SHARED_COMPONENTS_PATH = integrated_paths.SHARED_COMPONENTS_PATH
 DEFAULT_SHARED_SUMMARY_PATH = integrated_paths.SHARED_SUMMARY_PATH
 DEFAULT_SHARED_SELECTION_PATH = integrated_paths.SHARED_SELECTION_PATH
 
+SCENARIO_PLOTS_DIR = os.path.join(integrated_paths.MAIN, "plots", "scenarios")
+
+
 ROAD_COMMUNE_TO_ZONE_MAPPING_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad", "Scenario", "commune_to_zone_mapping.csv")
 ROAD_VORONOI_TIF_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad", "Network", "travel_time", "source_id_raster.tif")
 ROAD_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad", "traffic_flow", "od", "od_matrix_20.csv")
@@ -27,27 +30,6 @@ ROAD_POPULATION_RASTER_OUTPUT_DIR = os.path.join(integrated_paths.MAIN, "data", 
 RAIL_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "traffic_flow", "od", "rail", "ktzh", "od_matrix_stations_ktzh_20.csv")
 RAIL_COMMUNE_TO_STATION_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "Network", "processed", "Communes_to_railway_stations_ZH.xlsx")
 RAIL_SCENARIO_CACHE_DIR = os.path.join(integrated_paths.MAIN, "data", "Scenario", "cache", "rail")
-
-
-# Shared scenario core
-
-def _resolve_data_root() -> str:
-    candidates = [integrated_paths.MAIN]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        normalized = os.path.abspath(str(candidate))
-        if os.path.isdir(os.path.join(normalized, "data")):
-            return normalized
-
-    cwd = os.getcwd()
-    if os.path.isdir(os.path.join(cwd, "data")):
-        return cwd
-
-    raise FileNotFoundError(
-        "Could not resolve infraScan data root. Expected a folder containing 'data/'. "
-        "Set settings.MAIN correctly or run from the data root directory."
-    )
 
 def get_bezirk_population_scenarios():
     # Read the Swiss population scenario CSV with "," separator
@@ -146,13 +128,48 @@ def get_bezirk_population_scenarios():
         district_tables[district] = df_extended.reset_index(drop=True)
     return district_tables
 
-def generate_population_scenarios(ref_df: pd.DataFrame,
-                                  start_year: int,
-                                  end_year: int,
-                                  n_scenarios: int = 1000,
-                                  start_std_dev: float = 0.01,
-                                  end_std_dev: float = 0.03,
-                                  std_dev_shocks: float = 0.02) -> pd.DataFrame:
+def calculate_modal_split_growth_index(
+    scenarios_df: pd.DataFrame,
+    start_year: int,
+) -> pd.DataFrame:
+    """
+    Finalize a modal split scenario table by calculating growth rates and indices.
+    """
+    finalized = scenarios_df.copy()
+    finalized["modal_split"] = (
+        pd.to_numeric(finalized["modal_split"], errors="coerce")
+        .clip(lower=0.0, upper=1.0)
+    )
+    finalized = finalized.sort_values(["scenario", "year"]).reset_index(drop=True)
+
+    finalized["growth_rate"] = (
+        finalized.groupby("scenario")["modal_split"]
+        .pct_change()
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0.0)
+    )
+
+    start_values = (
+        finalized[finalized["year"] == start_year][["scenario", "modal_split"]]
+        .rename(columns={"modal_split": "start_modal_split"})
+    )
+    finalized = finalized.merge(start_values, on="scenario", how="left")
+    finalized["growth_index"] = np.where(
+        finalized["start_modal_split"].fillna(0.0) > 0.0,
+        100.0 * finalized["modal_split"] / finalized["start_modal_split"],
+        100.0,
+    )
+    return finalized.drop(columns=["start_modal_split"])
+
+def generate_population_scenarios(
+    ref_df: pd.DataFrame,
+    start_year: int,
+    end_year: int,
+    n_scenarios: int = 1000,
+    start_std_dev: float = 0.01,
+    end_std_dev: float = 0.03,
+    std_dev_shocks: float = 0.02,
+) -> pd.DataFrame:
     """
     Generate stochastic population scenarios using Latin Hypercube Sampling and a random walk process.
     The main growth rates are perturbed using LHS and a time-varying std dev. Random shocks are added separately.
@@ -176,91 +193,191 @@ def generate_population_scenarios(ref_df: pd.DataFrame,
     ref_df = ref_df[(ref_df["jahr"] >= start_year) & (ref_df["jahr"] <= end_year)].reset_index(drop=True)
 
     years = ref_df["jahr"].values
-    ref_growth = ref_df["growth_rate"].values  # deterministic base growth per year
+    ref_growth = ref_df["growth_rate"].values # deterministic base growth per year
     n_years = len(years)
-    initial_population = ref_df[ref_df["jahr"] == start_year]["total_population"].values[0]
+    initial_population = ref_df.loc[ref_df["jahr"] == start_year, "total_population"].values[0]
 
     # Linearly interpolate std devs across years for growth rate variation
     growth_std_devs = np.linspace(start_std_dev, end_std_dev, n_years)
 
     # Latin Hypercube Sampling: growth rate perturbations
-    sampler = qmc.LatinHypercube(d=n_years, seed = 42)
-    lhs_samples = sampler.random(n=n_scenarios)  # shape: (n_scenarios, n_years)
-    growth_perturbations = norm.ppf(lhs_samples) * growth_std_devs  # shape: (n_scenarios, n_years)
+    sampler = qmc.LatinHypercube(d=n_years, seed=42)
+    lhs_samples = sampler.random(n=n_scenarios) # shape: (n_scenarios, n_years)
+    growth_perturbations = norm.ppf(lhs_samples) * growth_std_devs # shape: (n_scenarios, n_years)
 
     # Perturbed growth rate: base + scenario-specific offset
-    scenario_growth = ref_growth + growth_perturbations  # shape: (n_scenarios, n_years)
+    scenario_growth = ref_growth + growth_perturbations # shape: (n_scenarios, n_years)
     # Setze Wachstumsrate für das erste Jahr auf 0 (kein Wachstum im ersten Jahr)
-    scenario_growth[:, 0] = 0
+    scenario_growth[:, 0] = 0.0
 
     # Random shocks: et ~ N(0, std_dev_shocks)
-    shock_sampler = qmc.LatinHypercube(d=n_years, seed = 43)
+    shock_sampler = qmc.LatinHypercube(d=n_years, seed=43)
     lhs_shocks = shock_sampler.random(n=n_scenarios)
     et = norm.ppf(lhs_shocks) * std_dev_shocks
     # Setze Schocks für das erste Jahr auf 0
-    et[:, 0] = 0
+    et[:, 0] = 0.0
 
     # Cumulative shocks per scenario
-    cumulative_shocks = np.cumsum(et, axis=1)  # shape: (n_scenarios, n_years)
+    cumulative_shocks = np.cumsum(et, axis=1)
 
     # Deterministic growth: cumulative product of (1 + growth_rate)
-    deterministic_growth = np.cumprod(1 + scenario_growth, axis=1)  # shape: (n_scenarios, n_years)
-
+    deterministic_growth = np.cumprod(1.0 + scenario_growth, axis=1)
     # Population index = deterministic path × stochastic shocks
     population_index = deterministic_growth + cumulative_shocks
-
     # Scale by initial population
     pop_scenarios = initial_population * population_index
 
     # Assemble output DataFrame
     scenario_data = []
-    for i in range(n_scenarios):
-        for t in range(n_years):
+    for scenario_idx in range(n_scenarios):
+        for year_idx, year in enumerate(years):
             # Berechne growth_index: 100 am Anfang und dann entsprechend der relativen Bevölkerungsentwicklung
-            growth_index = 100 * (pop_scenarios[i, t] / initial_population)
-
+            growth_index = 100 * (pop_scenarios[scenario_idx, year_idx] / initial_population)
             # Berechne die effektive Wachstumsrate inklusive Schocks
-            if t == 0:
+            if year_idx == 0:
                 # Für das erste Jahr ist die Wachstumsrate definitionsgemäß 0
                 effective_growth_rate = 0.0
             else:
-                # Berechne die prozentuale Änderung zur Bevölkerung des Vorjahres
-                effective_growth_rate = (pop_scenarios[i, t] / pop_scenarios[i, t - 1]) - 1
+                 # Berechne die prozentuale Änderung zur Bevölkerung des Vorjahres
+                effective_growth_rate = (pop_scenarios[scenario_idx, year_idx] / pop_scenarios[scenario_idx, year_idx - 1]) - 1.0
 
-            scenario_data.append({
-                "scenario": i,
-                "year": years[t],
-                "population": pop_scenarios[i, t],
-                "growth_rate": effective_growth_rate,
-                "growth_index": growth_index
-            })
+            scenario_data.append(
+                {
+                    "scenario": scenario_idx,
+                    "year": int(year),
+                    "population": float(pop_scenarios[scenario_idx, year_idx]),
+                    "growth_rate": float(effective_growth_rate),
+                    "growth_index": float(growth_index),
+                }
+            )
 
     return pd.DataFrame(scenario_data)
 
 
-def _finalize_modal_split_frame(
-    scenarios_df: pd.DataFrame,
+def generate_distance_per_person_scenarios(
+    avg_growth_rate: float,
+    start_value: float,
     start_year: int,
+    end_year: int,
+    n_scenarios: int = 1000,
+    start_std_dev: float = 0.01,
+    end_std_dev: float = 0.03,
+    std_dev_shocks: float = 0.02,
 ) -> pd.DataFrame:
-    finalized = scenarios_df.copy()
-    finalized["modal_split"] = pd.to_numeric(finalized["modal_split"], errors="coerce").clip(lower=0.0, upper=1.0)
-    finalized = finalized.sort_values(["scenario", "year"]).reset_index(drop=True)
-    finalized["growth_rate"] = (
-        finalized.groupby("scenario")["modal_split"].pct_change().replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    """
+        Generate stochastic trips per person scenarios using Latin Hypercube Sampling and a random walk process.
+
+        Parameters:
+        - avg_growth_rate: average annual growth rate to apply (can be positive or negative)
+        - start_value: initial trips per person value at start_year
+        - start_year: year to begin scenario generation
+        - end_year: year to end scenario generation
+        - n_scenarios: number of scenarios to generate
+        - start_std_dev: starting std deviation applied to growth rate perturbation
+        - end_std_dev: ending std deviation applied to growth rate perturbation
+        - std_dev_shocks: std deviation of yearly additive shocks
+
+        Returns:
+        - DataFrame with columns: "scenario", "year", "trips_per_person", "growth_rate", "growth_index"
+     """
+    years = np.arange(start_year, end_year + 1)
+    n_years = len(years)
+
+    growth_factors = np.ones(n_years) * (1.0 + avg_growth_rate)
+    growth_factors[0] = 1.0
+    cumulative_growth = np.cumprod(growth_factors)
+    distance_values = start_value * cumulative_growth
+
+    growth_rates = np.zeros(n_years)
+    growth_rates[1:] = avg_growth_rate
+
+    ref_df = pd.DataFrame(
+        {
+            "jahr": years,
+            "total_population": distance_values,
+            "growth_rate": growth_rates,
+        }
     )
-    start_values = (
-        finalized[finalized["year"] == start_year][["scenario", "modal_split"]]
-        .rename(columns={"modal_split": "start_modal_split"})
+
+    scenarios_df = generate_population_scenarios(
+        ref_df=ref_df,
+        start_year=start_year,
+        end_year=end_year,
+        n_scenarios=n_scenarios,
+        start_std_dev=start_std_dev,
+        end_std_dev=end_std_dev,
+        std_dev_shocks=std_dev_shocks,
     )
-    finalized = finalized.merge(start_values, on="scenario", how="left")
-    # Keep the index calculation explicit so it behaves consistently across pandas versions.
-    finalized["growth_index"] = np.where(
-        finalized["start_modal_split"].fillna(0.0) > 0.0,
-        100.0 * (finalized["modal_split"] / finalized["start_modal_split"]),
-        100.0,
+    return scenarios_df.rename(columns={"population": "distance_per_person"})
+
+def build_reference_modal_split_paths(
+    start_year: int,
+    end_year: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Build deterministic reference paths for the three-mode modal split scenarios (rail, road, other).
+    The reference paths are based on the average growth rates defined in settings, applied cumulatively 
+    to the starting shares. The resulting paths are normalized to ensure they sum to 1 in each year.
+    """
+    years = np.arange(start_year, end_year + 1)
+    year_offset = years - start_year
+
+    raw_reference = np.column_stack(
+        [
+            integrated_settings.rail_modal_split_start
+            * ((1.0 + integrated_settings.rail_modal_split_avg_growth_rate) ** year_offset),
+            integrated_settings.road_modal_split_start
+            * ((1.0 + integrated_settings.road_modal_split_avg_growth_rate) ** year_offset),
+            integrated_settings.other_modal_split_start
+            * ((1.0 + integrated_settings.other_modal_split_avg_growth_rate) ** year_offset),
+        ]
     )
-    finalized = finalized.drop(columns=["start_modal_split"])
-    return finalized
+    reference_shares = raw_reference / raw_reference.sum(axis=1, keepdims=True)
+    return years, reference_shares
+
+
+def shares_to_log_ratios(shares: np.ndarray) -> np.ndarray:
+    """
+    Convert shares to log-ratios for the two independent dimensions: log(rail / road) and log(other / road).
+    """
+    safe = np.clip(shares, 1e-12, 1.0)
+    return np.column_stack(
+        [
+            np.log(safe[:, 0] / safe[:, 1]),
+            np.log(safe[:, 2] / safe[:, 1]),
+        ]
+    )
+
+
+def log_ratios_to_shares(latent_paths: np.ndarray) -> np.ndarray:
+    """
+    Convert latent log-ratio paths back to shares using the softmax-like transformation.
+    """
+    exp_rail = np.exp(np.clip(latent_paths[:, :, 0], -20.0, 20.0))
+    exp_other = np.exp(np.clip(latent_paths[:, :, 1], -20.0, 20.0))
+    denominator = 1.0 + exp_rail + exp_other
+
+    rail_share = exp_rail / denominator
+    road_share = 1.0 / denominator
+    other_share = exp_other / denominator
+    return np.stack([rail_share, road_share, other_share], axis=2)
+
+
+def matrix_to_dataframe(values: np.ndarray, years: np.ndarray) -> pd.DataFrame:
+    rows = []
+    n_scenarios, n_years = values.shape
+
+    for scenario_idx in range(n_scenarios):
+        for year_idx in range(n_years):
+            rows.append(
+                {
+                    "scenario": scenario_idx,
+                    "year": int(years[year_idx]),
+                    "modal_split": float(values[scenario_idx, year_idx]),
+                }
+            )
+
+    return pd.DataFrame(rows)
 
 
 def generate_joint_modal_split_scenarios(
@@ -269,57 +386,23 @@ def generate_joint_modal_split_scenarios(
     n_scenarios: int = 1000,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Generate stochastic modal split scenarios for all three modes jointly using a logistic-normal approach.
-    the three modes are generated together and always sum exactly to 1 after the softmax-style back-transformation.
-    The latent process is calibrated on the residual simplex after injecting a minimum share, so the std dev settings are no longer direct share perturbations but are combined into the latent joint-process volatility.
+    Generate stochastic joint modal split scenarios for rail, road and other
+    using the same rail-style ingredients:
+
+    - deterministic reference path
+    - LHS perturbations of yearly growth in a two-dimensional state space
+    - cumulative yearly shocks
+
+    Because the three shares must sum to 1, only two independent log-ratios are
+    simulated: log(rail / road) and log(other / road).
     """
-    years = np.arange(start_year, end_year + 1)
+    # Build the deterministic multimode reference path in share space.
+    years, reference_shares = build_reference_modal_split_paths(start_year, end_year)
+    # Move from shares to two independent log-ratios.
+    reference_latent = shares_to_log_ratios(reference_shares)
     n_years = len(years)
-    horizon = max(1, end_year - start_year)
 
-    start_shares = np.array(
-        [
-            integrated_settings.rail_modal_split_start,
-            integrated_settings.road_modal_split_start,
-            integrated_settings.other_modal_split_start,
-        ],
-        dtype=float,
-    )
-    target_shares = np.array(
-        [
-            integrated_settings.rail_modal_split_start * ((1 + integrated_settings.rail_modal_split_avg_growth_rate) ** horizon),
-            integrated_settings.road_modal_split_start * ((1 + integrated_settings.road_modal_split_avg_growth_rate) ** horizon),
-            integrated_settings.other_modal_split_start * ((1 + integrated_settings.other_modal_split_avg_growth_rate) ** horizon),
-        ],
-        dtype=float,
-    )
-    target_shares = target_shares / target_shares.sum()
-    min_share = integrated_settings.modal_split_min_share
-    residual_weight = 1.0 - 3.0 * min_share
-
-    # The latent process is calibrated on the residual simplex because min_share
-    # is injected only in the final share space, not in latent space.
-    start_residual = np.clip((start_shares - min_share) / residual_weight, 1e-9, None)
-    start_residual = start_residual / start_residual.sum()
-    target_residual = np.clip((target_shares - min_share) / residual_weight, 1e-9, None)
-    target_residual = target_residual / target_residual.sum()
-
-    start_latent = np.array(
-        [
-            np.log(start_residual[0] / start_residual[1]),
-            np.log(start_residual[2] / start_residual[1]),
-        ],
-        dtype=float,
-    )
-    target_latent = np.array(
-        [
-            np.log(target_residual[0] / target_residual[1]),
-            np.log(target_residual[2] / target_residual[1]),
-        ],
-        dtype=float,
-    )
-    latent_drift = (target_latent - start_latent) / horizon
-
+    # Let the yearly volatility widen over time 
     rail_std_path = np.linspace(
         integrated_settings.rail_modal_split_start_std_dev,
         integrated_settings.rail_modal_split_end_std_dev,
@@ -336,145 +419,58 @@ def generate_joint_modal_split_scenarios(
         n_years,
     )
 
-    corr = np.array(
+    # Convert per-mode uncertainty into uncertainty of the two log-ratios.
+    ratio_std_path = np.column_stack(
         [
-            [1.0, integrated_settings.modal_split_latent_correlation],
-            [integrated_settings.modal_split_latent_correlation, 1.0],
+            np.sqrt(rail_std_path ** 2 + road_std_path ** 2),
+            np.sqrt(other_std_path ** 2 + road_std_path ** 2),
+        ]
+    )
+    ratio_shock_std = np.array(
+        [
+            np.sqrt(
+                integrated_settings.rail_modal_split_std_dev_shocks ** 2
+                + integrated_settings.road_modal_split_std_dev_shocks ** 2
+            ),
+            np.sqrt(
+                integrated_settings.other_modal_split_std_dev_shocks ** 2
+                + integrated_settings.road_modal_split_std_dev_shocks ** 2
+            ),
         ],
         dtype=float,
     )
-    corr += np.eye(2) * 1e-9
 
-    rng_growth = np.random.default_rng(42)
-    rng_shock = np.random.default_rng(43)
-    latent_paths = np.zeros((n_scenarios, n_years, 2), dtype=float)
-    latent_paths[:, 0, :] = start_latent
+    # Draw yearly growth perturbations jointly for both log-ratios.
+    sampler = qmc.LatinHypercube(d=2 * n_years, seed=42)
+    lhs_samples = sampler.random(n=n_scenarios)
+    growth_perturbations = norm.ppf(lhs_samples).reshape(n_scenarios, n_years, 2)
+    growth_perturbations *= ratio_std_path[None, :, :]
+    growth_perturbations[:, 0, :] = 0.0
 
-    for year_idx in range(1, n_years):
-        # The per-mode std dev settings are used as calibration inputs
-        # for the latent log-ratio process rather than direct share perturbations.
-        rail_scale = np.sqrt(rail_std_path[year_idx] ** 2 + road_std_path[year_idx] ** 2)
-        other_scale = np.sqrt(other_std_path[year_idx] ** 2 + road_std_path[year_idx] ** 2)
-        shock_rail_scale = np.sqrt(
-            integrated_settings.rail_modal_split_std_dev_shocks ** 2
-            + integrated_settings.road_modal_split_std_dev_shocks ** 2
-        )
-        shock_other_scale = np.sqrt(
-            integrated_settings.other_modal_split_std_dev_shocks ** 2
-            + integrated_settings.road_modal_split_std_dev_shocks ** 2
-        )
-        scale_factor = integrated_settings.modal_split_latent_std_scale
-        rail_scale *= scale_factor
-        other_scale *= scale_factor
-        shock_rail_scale *= scale_factor
-        shock_other_scale *= scale_factor
-        # Fade in uncertainty smoothly so the first years do not jump
-        warmup = max(1, int(integrated_settings.modal_split_warmup_years))
-        warmup_factor = min(1.0, year_idx / warmup)
-        warmup_factor = warmup_factor ** 1.5
-        rail_scale *= warmup_factor
-        other_scale *= warmup_factor
-        shock_rail_scale *= warmup_factor
-        shock_other_scale *= warmup_factor
+    # Draw additional yearly shocks and accumulate them over time.
+    shock_sampler = qmc.LatinHypercube(d=2 * n_years, seed=43)
+    lhs_shocks = shock_sampler.random(n=n_scenarios)
+    et = norm.ppf(lhs_shocks).reshape(n_scenarios, n_years, 2)
+    et *= ratio_shock_std[None, None, :]
+    et[:, 0, :] = 0.0
 
-        growth_cov = np.diag([rail_scale, other_scale]) @ corr @ np.diag([rail_scale, other_scale])
-        shock_cov = np.diag([shock_rail_scale, shock_other_scale]) @ corr @ np.diag([shock_rail_scale, shock_other_scale])
+    # Combine deterministic path, growth perturbations and cumulative shocks.
+    cumulative_shocks = np.cumsum(et, axis=1)
+    deterministic_latent = np.broadcast_to(reference_latent[None, :, :], (n_scenarios, n_years, 2))
+    latent_paths = deterministic_latent + growth_perturbations + cumulative_shocks
 
-        growth_innov = rng_growth.multivariate_normal(mean=np.zeros(2), cov=growth_cov, size=n_scenarios)
-        shock_innov = rng_shock.multivariate_normal(mean=np.zeros(2), cov=shock_cov, size=n_scenarios)
-        reference_prev = start_latent + latent_drift * (year_idx - 1)
-        reversion = integrated_settings.modal_split_latent_reversion * (latent_paths[:, year_idx - 1, :] - reference_prev)
-        latent_paths[:, year_idx, :] = latent_paths[:, year_idx - 1, :] + latent_drift + growth_innov + shock_innov - reversion
+    # Transform the latent log-ratios back to three shares summing to 1.
+    shares = log_ratios_to_shares(latent_paths)
+    shares[:, 0, 0] = integrated_settings.rail_modal_split_start
+    shares[:, 0, 1] = integrated_settings.road_modal_split_start
+    shares[:, 0, 2] = integrated_settings.other_modal_split_start
 
-    latent_rail = latent_paths[:, :, 0]
-    latent_other = latent_paths[:, :, 1]
-    exp_rail = np.exp(np.clip(latent_rail, -20.0, 20.0))
-    exp_other = np.exp(np.clip(latent_other, -20.0, 20.0))
-    denominator = 1.0 + exp_rail + exp_other
-
-    rail_share = min_share + residual_weight * (exp_rail / denominator)
-    road_share = min_share + residual_weight * (1.0 / denominator)
-    other_share = min_share + residual_weight * (exp_other / denominator)
-
-    rail_share[:, 0] = integrated_settings.rail_modal_split_start
-    road_share[:, 0] = integrated_settings.road_modal_split_start
-    other_share[:, 0] = integrated_settings.other_modal_split_start
-
-    def _shares_to_df(values: np.ndarray) -> pd.DataFrame:
-        scenario_data = []
-        for scenario_idx in range(n_scenarios):
-            for year_idx, year in enumerate(years):
-                scenario_data.append(
-                    {
-                        "scenario": scenario_idx,
-                        "year": int(year),
-                        "modal_split": float(values[scenario_idx, year_idx]),
-                    }
-                )
-        return pd.DataFrame(scenario_data)
-
-    rail_df = _finalize_modal_split_frame(_shares_to_df(rail_share), start_year=start_year)
-    road_df = _finalize_modal_split_frame(_shares_to_df(road_share), start_year=start_year)
-    other_df = _finalize_modal_split_frame(_shares_to_df(other_share), start_year=start_year)
+    # Convert each mode back to the long scenario format used downstream.
+    rail_df = calculate_modal_split_growth_index(matrix_to_dataframe(shares[:, :, 0], years), start_year=start_year)
+    road_df = calculate_modal_split_growth_index(matrix_to_dataframe(shares[:, :, 1], years), start_year=start_year)
+    other_df = calculate_modal_split_growth_index(matrix_to_dataframe(shares[:, :, 2], years), start_year=start_year)
     return rail_df, road_df, other_df
 
-
-def generate_distance_per_person_scenarios(avg_growth_rate: float,
-                                           start_value: float,
-                                           start_year: int,
-                                           end_year: int,
-                                           n_scenarios: int = 1000,
-                                           start_std_dev: float = 0.01,
-                                           end_std_dev: float = 0.03,
-                                           std_dev_shocks: float = 0.02) -> pd.DataFrame:
-    """
-    Generate stochastic trips per person scenarios using Latin Hypercube Sampling and a random walk process.
-
-    Parameters:
-    - avg_growth_rate: average annual growth rate to apply (can be positive or negative)
-    - start_value: initial trips per person value at start_year
-    - start_year: year to begin scenario generation
-    - end_year: year to end scenario generation
-    - n_scenarios: number of scenarios to generate
-    - start_std_dev: starting std deviation applied to growth rate perturbation
-    - end_std_dev: ending std deviation applied to growth rate perturbation
-    - std_dev_shocks: std deviation of yearly additive shocks
-
-    Returns:
-    - DataFrame with columns: "scenario", "year", "trips_per_person", "growth_rate", "growth_index"
-    """
-    # Distance per person still uses the single-series setup:
-    # deterministic drift + LHS perturbations + cumulative shocks.
-    years = np.arange(start_year, end_year + 1)
-    n_years = len(years)
-
-    growth_factors = np.ones(n_years) * (1 + avg_growth_rate)
-    growth_factors[0] = 1
-    cumulative_growth = np.cumprod(growth_factors)
-    distance_values = start_value * cumulative_growth
-
-    growth_rates = np.zeros(n_years)
-    growth_rates[1:] = avg_growth_rate
-
-    ref_df = pd.DataFrame({
-        "jahr": years,
-        "total_population": distance_values,
-        "growth_rate": growth_rates
-    })
-
-    scenarios_df = generate_population_scenarios(
-        ref_df=ref_df,
-        start_year=start_year,
-        end_year=end_year,
-        n_scenarios=n_scenarios,
-        start_std_dev=start_std_dev,
-        end_std_dev=end_std_dev,
-        std_dev_shocks=std_dev_shocks
-    )
-
-    scenarios_df = scenarios_df.rename(columns={"population": "distance_per_person"})
-
-    return scenarios_df
 
 # -----------------------------------------------------------------------------------
 # Rail-only helpers
@@ -571,6 +567,126 @@ def compute_growth_od_matrix_rail_optimized(
         growth_od.loc[:, station] *= sqrt_factors[station]
 
     return growth_od
+
+def generate_rail_od_growth_scenarios(
+    initial_od_matrix: pd.DataFrame,
+    communes_to_stations: pd.DataFrame,
+    communes_population: pd.DataFrame,
+    start_year: int,
+    end_year: int,
+    num_of_scenarios: int,
+    scenario_components: Dict[str, Any] | None,
+    do_plot: bool = False,
+    n_jobs: int = -1,
+) -> Dict[str, Dict[int, pd.DataFrame]]:
+    """
+    Optimierte Version von generate_od_growth_scenarios mit Multiprocessing
+    """
+    initial_od_matrix = initial_od_matrix.copy()
+    initial_od_matrix["from_station"] = initial_od_matrix["from_station"].astype(int)
+    initial_od_matrix.columns = [
+        "from_station" if col == "from_station" else int(col)
+        for col in initial_od_matrix.columns
+    ]
+    initial_od_matrix = initial_od_matrix.set_index('from_station')
+    if scenario_components is None:
+        raise ValueError(
+            "Rail OD generation in the integrated pipeline requires shared scenario components. "
+            "Pass the saved shared_components_path from generate_and_apply_shared_scenarios()."
+        )
+
+    population_scenarios = scenario_components["population_scenarios"]
+    modal_split_scenarios = scenario_components["modal_split_rail"]
+    distance_per_person_scenarios = scenario_components["distance_per_person"]
+    if do_plot:
+        pass
+
+    modal_factors, distance_factors = precompute_modal_distance_factors(
+        modal_split_scenarios, distance_per_person_scenarios, start_year
+    )
+
+    station_communes = build_station_to_communes_mapping(communes_to_stations)
+    station_commune_lookup = {}
+
+    def process_scenario(s):
+        key = f"scenario_{s + 1}"
+        results_s = {}
+
+        for y in range(start_year, end_year + 1):
+            pop_growth_od = compute_growth_od_matrix_rail_optimized(
+                initial_od_matrix,
+                station_communes,
+                communes_population,
+                population_scenarios,
+                s, y, start_year,
+                station_commune_lookup
+            )
+
+            final_od = apply_modal_trips_optimized(
+                initial_od_matrix,
+                pop_growth_od,
+                modal_factors,
+                distance_factors,
+                s, start_year, y
+            )
+            results_s[y] = final_od
+
+        return key, results_s
+
+    try:
+        scenario_results = Parallel(n_jobs=n_jobs, verbose=100)(
+            delayed(process_scenario)(s) for s in range(num_of_scenarios)
+        )
+    except PermissionError:
+        # Fall back to serial execution when multiprocessing is blocked by the runtime.
+        scenario_results = [process_scenario(s) for s in range(num_of_scenarios)]
+    return dict(scenario_results)
+
+def materialize_rail_scenarios(
+    start_year: int = 2018,
+    end_year: int = 2100,
+    num_of_scenarios: int = 100,
+    use_cache: bool = False,
+    do_plot: bool = False,
+    shared_components_path: str | None = None,
+):
+    cache_dir = RAIL_SCENARIO_CACHE_DIR
+
+    if use_cache:
+        scenarios = load_scenarios_from_cache(cache_dir)
+        if scenarios:
+            return scenarios
+
+    scenario_components = None
+    if shared_components_path and os.path.exists(shared_components_path):
+        with open(shared_components_path, "rb") as handle:
+            scenario_components = pickle.load(handle)
+    else:
+        raise FileNotFoundError(
+            "Integrated rail scenario generation requires a valid shared_components_path."
+        )
+
+    scenarios = generate_rail_od_growth_scenarios(
+        pd.read_csv(RAIL_OD_MATRIX_PATH),
+        pd.read_excel(RAIL_COMMUNE_TO_STATION_PATH),
+        pd.read_csv(ROAD_POPULATION_BY_COMMUNE_PATH),
+        start_year=start_year,
+        end_year=end_year,
+        num_of_scenarios=num_of_scenarios,
+        scenario_components=scenario_components,
+        do_plot=do_plot,
+    )
+
+    os.makedirs(cache_dir, exist_ok=True)
+    for filename in os.listdir(cache_dir):
+        if filename.endswith(".pkl") and not filename.startswith("._"):
+            os.remove(os.path.join(cache_dir, filename))
+    for scenario_name, scenario_data in scenarios.items():
+        scen_path = os.path.join(cache_dir, f"{scenario_name}.pkl")
+        with open(scen_path, 'wb') as handle:
+            pickle.dump(scenario_data, handle)
+
+    return scenarios
 
 
 # ----------------------------------------------------------------------------------------
@@ -726,76 +842,7 @@ def compute_growth_od_matrix_optimized(
 
     return growth_od
 
-
-def apply_modal_trips_optimized(
-        initial_od: pd.DataFrame,
-        growth_od: pd.DataFrame,
-        modal_factors: Dict[tuple, float],
-        distance_factors: Dict[tuple, float],
-        scenario: int,
-        start_year: int,
-        year: int
-) -> pd.DataFrame:
-    """
-    Optimierte Version von apply_modal_trips mit Lookup-Table
-    """
-    # Faktoren aus Lookup-Tabelle holen
-    scenario_year_key = (scenario, year)
-    m_factor = modal_factors.get(scenario_year_key, 1.0)
-    d_factor = distance_factors.get(scenario_year_key, 1.0)
-
-    # Einen Schritt berechnen
-    return (initial_od * growth_od * m_factor * d_factor).astype('float32')
-
-
-def precompute_modal_distance_factors(
-        modal_df: pd.DataFrame,
-        distance_df: pd.DataFrame,
-        start_year: int
-) -> tuple:
-    """
-    Vorausberechnung der Modal- und Distance-Faktoren
-    """
-    modal_factors = {}
-    distance_factors = {}
-
-    scenarios = modal_df['scenario'].unique()
-    years = modal_df['year'].unique()
-
-    # Modal split factors
-    for s in scenarios:
-        m_start = modal_df.loc[(modal_df['scenario'] == s) &
-                               (modal_df['year'] == start_year), 'modal_split'].iat[0]
-
-        for y in years:
-            if y == start_year:
-                modal_factors[(s, y)] = 1.0
-                continue
-
-            m_curr = modal_df.loc[(modal_df['scenario'] == s) &
-                                  (modal_df['year'] == y), 'modal_split'].iat[0]
-            m_factor = (m_curr / m_start) if m_start > 0 else 1.0
-            modal_factors[(s, y)] = m_factor
-
-    # Distance per person factors
-    for s in scenarios:
-        d_start = distance_df.loc[(distance_df['scenario'] == s) &
-                                  (distance_df['year'] == start_year), 'distance_per_person'].iat[0]
-
-        for y in years:
-            if y == start_year:
-                distance_factors[(s, y)] = 1.0
-                continue
-
-            d_curr = distance_df.loc[(distance_df['scenario'] == s) &
-                                     (distance_df['year'] == y), 'distance_per_person'].iat[0]
-            d_factor = (d_curr / d_start) if d_start > 0 else 1.0
-            distance_factors[(s, y)] = d_factor
-
-    return modal_factors, distance_factors
-
-
-def generate_od_growth_scenarios(
+def generate_road_od_growth_scenarios(
     initial_od_matrix: pd.DataFrame,
     communes_to_zones: pd.DataFrame,
     communes_population: pd.DataFrame,
@@ -869,79 +916,146 @@ def generate_od_growth_scenarios(
     return dict(scenario_results)
 
 
-def generate_rail_od_growth_scenarios(
-    initial_od_matrix: pd.DataFrame,
-    communes_to_stations: pd.DataFrame,
-    communes_population: pd.DataFrame,
-    start_year: int,
-    end_year: int,
-    num_of_scenarios: int,
-    scenario_components: Dict[str, Any] | None,
+def materialize_road_scenarios(
+    start_year: int = 2018,
+    end_year: int = 2100,
+    num_of_scenarios: int = 100,
+    use_cache: bool = False,
     do_plot: bool = False,
-    n_jobs: int = -1,
-) -> Dict[str, Dict[int, pd.DataFrame]]:
-    """
-    Optimierte Version von generate_od_growth_scenarios mit Multiprocessing
-    """
-    initial_od_matrix = initial_od_matrix.copy()
-    initial_od_matrix["from_station"] = initial_od_matrix["from_station"].astype(int)
-    initial_od_matrix.columns = [
-        "from_station" if col == "from_station" else int(col)
-        for col in initial_od_matrix.columns
-    ]
-    initial_od_matrix = initial_od_matrix.set_index('from_station')
-    if scenario_components is None:
-        raise ValueError(
-            "Rail OD generation in the integrated pipeline requires shared scenario components. "
-            "Pass the saved shared_components_path from generate_and_apply_shared_scenarios()."
-        )
+    shared_components_path: str | None = None,
+):
+    cache_dir = ROAD_SCENARIO_CACHE_DIR
+    scenario_components = None
 
-    population_scenarios = scenario_components["population_scenarios"]
-    modal_split_scenarios = scenario_components["modal_split_rail"]
-    distance_per_person_scenarios = scenario_components["distance_per_person"]
-    if do_plot:
-        pass
+    if use_cache:
+        scenarios = load_scenarios_from_cache(cache_dir)
+        if shared_components_path and os.path.exists(shared_components_path):
+            with open(shared_components_path, "rb") as handle:
+                scenario_components = pickle.load(handle)
+        if scenarios:
+            export_generated_population_rasters(
+                scenarios=scenarios,
+                start_year=start_year,
+                end_year=end_year,
+                num_of_scenarios=num_of_scenarios,
+                valuation_year=road_settings.start_valuation_year,
+                scenario_components=scenario_components,
+            )
+            return scenarios
 
-    modal_factors, distance_factors = precompute_modal_distance_factors(
-        modal_split_scenarios, distance_per_person_scenarios, start_year
+    communes_to_zones = load_or_create_commune_to_zone_mapping(
+        mapping_path=ROAD_COMMUNE_TO_ZONE_MAPPING_PATH,
+        voronoi_tif_path=ROAD_VORONOI_TIF_PATH,
     )
 
-    station_communes = build_station_to_communes_mapping(communes_to_stations)
-    station_commune_lookup = {}
+    if shared_components_path and os.path.exists(shared_components_path):
+        with open(shared_components_path, "rb") as handle:
+            scenario_components = pickle.load(handle)
 
-    def process_scenario(s):
-        key = f"scenario_{s + 1}"
-        results_s = {}
+    scenarios = generate_road_od_growth_scenarios(
+        pd.read_csv(ROAD_OD_MATRIX_PATH),
+        communes_to_zones,
+        pd.read_csv(ROAD_POPULATION_BY_COMMUNE_PATH),
+        start_year=start_year,
+        end_year=end_year,
+        num_of_scenarios=num_of_scenarios,
+        scenario_components=scenario_components,
+        do_plot=do_plot,
+    )
 
-        for y in range(start_year, end_year + 1):
-            pop_growth_od = compute_growth_od_matrix_rail_optimized(
-                initial_od_matrix,
-                station_communes,
-                communes_population,
-                population_scenarios,
-                s, y, start_year,
-                station_commune_lookup
-            )
+    os.makedirs(cache_dir, exist_ok=True)
+    for filename in os.listdir(cache_dir):
+        if filename.endswith(".pkl") and not filename.startswith("._"):
+            os.remove(os.path.join(cache_dir, filename))
+    for scenario_name, scenario_data in scenarios.items():
+        with open(os.path.join(cache_dir, f"{scenario_name}.pkl"), "wb") as handle:
+            pickle.dump(scenario_data, handle)
 
-            final_od = apply_modal_trips_optimized(
-                initial_od_matrix,
-                pop_growth_od,
-                modal_factors,
-                distance_factors,
-                s, start_year, y
-            )
-            results_s[y] = final_od
+    export_generated_population_rasters(
+        scenarios=scenarios,
+        start_year=start_year,
+        end_year=end_year,
+        num_of_scenarios=num_of_scenarios,
+        valuation_year=integrated_settings.start_valuation_year,
+        scenario_components=scenario_components,
+    )
 
-        return key, results_s
+    return scenarios
 
-    try:
-        scenario_results = Parallel(n_jobs=n_jobs, verbose=100)(
-            delayed(process_scenario)(s) for s in range(num_of_scenarios)
-        )
-    except PermissionError:
-        # Fall back to serial execution when multiprocessing is blocked by the runtime.
-        scenario_results = [process_scenario(s) for s in range(num_of_scenarios)]
-    return dict(scenario_results)
+
+
+
+# ----------------------------------------------------------------------------------------
+# Shared helpers for applying modal and distance factors to OD growth
+# ----------------------------------------------------------------------------------------
+
+def apply_modal_trips_optimized(
+        initial_od: pd.DataFrame,
+        growth_od: pd.DataFrame,
+        modal_factors: Dict[tuple, float],
+        distance_factors: Dict[tuple, float],
+        scenario: int,
+        start_year: int,
+        year: int
+) -> pd.DataFrame:
+    """
+    Optimierte Version von apply_modal_trips mit Lookup-Table
+    """
+    # Faktoren aus Lookup-Tabelle holen
+    scenario_year_key = (scenario, year)
+    m_factor = modal_factors.get(scenario_year_key, 1.0)
+    d_factor = distance_factors.get(scenario_year_key, 1.0)
+
+    # Einen Schritt berechnen
+    return (initial_od * growth_od * m_factor * d_factor).astype('float32')
+
+
+def precompute_modal_distance_factors(
+        modal_df: pd.DataFrame,
+        distance_df: pd.DataFrame,
+        start_year: int
+) -> tuple:
+    """
+    Vorausberechnung der Modal- und Distance-Faktoren
+    """
+    modal_factors = {}
+    distance_factors = {}
+
+    scenarios = modal_df['scenario'].unique()
+    years = modal_df['year'].unique()
+
+    # Modal split factors
+    for s in scenarios:
+        m_start = modal_df.loc[(modal_df['scenario'] == s) &
+                               (modal_df['year'] == start_year), 'modal_split'].iat[0]
+
+        for y in years:
+            if y == start_year:
+                modal_factors[(s, y)] = 1.0
+                continue
+
+            m_curr = modal_df.loc[(modal_df['scenario'] == s) &
+                                  (modal_df['year'] == y), 'modal_split'].iat[0]
+            m_factor = (m_curr / m_start) if m_start > 0 else 1.0
+            modal_factors[(s, y)] = m_factor
+
+    # Distance per person factors
+    for s in scenarios:
+        d_start = distance_df.loc[(distance_df['scenario'] == s) &
+                                  (distance_df['year'] == start_year), 'distance_per_person'].iat[0]
+
+        for y in years:
+            if y == start_year:
+                distance_factors[(s, y)] = 1.0
+                continue
+
+            d_curr = distance_df.loc[(distance_df['scenario'] == s) &
+                                     (distance_df['year'] == y), 'distance_per_person'].iat[0]
+            d_factor = (d_curr / d_start) if d_start > 0 else 1.0
+            distance_factors[(s, y)] = d_factor
+
+    return modal_factors, distance_factors
+
 
 
 def load_scenarios_from_cache(cache_dir: str):
@@ -962,9 +1076,11 @@ def export_generated_population_rasters(
     num_of_scenarios: int,
     valuation_year: int,
     scenario_components: Dict[str, Any] | None = None,
-    output_dir: str = ROAD_POPULATION_RASTER_OUTPUT_DIR,
+    output_dir: str | None = None,
 ) -> int:
     del end_year, num_of_scenarios
+    if output_dir is None:
+        output_dir = ROAD_POPULATION_RASTER_OUTPUT_DIR
     os.makedirs(output_dir, exist_ok=True)
 
     base_candidates = [
@@ -1060,115 +1176,6 @@ def export_generated_population_rasters(
     return written
 
 
-def get_random_scenarios(
-    start_year: int = 2018,
-    end_year: int = 2100,
-    num_of_scenarios: int = 100,
-    use_cache: bool = False,
-    do_plot: bool = False,
-    shared_components_path: str | None = None,
-):
-    cache_dir = ROAD_SCENARIO_CACHE_DIR
-
-    if use_cache:
-        scenarios = load_scenarios_from_cache(cache_dir)
-        if scenarios:
-            export_generated_population_rasters(
-                scenarios=scenarios,
-                start_year=start_year,
-                end_year=end_year,
-                num_of_scenarios=num_of_scenarios,
-                valuation_year=road_settings.start_valuation_year,
-                scenario_components=scenario_components,
-            )
-            return scenarios
-
-    communes_to_zones = load_or_create_commune_to_zone_mapping(
-        mapping_path=ROAD_COMMUNE_TO_ZONE_MAPPING_PATH,
-        voronoi_tif_path=ROAD_VORONOI_TIF_PATH,
-    )
-
-    scenario_components = None
-    if shared_components_path and os.path.exists(shared_components_path):
-        with open(shared_components_path, "rb") as handle:
-            scenario_components = pickle.load(handle)
-
-    scenarios = generate_od_growth_scenarios(
-        pd.read_csv(ROAD_OD_MATRIX_PATH),
-        communes_to_zones,
-        pd.read_csv(ROAD_POPULATION_BY_COMMUNE_PATH),
-        start_year=start_year,
-        end_year=end_year,
-        num_of_scenarios=num_of_scenarios,
-        scenario_components=scenario_components,
-        do_plot=do_plot,
-    )
-
-    os.makedirs(cache_dir, exist_ok=True)
-    for filename in os.listdir(cache_dir):
-        if filename.endswith(".pkl") and not filename.startswith("._"):
-            os.remove(os.path.join(cache_dir, filename))
-    for scenario_name, scenario_data in scenarios.items():
-        with open(os.path.join(cache_dir, f"{scenario_name}.pkl"), "wb") as handle:
-            pickle.dump(scenario_data, handle)
-
-    export_generated_population_rasters(
-        scenarios=scenarios,
-        start_year=start_year,
-        end_year=end_year,
-        num_of_scenarios=num_of_scenarios,
-        valuation_year=integrated_settings.start_valuation_year,
-        scenario_components=scenario_components,
-    )
-
-    return scenarios
-
-
-def get_rail_random_scenarios(
-    start_year: int = 2018,
-    end_year: int = 2100,
-    num_of_scenarios: int = 100,
-    use_cache: bool = False,
-    do_plot: bool = False,
-    shared_components_path: str | None = None,
-):
-    cache_dir = RAIL_SCENARIO_CACHE_DIR
-
-    if use_cache:
-        scenarios = load_scenarios_from_cache(cache_dir)
-        if scenarios:
-            return scenarios
-
-    scenario_components = None
-    if shared_components_path and os.path.exists(shared_components_path):
-        with open(shared_components_path, "rb") as handle:
-            scenario_components = pickle.load(handle)
-    else:
-        raise FileNotFoundError(
-            "Integrated rail scenario generation requires a valid shared_components_path."
-        )
-
-    scenarios = generate_rail_od_growth_scenarios(
-        pd.read_csv(RAIL_OD_MATRIX_PATH),
-        pd.read_excel(RAIL_COMMUNE_TO_STATION_PATH),
-        pd.read_csv(ROAD_POPULATION_BY_COMMUNE_PATH),
-        start_year=start_year,
-        end_year=end_year,
-        num_of_scenarios=num_of_scenarios,
-        scenario_components=scenario_components,
-        do_plot=do_plot,
-    )
-
-    os.makedirs(cache_dir, exist_ok=True)
-    for filename in os.listdir(cache_dir):
-        if filename.endswith(".pkl") and not filename.startswith("._"):
-            os.remove(os.path.join(cache_dir, filename))
-    for scenario_name, scenario_data in scenarios.items():
-        scen_path = os.path.join(cache_dir, f"{scenario_name}.pkl")
-        with open(scen_path, 'wb') as handle:
-            pickle.dump(scenario_data, handle)
-
-    return scenarios
 
 # -----------------------------------------------------------------
 # Shared outputs, selection and plotting
@@ -1240,17 +1247,7 @@ def load_shared_scenario_components(
         return pickle.load(file)
 
 
-def _ensure_output_dir(path: str) -> None:
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-
-
-def _scenario_name_to_index(scenario_name: str) -> int:
-    return int(str(scenario_name).split("_")[-1]) - 1
-
-
-def _get_value_for_scenario_year(
+def get_value_for_scenario_year(
     df: pd.DataFrame,
     scenario_idx: int,
     year: int,
@@ -1288,25 +1285,25 @@ def build_shared_scenario_summary(
         total_population_valuation = 0.0
 
         for district_df in population_scenarios.values():
-            total_population_start += _get_value_for_scenario_year(
+            total_population_start += get_value_for_scenario_year(
                 district_df, scenario_idx, start_year, "population"
             )
-            total_population_valuation += _get_value_for_scenario_year(
+            total_population_valuation += get_value_for_scenario_year(
                 district_df, scenario_idx, valuation_year, "population"
             )
 
-        road_modal = _get_value_for_scenario_year(
+        road_modal = get_value_for_scenario_year(
             modal_split_road, scenario_idx, valuation_year, "modal_split"
         )
-        rail_modal = _get_value_for_scenario_year(
+        rail_modal = get_value_for_scenario_year(
             modal_split_rail, scenario_idx, valuation_year, "modal_split"
         )
         other_modal = (
-            _get_value_for_scenario_year(modal_split_other, scenario_idx, valuation_year, "modal_split")
+            get_value_for_scenario_year(modal_split_other, scenario_idx, valuation_year, "modal_split")
             if modal_split_other is not None
             else max(0.0, 1.0 - road_modal - rail_modal)
         )
-        distance_value = _get_value_for_scenario_year(
+        distance_value = get_value_for_scenario_year(
             distance_per_person, scenario_idx, valuation_year, "distance_per_person"
         )
 
@@ -1416,7 +1413,9 @@ def save_shared_scenario_summary(
     summary_df: pd.DataFrame,
     output_path: str = DEFAULT_SHARED_SUMMARY_PATH,
 ) -> str:
-    _ensure_output_dir(output_path)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     summary_df.to_csv(output_path, index=False)
     return output_path
 
@@ -1425,20 +1424,145 @@ def save_representative_scenario_selection(
     selected_df: pd.DataFrame,
     output_path: str = DEFAULT_SHARED_SELECTION_PATH,
 ) -> str:
-    _ensure_output_dir(output_path)
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     selected_df.to_csv(output_path, index=False)
     return output_path
 
 
-def apply_selected_scenarios_to_mode_settings(
-    selected_scenarios: Iterable[str],
-) -> List[str]:
-    selected = list(selected_scenarios)
+# ------------------------------------------------------------------------
+# Plotting functions
+# ------------------------------------------------------------------------
 
-    road_settings.travel_time_debug_enabled = True
-    road_settings.travel_time_debug_scenarios = selected
+def _plot_modal_split_band(
+    df: pd.DataFrame,
+    title: str,
+    output_path: str,
+    federal_2050_range: tuple[float, float],
+) -> None:
+    year_stats = (
+        df.groupby("year")["modal_split"]
+        .agg(min="min", max="max", mean="mean", std="std")
+        .reset_index()
+    )
+    std = year_stats["std"].fillna(0.0)
+    year_stats["mean_plus_1_65std"] = year_stats["mean"] + 1.65 * std
+    year_stats["mean_minus_1_65std"] = year_stats["mean"] - 1.65 * std
 
-    return selected
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], color="grey", alpha=0.3, label="Gesamter Bereich")
+    ax.plot(year_stats["year"], year_stats["mean_plus_1_65std"], color="red", linestyle="-", alpha=0.7, label="+1,65σ (95%)")
+    ax.plot(year_stats["year"], year_stats["mean_minus_1_65std"], color="red", linestyle="-", alpha=0.7, label="-1,65σ (5%)")
+    ax.plot(year_stats["year"], year_stats["mean"], color="grey", linestyle="--", alpha=0.8, label="Mittelwert")
+
+    sample_id = int(df["scenario"].drop_duplicates().sample(n=1, random_state=42).iloc[0])
+    sample_df = df[df["scenario"] == sample_id].sort_values("year")
+    ax.plot(sample_df["year"], sample_df["modal_split"], color="blue", linewidth=2, label=f"Beispielszenario {sample_id}")
+
+    lower_bound, upper_bound = federal_2050_range
+    marker_color = "#E08D3C"
+    marker_description = f"Verkehrsperspektive 2050 ({lower_bound*100:.1f}-{upper_bound*100:.1f}%)"
+    ax.vlines(x=2050, ymin=lower_bound, ymax=upper_bound, colors=marker_color, linestyles="solid", linewidth=2, label=marker_description)
+    ax.plot([2050], [lower_bound], marker="_", markersize=10, color=marker_color)
+    ax.plot([2050], [upper_bound], marker="_", markersize=10, color=marker_color)
+
+    ax.set_xlabel("Jahr")
+    ax.set_ylabel("Modal-Split (%)")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x * 100:.0f}%"))
+    ax.set_title(title)
+    ax.grid(True)
+    ax.legend(loc="upper left")
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_value_band(
+    df: pd.DataFrame,
+    value_column: str,
+    title: str,
+    output_path: str,
+) -> None:
+    year_stats = (
+        df.groupby("year")[value_column]
+        .agg(min="min", max="max", mean="mean", std="std")
+        .reset_index()
+    )
+    std = year_stats["std"].fillna(0.0)
+    year_stats["upper_195"] = year_stats["mean"] + 1.95 * std
+    year_stats["lower_195"] = year_stats["mean"] - 1.95 * std
+
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], alpha=0.22, color="#7f8c8d", label="Total range")
+    ax.plot(year_stats["year"], year_stats["mean"], color="#2c3e50", linestyle="--", linewidth=1.8, label="Mean")
+    ax.plot(year_stats["year"], year_stats["upper_195"], color="#8e44ad", linewidth=1.2, linestyle=":", label="Mean ± 1.95σ")
+    ax.plot(year_stats["year"], year_stats["lower_195"], color="#8e44ad", linewidth=1.2, linestyle=":")
+    sample_id = int(df["scenario"].drop_duplicates().iloc[0])
+    sample_df = df[df["scenario"] == sample_id]
+    ax.plot(sample_df["year"], sample_df[value_column], color="#2980b9", linewidth=1.6, label=f"Sample scenario {sample_id + 1}")
+    ax.set_xlabel("Year")
+    ax.set_ylabel(value_column.replace("_", " ").title())
+    ax.set_title(title)
+    ax.grid(True, alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_shared_scenario_components(
+    components: Dict[str, Any],
+    summary_df: pd.DataFrame,
+    selected_df: pd.DataFrame,
+    output_dir: str,
+) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    _plot_modal_split_band(
+        components["modal_split_rail"],
+        "Rail modal split scenarios",
+        os.path.join(output_dir, "modal_split_rail.png"),
+        federal_2050_range=(0.187, 0.243),
+    )
+    _plot_modal_split_band(
+        components["modal_split_road"],
+        "Road modal split scenarios",
+        os.path.join(output_dir, "modal_split_road.png"),
+        federal_2050_range=(0.670, 0.738),
+    )
+    _plot_modal_split_band(
+        components["modal_split_other"],
+        "Other modal split scenarios",
+        os.path.join(output_dir, "modal_split_other.png"),
+        federal_2050_range=(0.067, 0.089),
+    )
+    _plot_value_band(
+        components["distance_per_person"],
+        "distance_per_person",
+        "Distance per person scenarios",
+        os.path.join(output_dir, "distance_per_person.png"),
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    ordered = summary_df.sort_values("shared_future_score").reset_index(drop=True)
+    ax.plot(np.arange(len(ordered)), ordered["shared_future_score"], color="#2c3e50", linewidth=1.6)
+    if not selected_df.empty:
+        selected_lookup = ordered.reset_index().merge(selected_df[["scenario", "selection_order"]], on="scenario", how="inner")
+        ax.scatter(selected_lookup["index"], selected_lookup["shared_future_score"], color="#c0392b", s=35, zorder=3)
+        for row in selected_lookup.itertuples(index=False):
+            ax.text(row.index, row.shared_future_score, f"  {row.selection_order}", va="center", fontsize=8)
+    ax.set_xlabel("Scenario rank")
+    ax.set_ylabel("Shared future score")
+    ax.set_title("Representative scenario selection")
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, "shared_future_score.png"), bbox_inches="tight")
+    plt.close(fig)
+
+
+# ------------------------------------------------------------------------
+# Main generation and application function
+# ------------------------------------------------------------------------
 
 
 def generate_and_apply_shared_scenarios(
@@ -1454,7 +1578,9 @@ def generate_and_apply_shared_scenarios(
     apply_selection_to_modes: bool = True,
     do_plot: bool = False,
 ) -> Dict[str, Any]:
-    data_root = _resolve_data_root()
+    data_root = integrated_paths.MAIN
+    if not os.path.isdir(os.path.join(data_root, "data")):
+        data_root = os.getcwd()
     previous_cwd = os.getcwd()
 
     try:
@@ -1485,10 +1611,13 @@ def generate_and_apply_shared_scenarios(
         selected_scenarios = selected_df["scenario"].tolist()
 
         if apply_selection_to_modes:
-            apply_selected_scenarios_to_mode_settings(selected_scenarios)
+            selected = list(selected_scenarios)
+
+            road_settings.travel_time_debug_enabled = True
+            road_settings.travel_time_debug_scenarios = selected
 
         if run_road:
-            get_random_scenarios(
+            materialize_road_scenarios(
                 start_year=start_year,
                 end_year=end_year,
                 num_of_scenarios=num_of_scenarios,
@@ -1498,7 +1627,7 @@ def generate_and_apply_shared_scenarios(
             )
 
         if run_rail:
-            get_rail_random_scenarios(
+            materialize_rail_scenarios(
                 start_year=start_year,
                 end_year=end_year,
                 num_of_scenarios=num_of_scenarios,
@@ -1508,9 +1637,7 @@ def generate_and_apply_shared_scenarios(
             )
 
         if do_plot:
-            plot_base_dir = os.path.dirname(summary_file) or integrated_paths.SCENARIO_CACHE_SHARED_DIR
-            plot_dir = os.path.join(plot_base_dir, "plots")
-            plot_shared_scenario_components(components, summary_df, selected_df, plot_dir)
+            plot_shared_scenario_components(components, summary_df, selected_df, SCENARIO_PLOTS_DIR)
 
         return {
             "components_path": saved_path,
@@ -1522,92 +1649,6 @@ def generate_and_apply_shared_scenarios(
     finally:
         os.chdir(previous_cwd)
 
-
-def _plot_scenario_band(df: pd.DataFrame, value_column: str, title: str, output_path: str) -> None:
-    year_stats = (
-        df.groupby("year")[value_column]
-        .agg(
-            min="min",
-            max="max",
-            mean="mean",
-            std="std",
-            q05=lambda x: x.quantile(0.05),
-            q95=lambda x: x.quantile(0.95),
-        )
-        .reset_index()
-    )
-    std = year_stats["std"].fillna(0.0)
-    year_stats["upper_195"] = year_stats["mean"] + 1.95 * std
-    year_stats["lower_195"] = year_stats["mean"] - 1.95 * std
-
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], alpha=0.22, color="#7f8c8d", label="Total range")
-    ax.plot(year_stats["year"], year_stats["mean"], color="#2c3e50", linestyle="--", linewidth=1.8, label="Mean")
-    ax.plot(year_stats["year"], year_stats["q95"], color="#c0392b", linewidth=1.2, label="95% quantile")
-    ax.plot(year_stats["year"], year_stats["q05"], color="#c0392b", linewidth=1.2, label="5% quantile")
-    ax.plot(year_stats["year"], year_stats["upper_195"], color="#8e44ad", linewidth=1.2, linestyle=":", label="Mean ± 1.95σ")
-    ax.plot(year_stats["year"], year_stats["lower_195"], color="#8e44ad", linewidth=1.2, linestyle=":")
-    sample_id = int(df["scenario"].drop_duplicates().iloc[0])
-    sample_df = df[df["scenario"] == sample_id]
-    ax.plot(sample_df["year"], sample_df[value_column], color="#2980b9", linewidth=1.6, label=f"Sample scenario {sample_id + 1}")
-    ax.set_xlabel("Year")
-    ax.set_ylabel(value_column.replace("_", " ").title())
-    ax.set_title(title)
-    ax.grid(True, alpha=0.25)
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(output_path, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_shared_scenario_components(
-    components: Dict[str, Any],
-    summary_df: pd.DataFrame,
-    selected_df: pd.DataFrame,
-    output_dir: str,
-) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-    _plot_scenario_band(
-        components["modal_split_rail"],
-        "modal_split",
-        "Rail modal split scenarios",
-        os.path.join(output_dir, "modal_split_rail.png"),
-    )
-    _plot_scenario_band(
-        components["modal_split_road"],
-        "modal_split",
-        "Road modal split scenarios",
-        os.path.join(output_dir, "modal_split_road.png"),
-    )
-    if "modal_split_other" in components:
-        _plot_scenario_band(
-            components["modal_split_other"],
-            "modal_split",
-            "Other modal split scenarios",
-            os.path.join(output_dir, "modal_split_other.png"),
-        )
-    _plot_scenario_band(
-        components["distance_per_person"],
-        "distance_per_person",
-        "Distance per person scenarios",
-        os.path.join(output_dir, "distance_per_person.png"),
-    )
-
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ordered = summary_df.sort_values("shared_future_score").reset_index(drop=True)
-    ax.plot(np.arange(len(ordered)), ordered["shared_future_score"], color="#2c3e50", linewidth=1.6)
-    if not selected_df.empty:
-        selected_lookup = ordered.reset_index().merge(selected_df[["scenario", "selection_order"]], on="scenario", how="inner")
-        ax.scatter(selected_lookup["index"], selected_lookup["shared_future_score"], color="#c0392b", s=35, zorder=3)
-        for row in selected_lookup.itertuples(index=False):
-            ax.text(row.index, row.shared_future_score, f"  {row.selection_order}", va="center", fontsize=8)
-    ax.set_xlabel("Scenario rank")
-    ax.set_ylabel("Shared future score")
-    ax.set_title("Representative scenario selection")
-    ax.grid(True, alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(os.path.join(output_dir, "shared_future_score.png"), bbox_inches="tight")
-    plt.close(fig)
 
 
 if __name__ == "__main__":

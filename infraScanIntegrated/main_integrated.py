@@ -10,7 +10,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from infraScan.infraScanIntegrated import config as integrated_config
 from infraScan.infraScanIntegrated import settings as integrated_settings
 from infraScan.infraScanIntegrated import pipeline_integrated as integrated_pipeline
-from infraScan.infraScanIntegrated import random_scenarios as integrated_random_scenarios
+from infraScan.infraScanIntegrated.Ideas import random_scenarios as integrated_random_scenarios
 
 
 from infraScan.infraScanRail import pipeline as rail_pipeline
