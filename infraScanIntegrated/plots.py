@@ -622,6 +622,8 @@ def main() -> None:
     plot_all_rail_final_cost_savings(COST_OUTPUT_DIR)
     plot_all_road_final_cost_savings(COST_OUTPUT_DIR)
 
+    # Add scenario plots also here
+
     print("Saved plots to:", COST_OUTPUT_DIR)
 
 

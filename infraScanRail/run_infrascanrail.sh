@@ -34,6 +34,6 @@ def auto_input(prompt=""):
 
 builtins.input = auto_input
 
-from infraScan.infraScanRail.main_cap import infrascanrail_cap
+from infraScan.infraScanRail.main_pipeline import infrascanrail_cap
 infrascanrail_cap()
 PY
