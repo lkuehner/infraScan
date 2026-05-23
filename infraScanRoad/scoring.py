@@ -2325,7 +2325,7 @@ def CostFun(Xi, par):
 def IntCostFun(Xi, par):
     # Computes the integral of the cost function for the flow Xi, with the
     # parameters 'par'. Xi has the adequate size
-    Xi = 2
+    # Xi = 2
     # BPR
     # s1 = (Xi./par.Xmax_i).^par.gamma_i            (Flow/MaxCapacity)^gamma
     # s2 = Xi*par.alpha_i.*par.fftt_i.*s1           Flow*alpha*fftt*s1
@@ -2515,8 +2515,8 @@ def SUE_C_Logit(nroutes, D_od, par, delta_ir, delta_odr, cf_r, theta):
                     method='SLSQP',
                    #jac=fun_der,
                    constraints=[eq_cons, ineq_cons],
-                   options={   'ftol': 1e5,
-                       'maxiter': 2,
+                   options={ 'ftol': 1e5, 'eps': 1e5,
+                       'maxiter': 3,
                        #'verbose': 0,
                        'disp': True},
                    bounds=bounds

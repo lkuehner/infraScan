@@ -225,19 +225,43 @@ def connect_points_to_network(new_point_gdf, network_gdf):
     #network_gdf = network_gdf.rename(columns={'geometry': 'geometry_current'})
     #network_gdf = network_gdf.set_geometry("geometry_current")
     network_gdf["geometry_current"] = network_gdf["geometry"]
-    network_gdf = network_gdf[['intersection', 'ID_point', 'name', 'end', 'cor_1',
-       'geometry', 'geometry_current']]
-    new_gdf = gpd.sjoin_nearest(new_point_gdf,network_gdf,distance_col="distances")[["ID_new","XKOORD","YKOORD","geometry","distances","geometry_current", "ID_point"]] # "geometry",
+    #network_gdf = network_gdf[['intersection', 'ID_point', 'name', 'end', 'cor_1','geometry', 'geometry_current']]
+    #new_gdf = gpd.sjoin_nearest(new_point_gdf,network_gdf,distance_col="distances")[["ID_new","XKOORD","YKOORD","geometry","distances","geometry_current", "ID_point"]] # "geometry",
     ###
     #new_gdf['straight_line'] = new_gdf.apply(lambda row: LineString([row['geometry'], row['nearest_node']]), axis=1) #Create a linestring column
+
+    # Keep a target access point representative for each mapped access point.
+    target_access_points = network_gdf[network_gdf["ID_point"] ==
+                                   network_gdf["index_right"]][["ID_point", "geometry"]].rename(
+                                    columns={ "ID_point": "target_access_id",
+                                                 "geometry": "target_access_geometry",
+        }
+    )
+    network_gdf = network_gdf.rename(columns={"index_right": "mapped_access_id"})
+    network_gdf = network_gdf.merge(target_access_points, left_on="mapped_access_id", right_on="target_access_id", how="left",
+    )
+    network_gdf = network_gdf[['intersection', 'ID_point', 'mapped_access_id', 'target_access_id',
+       'name', 'end', 'cor_1', 'geometry', 'geometry_current', 'target_access_geometry']]
+    new_gdf = gpd.sjoin_nearest(new_point_gdf,network_gdf,distance_col="distances")[["ID_new","XKOORD","YKOORD","geometry","distances","geometry_current", "ID_point", "mapped_access_id", "target_access_id", "target_access_geometry"]] # "geometry",
     return new_gdf
 
 
 def create_nearest_gdf(filtered_rand_gdf):
-    nearest_gdf = filtered_rand_gdf[["ID_new", "ID_point", "geometry_current"]].set_geometry("geometry_current")
-    #nearest_gdf = nearest_gdf.rename({"ID":"PointID", "index_right":"NearestAccID"})
-    #nearest_df = filtered_rand_gdf.assign(PointID=filtered_rand_gdf["ID"],NearestAccID=filtered_rand_gdf["index_right"],x=filtered_rand_gdf["x"],y=filtered_rand_gdf["y"])
-    #nearest_gdf = gpd.GeoDataFrame(nearest_df,geometry=gpd.points_from_xy(nearest_df.x,nearest_df.y),crs="epsg:2056")
+    # nearest_gdf = filtered_rand_gdf[["ID_new", "ID_point", "geometry_current"]].set_geometry("geometry_current")
+    # nearest_gdf = nearest_gdf.rename({"ID":"PointID", "index_right":"NearestAccID"})
+    # nearest_df = filtered_rand_gdf.assign(PointID=filtered_rand_gdf["ID"],NearestAccID=filtered_rand_gdf["index_right"],x=filtered_rand_gdf["x"],y=filtered_rand_gdf["y"])
+    # nearest_gdf = gpd.GeoDataFrame(nearest_df,geometry=gpd.points_from_xy(nearest_df.x,nearest_df.y),crs="epsg:2056")
+
+    # Route to the target access point represented by the mapped access id.
+    nearest_gdf = filtered_rand_gdf[
+        ["ID_new", "ID_point", "mapped_access_id", "target_access_id", "target_access_geometry"]
+    ].copy()
+    nearest_gdf["nearest_network_point_id"] = nearest_gdf["ID_point"]
+    nearest_gdf["ID_point"] = nearest_gdf["target_access_id"]
+    nearest_gdf["geometry_current"] = nearest_gdf["target_access_geometry"]
+    nearest_gdf = nearest_gdf[
+        ["ID_new", "ID_point", "nearest_network_point_id", "mapped_access_id", "geometry_current"]
+    ].set_geometry("geometry_current")
     return nearest_gdf
 
 
