@@ -19,7 +19,7 @@ tts_valuation_period = (2050,2100)
 construction_start_year = 2050
 
 tau = 0.13
-discount_rate = 0.03  # 3% discount rate
+discount_rate = 0.02  # 2% discount rate
 
 average_train_change_time = 7.1 # Axhausen, 2014
 change_time_comfort_factor = 1.7

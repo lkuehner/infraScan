@@ -149,6 +149,7 @@ def maintenance_costs(duration, highway, tunnel, bridge, structural):
 
     costs_links = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
     costs_links["structural_maint"] = costs_links["building_costs"] * structural * duration
+    costs_links["structural_maint_annual"] = costs_links["building_costs"] * structural
 
     # generated_links_gdf["structural_maint"] = duration * generated_links_gdf["bridge_len"] * structural
 
@@ -157,9 +158,15 @@ def maintenance_costs(duration, highway, tunnel, bridge, structural):
                                                     how="left")
     generated_links_gdf["maintenance"] = generated_links_gdf["operational_maint"] + generated_links_gdf[
         "structural_maint"]
+    
+    # Merge column "structural_maint_annual" to generated links using ID_new
+    generated_links_gdf = generated_links_gdf.merge(costs_links[["ID_new", "structural_maint_annual"]], on="ID_new",
+                                                    how="left")
+    generated_links_gdf["maintenance_annual"] = generated_links_gdf["operational_maint_annual"] + generated_links_gdf[
+        "structural_maint_annual"]
 
     # Only keep df with ID_new and maintenance costs
-    generated_links_gdf = generated_links_gdf[["ID_new", "geometry", "maintenance"]]
+    generated_links_gdf = generated_links_gdf[["ID_new", "geometry", "maintenance", "maintenance_annual"]]
 
     # Store the modified GeoDataFrame
     generated_links_gdf.to_file(r"data/infraScanRoad/costs/maintenance.gpkg", driver='GPKG')
@@ -2703,7 +2710,16 @@ def travel_flow_optimization(OD_matrix, points, edges, voronoi, dev, scen):
         return travel_time  # .item(0)
 
     
-def travel_flow_optimization_by_od(OD_matrix, points, edges, voronoi, dev, scen):
+def travel_flow_optimization_by_od(
+    OD_matrix,
+    points,
+    edges,
+    voronoi,
+    dev,
+    scen,
+    export_link_flows=False,
+    flow_output_path=None,
+):
     nodes_lv95, nodes_wgs84, links, link_length_i, nlinks, par = convert_data_to_input(points=points, edges=edges)
     delta_ir, delta_odr, routelinks, D_od, nOD, nroutes, od_pairs = get_nw_data(
         OD_matrix=OD_matrix,
@@ -2746,6 +2762,15 @@ def travel_flow_optimization_by_od(OD_matrix, points, edges, voronoi, dev, scen)
         link_flows = Xi_array.sum(axis=1).reshape(-1, 1)
     else:
         link_flows = Xi_array.reshape(-1, 1)
+
+    if export_link_flows and flow_output_path is not None:
+        flow_df = edges[["ID_edge"]].copy()
+        flow_df["length_m"] = edges.geometry.length
+        flow_df["flow"] = link_flows.flatten()
+        flow_df["development"] = dev
+        flow_df["scenario"] = scen
+        os.makedirs(os.path.dirname(flow_output_path), exist_ok=True)
+        flow_df.to_csv(flow_output_path, index=False)
 
     # Get congested travel time on each link
     link_tt = CostFun(link_flows, par).flatten()
@@ -2975,6 +3000,9 @@ def process_development_travel_time_by_od(dev, scenarios):
         OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
 
         # Run the flow optimization and keep the OD-level output table.
+        flow_output_path = (
+            f"data/infraScanRoad/traffic_flow/od/link_flows/dev{dev}_{scen}.csv"
+        )
         od_tt_df = travel_flow_optimization_by_od(
             OD_matrix=OD_matrix,
             points=points.copy(),
@@ -2982,6 +3010,8 @@ def process_development_travel_time_by_od(dev, scenarios):
             voronoi=voronoi_df,
             dev=dev,
             scen=scen,
+            export_link_flows=True,
+            flow_output_path=flow_output_path,
         )
         scenario_results.append(od_tt_df)
 
@@ -3168,6 +3198,9 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
 
         OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
 
+        flow_output_path = (
+            f"data/infraScanRoad/traffic_flow/od/link_flows/status_quo_{scen}.csv"
+        )
         od_tt_df = travel_flow_optimization_by_od(
             OD_matrix=OD_matrix,
             points=points.copy(),
@@ -3175,6 +3208,8 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
             voronoi=voronoi_df,
             dev="status_quo",
             scen=scen,
+            export_link_flows=True,
+            flow_output_path=flow_output_path,
         )
 
         results_status_quo[scen] = od_tt_df
@@ -3717,8 +3752,9 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
 
             # 5) Store the full decomposition into access, network, and egress savings.
             tt_savings_peak = sq_total_tt - dev_total_tt
-            mon_factor = (VTTS / 60.0) * 2.5 * 250 * duration
-            monetized_savings = tt_savings_peak * mon_factor
+            mon_factor_yearly = (VTTS / 60.0) * 2.5 * 250
+            monetized_savings_yearly = tt_savings_peak * mon_factor_yearly
+            monetized_savings = monetized_savings_yearly * duration
 
             detailed_rows.append(
                 {
@@ -3736,6 +3772,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
                     "network_savings": sq_total_network - dev_total_network,
                     "destination_access_savings": sq_total_dest - dev_total_dest,
                     "tt_savings_peak": tt_savings_peak,
+                    "monetized_savings_yearly": monetized_savings_yearly,
                     "monetized_savings": monetized_savings,
                 }
             )
@@ -3743,6 +3780,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
                 {
                     "development": int(dev),
                     "scenario": str(scen),
+                    "monetized_savings_yearly": monetized_savings_yearly,
                     "monetized_savings": monetized_savings,
                 }
             )
@@ -3761,22 +3799,33 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         scen_df.to_csv(os.path.join(scen_dir, "od_tt_savings_detailed.csv"), index=False)
 
     # 6) Pivot back to the wide output format expected by cost aggregation.
-    tt_wide = (
+    tt_wide_total = (
         pd.DataFrame(summary_rows)
         .pivot(index="development", columns="scenario", values="monetized_savings")
         .reset_index()
     )
-    tt_wide.columns.name = None
-    tt_wide = tt_wide.rename(
-        columns={col: f"tt_{col}" for col in tt_wide.columns if col != "development"}
+    tt_wide_total.columns.name = None
+    tt_wide_total = tt_wide_total.rename(
+        columns={col: f"tt_{col}" for col in tt_wide_total.columns if col != "development"}
     )
     wide_out = "data/infraScanRoad/costs/traveltime_savings_od.csv"
-    tt_wide.to_csv(wide_out, index=False)
+    tt_wide_total.to_csv(wide_out, index=False)
+
+    tt_wide_yearly = (
+    pd.DataFrame(summary_rows)
+    .pivot(index="development", columns="scenario", values="monetized_savings_yearly")
+    .reset_index()
+    )
+    tt_wide_yearly.columns.name = None
+    tt_wide_yearly = tt_wide_yearly.rename(
+        columns={col: f"tt_{col}" for col in tt_wide_yearly.columns if col != "development"}
+    )
+    tt_wide_yearly.to_csv("data/infraScanRoad/costs/traveltime_savings_od_yearly.csv", index=False)
 
     print(f"Saved detailed OD TT savings to: {detailed_out}")
     print(f"Saved aggregated TT savings to: {wide_out}")
 
-    return detailed_df, tt_wide
+    return detailed_df, tt_wide_total
 
 
 def discounting(df, discount_rate, base_year=2018):
