@@ -57,6 +57,7 @@ def _phase_label_for_checkpoint(name):
         "import_raw_data_corridor": "PHASE_2",
         "protected_area_corridor": "PHASE_2",
         "map_access_points": "PHASE_2",
+        "preprocess_network": "PHASE_3",
         "generate_infrastructure": "PHASE_3",
         "import_scenario_variables": "PHASE_4",
         "scenario_generation": "PHASE_4",
@@ -245,31 +246,33 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
     ##################################################################################
     # 2) Process network
 
-    # Simplify the physical topology of the network
-    # One distinct edge between two nodes (currently multiple edges between nodes)
-    # Edges are stored in "data\Network\processed\edges.gpkg"
-    # Points in simplified network can be intersections ("intersection"==1) or access points ("intersection"==0)
-    # Points are stored in "data\Network\processed\points.gpkg"
-    reformat_network()
+    if not checkpoint_exists("preprocess_network"):
+        # Simplify the physical topology of the network.
+        # One distinct edge between two nodes (currently multiple edges between nodes)
+        # Edges are stored in "data\Network\processed\edges.gpkg"
+        # Points in simplified network can be intersections ("intersection"==1) or access points ("intersection"==0)
+        # Points are stored in "data\Network\processed\points.gpkg"
+        reformat_network()
 
+        # Filter the infrastructure elements that lie within a given polygon
+        # Points within the corridor are stored in "data\Network\processed\points_corridor.gpkg"
+        # Edges within the corridor are stored in "data\Network\processed\edges_corridor.gpkg"
+        # Edges crossing the corridor border are stored in "data\Network\processed\edges_on_corridor.gpkg"
+        network_in_corridor(polygon=outerboundary)
 
-    # Filter the infrastructure elements that lie within a given polygon
-    # Points within the corridor are stored in "data\Network\processed\points_corridor.gpkg"
-    # Edges within the corridor are stored in "data\Network\processed\edges_corridor.gpkg"
-    # Edges crossing the corridor border are stored in "data\Network\processed\edges_on_corridor.gpkg"
-    network_in_corridor(polygon=outerboundary)
+        # Add attributes to nodes within the corridor (mainly access point T/F)
+        # Points with attributes saved as "data\Network\processed\points_attribute.gpkg"
+        map_values_to_nodes()
 
+        # Add attributes to the edges
+        get_edge_attributes()
 
+        # Add specific elements to the network
+        required_manipulations_on_network()
 
-    # Add attributes to nodes within the corridor (mainly access point T/F)
-    # Points with attributes saved as "data\Network\processed\points_attribute.gpkg"
-    map_values_to_nodes()
-
-    # Add attributes to the edges
-    get_edge_attributes()
-
-    # Add specific elements to the network
-    required_manipulations_on_network()
+        save_checkpoint("preprocess_network")
+    else:
+        print("  [CHECKPOINT] Skipping: preprocess_network")
 
     ##################################################################################
     # 3) Generate developments (new access points) and connection to existing infrastructure
@@ -568,6 +571,7 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
 
     #################################################################################
     # 6) Compute access time costs
+    # TO DO: to check if i calc this twice
 
     # Compute the accessibility for status quo for scenarios
     if not checkpoint_exists("accessibility"):
@@ -606,9 +610,7 @@ def phase_6_travel_time_savings(runtimes):
     status_quo_checkpoint = pipeline_config["status_quo_checkpoint"]
     developments_checkpoint = pipeline_config["developments_checkpoint"]
     monetization_checkpoint = pipeline_config["monetization_checkpoint"]
-    od_matrices_checkpoint = (
-        f"od_matrices_{settings.scenario_type.lower()}"
-    )
+    od_matrices_checkpoint = (f"od_matrices_{settings.scenario_type.lower()}")
 
     debug_enabled = bool(getattr(settings, "travel_time_debug_enabled", False))
     status_quo_scenarios = None

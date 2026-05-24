@@ -1,0 +1,422 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import rasterio
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA = ROOT / "data"
+ROAD = DATA / "infraScanRoad"
+OUT = (
+    ROOT
+    / "infraScan"
+    / "plots"
+    / "road_accessibility_maps"
+    / "tt_accessibility_top10_lineplots"
+)
+
+BETA_PER_HOUR = 3.0
+TOP_N = 10
+
+
+def scenario_sort_key(name: str):
+    try:
+        return int(str(name).split("_")[-1])
+    except Exception:
+        return str(name)
+
+
+def read_tt_tables() -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    sq_tt = pd.read_csv(ROAD / "traffic_flow/od/status_quo_od_tt.csv")
+    dev_tt = pd.read_csv(ROAD / "traffic_flow/od/developments_od_tt.csv")
+
+    for df in (sq_tt, dev_tt):
+        for col in ["origin", "destination", "demand", "travel_time"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "development" in df.columns:
+            df["development"] = pd.to_numeric(df["development"], errors="coerce")
+        df["scenario"] = df["scenario"].astype(str)
+
+    sq_tt = sq_tt.dropna(subset=["origin", "destination", "travel_time"]).copy()
+    dev_tt = dev_tt.dropna(
+        subset=["development", "origin", "destination", "travel_time"]
+    ).copy()
+    sq_tt[["origin", "destination"]] = sq_tt[["origin", "destination"]].astype(int)
+    dev_tt[["development", "origin", "destination"]] = dev_tt[
+        ["development", "origin", "destination"]
+    ].astype(int)
+
+    scenarios = sorted(
+        set(sq_tt["scenario"]).intersection(dev_tt["scenario"]),
+        key=scenario_sort_key,
+    )
+    return sq_tt, dev_tt, scenarios
+
+
+def selected_top_developments(n: int = TOP_N) -> list[int]:
+    total = pd.read_csv(ROAD / "costs/total_costs_od.csv")
+    if "total_mean" in total.columns:
+        ranked = total.sort_values("total_mean", ascending=False)
+    else:
+        total_cols = [c for c in total.columns if c.startswith("total_scenario_")]
+        ranked = total.assign(_mean=total[total_cols].mean(axis=1)).sort_values(
+            "_mean", ascending=False
+        )
+    return ranked.head(n)["ID_new"].astype(int).tolist()
+
+
+def place_subset_on_road_grid(
+    subset_arr: np.ndarray,
+    subset_transform,
+    road_shape: tuple[int, int],
+    road_transform,
+) -> np.ndarray:
+    if road_transform.a != subset_transform.a or road_transform.e != subset_transform.e:
+        raise ValueError("Raster resolutions differ; expected identical cell size.")
+
+    cell = road_transform.a
+    row_off = int(round((road_transform.f - subset_transform.f) / cell))
+    col_off = int(round((subset_transform.c - road_transform.c) / cell))
+
+    out = np.zeros(road_shape, dtype=float)
+    subset_arr = np.nan_to_num(
+        subset_arr.astype(float), nan=0.0, posinf=0.0, neginf=0.0
+    )
+    out[
+        row_off : row_off + subset_arr.shape[0],
+        col_off : col_off + subset_arr.shape[1],
+    ] = subset_arr
+    return out
+
+
+def load_base_rasters():
+    with rasterio.open(ROAD / "Network/travel_time/source_id_raster.tif") as src:
+        sq_source = src.read(1)
+        road_shape = (src.height, src.width)
+        road_transform = src.transform
+
+    with rasterio.open(ROAD / "Network/travel_time/travel_time_raster.tif") as src:
+        sq_access_hr = src.read(1).astype(float) / 3600.0
+
+    with rasterio.open(DATA / "independent_variable/processed/pop20_corrected.tif") as src:
+        pop_small = src.read(1).astype(float)
+        pop_transform = src.transform
+
+    with rasterio.open(DATA / "independent_variable/processed/empl20_corrected.tif") as src:
+        empl_small = src.read(1).astype(float)
+        empl_transform = src.transform
+
+    pop = place_subset_on_road_grid(
+        pop_small, pop_transform, road_shape, road_transform
+    )
+    empl = place_subset_on_road_grid(
+        empl_small, empl_transform, road_shape, road_transform
+    )
+    return sq_source, sq_access_hr, pop, empl
+
+
+def catchment_stats(
+    source_arr: np.ndarray,
+    access_hr_arr: np.ndarray,
+    pop_arr: np.ndarray | None = None,
+    empl_arr: np.ndarray | None = None,
+) -> pd.DataFrame:
+    valid = (source_arr > 0) & np.isfinite(source_arr) & np.isfinite(access_hr_arr)
+    data = {
+        "catchment": source_arr[valid].astype(int),
+        "access_hr": access_hr_arr[valid],
+    }
+
+    if pop_arr is not None and empl_arr is not None:
+        valid &= np.isfinite(pop_arr) & np.isfinite(empl_arr)
+        data = {
+            "catchment": source_arr[valid].astype(int),
+            "access_hr": access_hr_arr[valid],
+            "pop": pop_arr[valid],
+            "empl": empl_arr[valid],
+        }
+
+    frame = pd.DataFrame(data)
+    agg = {"access_hr": ("access_hr", "mean")}
+    if "pop" in frame.columns:
+        agg.update({"pop": ("pop", "sum"), "empl": ("empl", "sum")})
+
+    grouped = frame.groupby("catchment", as_index=False).agg(**agg)
+    if "pop" in grouped.columns:
+        grouped["Pj"] = grouped["pop"] + 0.5 * grouped["empl"]
+    return grouped
+
+
+def add_generalized_tt(tt_df: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
+    origin_map = stats[["catchment", "access_hr"]].rename(
+        columns={"catchment": "origin", "access_hr": "origin_access_hr"}
+    )
+    dest_cols = ["catchment", "access_hr"] + (["Pj"] if "Pj" in stats.columns else [])
+    dest_map = stats[dest_cols].rename(
+        columns={"catchment": "destination", "access_hr": "dest_access_hr"}
+    )
+
+    work = tt_df.merge(origin_map, on="origin", how="left").merge(
+        dest_map, on="destination", how="left"
+    )
+    work["origin_access_hr"] = work["origin_access_hr"].fillna(0.0)
+    work["dest_access_hr"] = work["dest_access_hr"].fillna(0.0)
+    work["gen_tt_hr"] = (
+        work["origin_access_hr"] + work["travel_time"] + work["dest_access_hr"]
+    )
+    if "Pj" in work.columns:
+        work["Pj"] = work["Pj"].fillna(0.0)
+    return work
+
+
+def generalized_tt_by_origin(tt_df: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
+    work = add_generalized_tt(tt_df, stats)
+    work["weighted_gen_tt_hr"] = work["gen_tt_hr"] * work["demand"].fillna(0.0)
+
+    grouped = work.groupby("origin", as_index=False).agg(
+        demand_sum=("demand", "sum"),
+        weighted_gen_tt_hr=("weighted_gen_tt_hr", "sum"),
+        mean_gen_tt_hr_unweighted=("gen_tt_hr", "mean"),
+        median_gen_tt_hr=("gen_tt_hr", "median"),
+        n_destinations=("destination", "nunique"),
+    )
+    grouped["mean_gen_tt_hr"] = np.where(
+        grouped["demand_sum"] > 0,
+        grouped["weighted_gen_tt_hr"] / grouped["demand_sum"],
+        grouped["mean_gen_tt_hr_unweighted"],
+    )
+    grouped["mean_gen_tt_min"] = grouped["mean_gen_tt_hr"] * 60.0
+    return grouped[["origin", "mean_gen_tt_min"]]
+
+
+def accessibility_by_origin(tt_df: pd.DataFrame, stats: pd.DataFrame) -> pd.DataFrame:
+    work = add_generalized_tt(tt_df, stats)
+    work["access_contrib"] = np.exp(-BETA_PER_HOUR * work["gen_tt_hr"]) * work["Pj"]
+    return (
+        work.groupby("origin", as_index=False)["access_contrib"]
+        .sum()
+        .rename(columns={"access_contrib": "accessibility"})
+    )
+
+
+def scenario_mean(
+    tt_source: pd.DataFrame,
+    stats: pd.DataFrame,
+    scenarios: list[str],
+    metric: str,
+    development: int | None = None,
+) -> pd.DataFrame:
+    frames = []
+    for scenario in scenarios:
+        if development is None:
+            tt = tt_source[tt_source["scenario"] == scenario]
+        else:
+            tt = tt_source[
+                (tt_source["scenario"] == scenario)
+                & (tt_source["development"] == development)
+            ]
+        if tt.empty:
+            continue
+
+        if metric == "tt":
+            values = generalized_tt_by_origin(tt, stats).rename(
+                columns={"mean_gen_tt_min": "value"}
+            )
+        elif metric == "accessibility":
+            values = accessibility_by_origin(tt, stats).rename(
+                columns={"accessibility": "value"}
+            )
+        else:
+            raise ValueError(f"Unknown metric: {metric}")
+
+        values["scenario"] = scenario
+        frames.append(values)
+
+    all_values = pd.concat(frames, ignore_index=True)
+    return all_values.groupby("origin", as_index=False)["value"].mean()
+
+
+def load_development_stats(
+    development: int, pop: np.ndarray, empl: np.ndarray, include_potential: bool
+) -> pd.DataFrame:
+    dev_dir = ROAD / "Network/travel_time/developments"
+    with rasterio.open(dev_dir / f"dev{development}_source_id_raster.tif") as src:
+        dev_source = src.read(1)
+    with rasterio.open(dev_dir / f"dev{development}_travel_time_raster.tif") as src:
+        dev_access_hr = src.read(1).astype(float) / 3600.0
+
+    if include_potential:
+        return catchment_stats(dev_source, dev_access_hr, pop, empl)
+    return catchment_stats(dev_source, dev_access_hr)
+
+
+def build_comparison_table(
+    metric: str,
+    sq_tt: pd.DataFrame,
+    dev_tt: pd.DataFrame,
+    scenarios: list[str],
+    developments: list[int],
+    sq_stats: pd.DataFrame,
+    pop: np.ndarray,
+    empl: np.ndarray,
+) -> pd.DataFrame:
+    sq_mean = scenario_mean(
+        sq_tt, sq_stats, scenarios, metric=metric, development=None
+    ).rename(columns={"value": "status_quo"})
+    comparison = sq_mean.copy()
+
+    for development in developments:
+        dev_stats = load_development_stats(
+            development,
+            pop,
+            empl,
+            include_potential=(metric == "accessibility"),
+        )
+        dev_mean = scenario_mean(
+            dev_tt,
+            dev_stats,
+            scenarios,
+            metric=metric,
+            development=development,
+        ).rename(columns={"value": f"dev_{development}"})
+        comparison = comparison.merge(dev_mean, on="origin", how="left")
+
+    comparison = comparison[
+        (comparison["status_quo"] > 0) & (comparison["origin"] != 9999)
+    ].copy()
+    return comparison
+
+
+def plot_lines(
+    comparison: pd.DataFrame,
+    metric: str,
+    scenarios: list[str],
+    output_prefix: str,
+) -> None:
+    if metric == "tt":
+        comparison = comparison.sort_values("status_quo", ascending=True).reset_index(
+            drop=True
+        )
+        y_label = "Mean generalized travel time [min]"
+        delta_label = "Delta generalized TT vs status quo [min]"
+        title_base = "Generalized TT"
+        csv_name = "generalized_tt_top10_by_common_statusquo_origins.csv"
+    else:
+        comparison = comparison.sort_values("status_quo", ascending=False).reset_index(
+            drop=True
+        )
+        y_label = "Accessibility function value"
+        delta_label = "Delta accessibility vs status quo"
+        title_base = "Accessibility function"
+        csv_name = "accessibility_function_top10_by_common_statusquo_origins_recomputed.csv"
+
+    comparison.to_csv(OUT / csv_name, index=False)
+    dev_cols = [c for c in comparison.columns if c.startswith("dev_")]
+    x = np.arange(len(comparison))
+    colors = plt.cm.tab20(np.linspace(0, 1, len(dev_cols)))
+
+    fig, ax = plt.subplots(figsize=(13, 6), dpi=240)
+    ax.plot(x, comparison["status_quo"], label="Status quo", color="black", linewidth=2.2)
+    for color, col in zip(colors, dev_cols):
+        ax.plot(
+            x,
+            comparison[col],
+            label=col.replace("dev_", "Dev "),
+            linewidth=1.2,
+            color=color,
+            alpha=0.92,
+        )
+    ax.set_xlabel(f"Common status quo origin catchments ranked by status quo {title_base.lower()}")
+    ax.set_ylabel(y_label)
+    ax.set_title(
+        f"{title_base} by common origin, mean over {len(scenarios)} scenarios, "
+        f"top {len(dev_cols)} developments"
+    )
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    ax.legend(frameon=False, ncol=2, fontsize=9, loc="best")
+    fig.tight_layout()
+    fig.savefig(OUT / f"{output_prefix}_by_common_origin_statusquo_top10_devs.png", bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(13, 6), dpi=240)
+    ax.axhline(0, color="black", linewidth=1.0)
+    for color, col in zip(colors, dev_cols):
+        ax.plot(
+            x,
+            comparison[col] - comparison["status_quo"],
+            label=col.replace("dev_", "Dev "),
+            linewidth=1.3,
+            color=color,
+            alpha=0.94,
+        )
+    ax.set_xlabel(f"Common status quo origin catchments ranked by status quo {title_base.lower()}")
+    ax.set_ylabel(delta_label)
+    ax.set_title(
+        f"Delta {title_base} by common origin, mean over {len(scenarios)} scenarios, "
+        f"top {len(dev_cols)} developments"
+    )
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    ax.legend(frameon=False, ncol=2, fontsize=9, loc="best")
+    fig.tight_layout()
+    fig.savefig(OUT / f"delta_{output_prefix}_by_common_origin_top10_devs.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def main() -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    sq_tt, dev_tt, scenarios = read_tt_tables()
+    developments = selected_top_developments(TOP_N)
+    sq_source, sq_access_hr, pop, empl = load_base_rasters()
+
+    sq_stats_tt = catchment_stats(sq_source, sq_access_hr)
+    sq_stats_access = catchment_stats(sq_source, sq_access_hr, pop, empl)
+
+    print(f"Selected developments: {developments}")
+    print(f"Scenarios ({len(scenarios)}): {scenarios}")
+    print(f"Aligned population total: {float(np.nansum(pop)):.2f}")
+    print(f"Aligned employment total: {float(np.nansum(empl)):.2f}")
+
+    tt_comparison = build_comparison_table(
+        metric="tt",
+        sq_tt=sq_tt,
+        dev_tt=dev_tt,
+        scenarios=scenarios,
+        developments=developments,
+        sq_stats=sq_stats_tt,
+        pop=pop,
+        empl=empl,
+    )
+    plot_lines(
+        tt_comparison,
+        metric="tt",
+        scenarios=scenarios,
+        output_prefix="generalized_tt",
+    )
+
+    accessibility_comparison = build_comparison_table(
+        metric="accessibility",
+        sq_tt=sq_tt,
+        dev_tt=dev_tt,
+        scenarios=scenarios,
+        developments=developments,
+        sq_stats=sq_stats_access,
+        pop=pop,
+        empl=empl,
+    )
+    plot_lines(
+        accessibility_comparison,
+        metric="accessibility",
+        scenarios=scenarios,
+        output_prefix="accessibility_function",
+    )
+
+    print(f"Saved plots and CSVs to: {OUT}")
+
+
+if __name__ == "__main__":
+    main()

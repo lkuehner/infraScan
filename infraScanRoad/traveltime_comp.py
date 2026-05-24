@@ -463,7 +463,7 @@ def CostFun(Xi,par):
 def IntCostFun(Xi,par):
     #Computes the integral of the cost function for the flow Xi, with the
     #parameters 'par'. Xi has the adequate size
-    Xi=2
+    # Xi = 2
     #BPR
     # s1 = (Xi./par.Xmax_i).^par.gamma_i            (Flow/MaxCapacity)^gamma
     # s2 = Xi*par.alpha_i.*par.fftt_i.*s1           Flow*alpha*fftt*s1
@@ -870,4 +870,3 @@ if not done:
 else: #thus, it is done
     Results = scipy.io.loadmat('data/traffic_flow/mat/Critical_v01',Results)
  #done
-

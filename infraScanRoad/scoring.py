@@ -2988,6 +2988,14 @@ def process_development_travel_time_by_od(dev, scenarios):
     return scenario_results
 
 
+def process_development_scenario_travel_time_by_od(dev, scen):
+    """Compute OD-level travel times for one development-scenario pair."""
+    scenario_results = process_development_travel_time_by_od(dev, [scen])
+    if not scenario_results:
+        return None
+    return scenario_results[0]
+
+
 
 def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None, n_jobs=-1):
     # Run travel time optimization for infrastructure developments and all scenarios
@@ -3234,18 +3242,34 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
         if max_developments > 0:
             developments = developments[:max_developments]
 
+    # Check which developments have valid cost-link-data
+    valid_developments = set(
+        gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")["ID_new"].astype(int)
+    )
+    original_development_count = len(developments)
+    developments = [dev for dev in developments if dev in valid_developments]
+    if len(developments) != original_development_count:
+        print(
+            f"  -> Skipping {original_development_count - len(developments)} developments "
+            "without construction costs"
+        )
 
-    # Parallelize over developments to avoid reloading the same development
-    # inputs for every scenario
-    development_results = Parallel(n_jobs=n_jobs)(
-        delayed(process_development_travel_time_by_od)(dev, scenarios)
-        for dev in tqdm(developments, desc="OD TT by development")
+    tasks = [
+        (dev, scen)
+        for dev in developments
+        for scen in scenarios
+        if os.path.exists(os.path.join(directory_path, f"od_matrix_dev{dev}_{scen}.csv"))
+    ]
+
+    # Parallelize over development-scenario pairs. 
+    scenario_results = Parallel(n_jobs=n_jobs, batch_size=1)(
+        delayed(process_development_scenario_travel_time_by_od)(dev, scen)
+        for dev, scen in tqdm(tasks, desc="OD TT by development-scenario")
     )
 
     scenario_frames = [
         frame
-        for per_development in development_results
-        for frame in per_development
+        for frame in scenario_results
         if frame is not None and not frame.empty
     ]
 

@@ -8,6 +8,8 @@ import pandas as pd
 import rasterio
 from joblib import Parallel, delayed
 from scipy.stats import norm, qmc
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 from infraScan.infraScanRoad import settings as road_settings
 from infraScan.infraScanRoad.scoring import GetCommuneShapes
@@ -1356,6 +1358,67 @@ def build_shared_scenario_summary(
 def select_representative_shared_scenarios(
     summary_df: pd.DataFrame,
     n_representatives: int,
+    random_state: int = 42,
+    feature_cols: List[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Select one representative scenario per K-Means cluster in the standardized
+    multidimensional scenario-feature space.
+    """
+    n_representatives = max(0, int(n_representatives))
+
+    if n_representatives == 0 or summary_df.empty:
+        return summary_df.iloc[0:0].copy()
+
+    if n_representatives >= len(summary_df):
+        selected = summary_df.copy()
+        selected["selection_order"] = range(1, len(selected) + 1)
+        return selected
+
+    if feature_cols is None:
+        feature_cols = [
+            "population_growth_factor",
+            "road_modal_split",
+            "rail_modal_split",
+            "other_modal_split",
+            "distance_per_person",
+            "road_demand_proxy",
+            "rail_demand_proxy",
+        ]
+
+    missing_cols = [col for col in feature_cols if col not in summary_df.columns]
+    if missing_cols:
+        raise KeyError(f"Missing scenario summary columns for K-Means selection: {missing_cols}")
+
+    features = summary_df[feature_cols].astype(float).replace([np.inf, -np.inf], np.nan)
+    features = features.fillna(features.median(numeric_only=True))
+    scaled_features = StandardScaler().fit_transform(features)
+
+    kmeans = KMeans(
+        n_clusters=n_representatives,
+        random_state=random_state,
+        n_init=50,
+    )
+    labels = kmeans.fit_predict(scaled_features)
+
+    selected_positions = []
+    for cluster_id in range(n_representatives):
+        cluster_positions = np.flatnonzero(labels == cluster_id)
+        center = kmeans.cluster_centers_[cluster_id]
+        distances = np.linalg.norm(scaled_features[cluster_positions] - center, axis=1)
+        selected_positions.append(cluster_positions[np.argmin(distances)])
+
+    selected = summary_df.iloc[selected_positions].copy()
+    selected["cluster"] = range(n_representatives)
+    selected = selected.sort_values("shared_future_score").reset_index(drop=True)
+    selected["selection_order"] = range(1, len(selected) + 1)
+    return selected
+
+"""
+# Select scenarios in the 25% to 75% Percentile
+def select_representative_shared_scenarios(
+    summary_df: pd.DataFrame,
+    n_representatives: int,
 ) -> pd.DataFrame:
     n_representatives = max(0, int(n_representatives))
 
@@ -1374,7 +1437,7 @@ def select_representative_shared_scenarios(
     else:
         lower_q = 0.25
         upper_q = 0.75
-
+  
         selected_positions = [
             round(
                 (lower_q + idx * (upper_q - lower_q) / (n_representatives - 1))
@@ -1406,8 +1469,8 @@ def select_representative_shared_scenarios(
         row["selection_order"] = order
         selected_rows.append(row)
 
-    return pd.concat(selected_rows, ignore_index=True)
-
+    return pd.concat(selected_rows, ignore_index=True)      
+"""
 
 def save_shared_scenario_summary(
     summary_df: pd.DataFrame,

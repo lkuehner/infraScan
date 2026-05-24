@@ -118,7 +118,7 @@ class CustomBasemap:
         if isinstance(access_points, gpd.GeoDataFrame):
             access_points.plot(ax=self.ax, color="black", markersize=50)
 
-        location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+        location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
         # Plot the location as points
         location.plot(ax=self.ax, color="black", markersize=75)
         # Add city names to the plot
@@ -231,7 +231,7 @@ def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=No
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=13)
     # Add city names to the plot
@@ -374,7 +374,7 @@ def plot_single_cost_result(df_costs, banned_area , title_bar, boundary=None, ne
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=13)
     # Add city names to the plot
@@ -501,7 +501,7 @@ def plot_cost_uncertainty(df_costs, banned_area, col, legend_title, boundary=Non
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=13)
     # Add city names to the plot
@@ -954,7 +954,7 @@ def plot_points_gen(points, edges, banned_area, points_2=None, boundary=None, ne
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=200)
     # Add city names to the plot
@@ -1048,7 +1048,7 @@ def plot_voronoi_comp(eucledian, traveltime, boundary=None, network=None, access
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=200)
     # Add city names to the plot
@@ -1126,7 +1126,7 @@ def plot_voronoi_development(statusquo, development_voronoi, development_point, 
     if isinstance(access_points, gpd.GeoDataFrame):
         access_points.plot(ax=ax, color="black", markersize=50, zorder=12)
 
-    location = gpd.read_file("data/manually_gathered_data/Cities.shp", crs="epsg:2056")
+    location = gpd.read_file("data/manually_gathered_data/cities.shp", crs="epsg:2056")
     # Plot the location as points
     location.plot(ax=ax, color="black", markersize=75, zorder=200)
     # Add city names to the plot

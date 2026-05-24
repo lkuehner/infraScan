@@ -16,9 +16,17 @@ from scipy.optimize import minimize
 from tqdm import tqdm
 import pulp
 import requests
+import shutil
 import zipfile
 
 from .data_import import *
+
+
+def _get_pulp_cbc_solver(msg=False):
+    cbc_path = shutil.which("cbc")
+    if cbc_path:
+        return pulp.COIN_CMD(path=cbc_path, msg=msg)
+    return pulp.PULP_CBC_CMD(msg=msg)
 
 
 def generated_access_points(extent,number):
@@ -263,7 +271,6 @@ def create_nearest_gdf(filtered_rand_gdf):
         ["ID_new", "ID_point", "nearest_network_point_id", "mapped_access_id", "geometry_current"]
     ].set_geometry("geometry_current")
     return nearest_gdf
-
 
 def create_lines(rand_pts_gdf, nearest_highway_pt_gdf):
     rand_pts_gdf = rand_pts_gdf.sort_values(by="ID_new")
@@ -844,9 +851,8 @@ def tunnel_bridges(df):
         prob += lp_vars[len(values) - 1] == values[len(values) - 1]
         prob += change_vars[len(values) - 1] == 0  # No change for the last element
 
-        # Solve the problem without printing messages
-        #prob.solve(pulp.PULP_CBC_CMD(msg=False))
-        prob.solve(pulp.PULP_CBC_CMD(msg=True))
+        # Use the external CBC binary when PuLP's bundled CBC is unavailable.
+        prob.solve(_get_pulp_cbc_solver(msg=True))
 
         # Check if the problem is infeasible
         if prob.status != pulp.LpStatusOptimal:
