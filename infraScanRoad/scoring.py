@@ -27,7 +27,8 @@ import networkx as nx
 from itertools import islice
 from joblib import Parallel, delayed
 import warnings
-warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
+
+#warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
 
 from . import settings
 
@@ -3059,7 +3060,7 @@ def SUE_C_Logit(nroutes, D_od, par, delta_ir, delta_odr, cf_r, theta):
                    #jac=fun_der,
                    constraints=[eq_cons, ineq_cons],
                    options={ #'ftol': 1e5, 'eps': 1e5,
-                       'maxiter': 3,
+                       'maxiter': 2,
                        'verbose': 0,
                        'disp': True},
                    bounds=bounds
@@ -3563,7 +3564,7 @@ def process_development_scenario_travel_time_by_od(dev, scen):
 
 
 
-def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None, n_jobs=-1):
+def tt_optimization_all_developments(scenarios=None, max_developments=None, selected_developments=None, n_jobs=24):
     # Run travel time optimization for infrastructure developments and all scenarios
     # Scenario = OD matrix
     # Development = new network
@@ -3767,7 +3768,7 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
     return results_status_quo
 
 
-def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None, selected_developments=None, n_jobs=16):
+def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None, selected_developments=None, n_jobs=24):
     """
     Compute OD-level travel times for all infrastructure developments.
 
@@ -3961,8 +3962,10 @@ def _monetize_tts_network_static(VTTS, duration):
 def _monetize_tts_network_generated(VTTS, duration):
     """
     GENERATED network TTS:
-    - origin-side tessellation transfer uses population
-    - destination-side tessellation transfer also uses population
+    - OD demand itself is taken from the generated OD matrices
+    - origin access is weighted by generated scenario population
+    - destination egress is weighted by current employment, because no generated
+      employment scenarios are available
     """
     def load_mass_rasters_for_scenario(scen):
         pop_candidates = [
@@ -3982,7 +3985,19 @@ def _monetize_tts_network_generated(VTTS, duration):
             )
         with rasterio.open(pop_raster_path) as src:
             origin_mass = src.read(1).astype(float)
-        destination_mass = origin_mass.copy()
+
+        employment_raster_path = os.path.join(
+            "data", "independent_variable", "processed", "raw", "empl20.tif"
+        )
+        with rasterio.open(employment_raster_path) as src:
+            destination_mass = src.read(1).astype(float)
+
+        if origin_mass.shape != destination_mass.shape:
+            raise ValueError(
+                "Generated population raster and current employment raster do not share the same grid: "
+                f"{pop_raster_path} has shape {origin_mass.shape}, "
+                f"{employment_raster_path} has shape {destination_mass.shape}."
+            )
         return origin_mass, destination_mass
 
     return _monetize_tts_network_core(
@@ -3995,8 +4010,7 @@ def _monetize_tts_network_generated(VTTS, duration):
 def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     """
     Shared network-TTS core:
-    - fixed commune OD basis
-    - commune -> catchment tessellation transfer
+    - use the same scenario/catchment OD matrices as the OD flow optimization
     - generalized travel time = origin access + network + destination egress
     """
     # 1) Load routed OD network times plus the raster-based access/catchment layers.
@@ -4053,23 +4067,6 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     with rasterio.open(sq_access_path) as src:
         sq_access_minutes = src.read(1).astype(float) / 60.0
 
-    commune_raster, _ = GetCommuneShapes(raster_path=sq_source_path)
-
-    od = GetHighwayPHDemandPerCommune()
-    odmat = GetODMatrix(od).astype(float)
-    od_long = odmat.stack().rename("od_demand").reset_index()
-    od_long.columns = ["origin_commune", "destination_commune", "od_demand"]
-    od_long["origin_commune"] = pd.to_numeric(od_long["origin_commune"], errors="coerce")
-    od_long["destination_commune"] = pd.to_numeric(od_long["destination_commune"], errors="coerce")
-    od_long["od_demand"] = pd.to_numeric(od_long["od_demand"], errors="coerce")
-    od_long = od_long.dropna(subset=["origin_commune", "destination_commune", "od_demand"])
-    od_long["origin_commune"] = od_long["origin_commune"].astype(int)
-    od_long["destination_commune"] = od_long["destination_commune"].astype(int)
-    od_long = od_long[
-        (od_long["origin_commune"] != od_long["destination_commune"]) &
-        (od_long["od_demand"] > 0)
-    ].copy()
-
     # 2) Keep only scenarios that exist in both SQ and development OD routing outputs.
     available_sq_scenarios = set(tt_status_quo["scenario"].unique())
     available_dev_scenarios = set(tt_developments["scenario"].unique())
@@ -4077,102 +4074,17 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     if not scenarios:
         raise ValueError("No common scenarios found between status_quo_od_tt and developments_od_tt.")
 
-    def commune_catchment_stats(catchment_raster, mass_raster, access_minutes):
-        valid = (
-            (catchment_raster > 0) &
-            (commune_raster > 0) &
-            np.isfinite(mass_raster) &
-            np.isfinite(access_minutes) &
-            (mass_raster >= 0)
-        )
-        if not np.any(valid):
-            return pd.DataFrame(columns=["commune_id", "catchment_id", "share", "mean_access_min"])
-
-        df = pd.DataFrame(
-            {
-                "commune_id": commune_raster[valid].astype(int),
-                "catchment_id": catchment_raster[valid].astype(int),
-                "mass": mass_raster[valid],
-                "access_weighted": mass_raster[valid] * access_minutes[valid],
-            }
-        )
-        grouped = (
-            df.groupby(["commune_id", "catchment_id"], as_index=False)[["mass", "access_weighted"]]
-            .sum()
-        )
-        grouped = grouped[grouped["mass"] > 0].copy()
-        if grouped.empty:
-            return pd.DataFrame(columns=["commune_id", "catchment_id", "share", "mean_access_min"])
-
-        grouped["commune_total_mass"] = grouped.groupby("commune_id")["mass"].transform("sum")
-        grouped["share"] = grouped["mass"] / grouped["commune_total_mass"]
-        grouped["mean_access_min"] = grouped["access_weighted"] / grouped["mass"]
-        return grouped[["commune_id", "catchment_id", "share", "mean_access_min"]]
-
-    def restrict_and_renormalize_stats(stats, valid_catchment_ids):
-        if stats.empty:
-            return stats
-
-        valid_ids = {int(x) for x in valid_catchment_ids}
-        filtered = stats[stats["catchment_id"].isin(valid_ids)].copy()
-        if filtered.empty:
-            return filtered
-
-        filtered["commune_total_share"] = filtered.groupby("commune_id")["share"].transform("sum")
-        filtered = filtered[filtered["commune_total_share"] > 0].copy()
-        filtered["share"] = filtered["share"] / filtered["commune_total_share"]
-        return filtered[["commune_id", "catchment_id", "share", "mean_access_min"]]
-
-    def redistribute_commune_od_with_access(od_long_df, origin_stats, dest_stats):
-        origin_map = origin_stats.rename(
-            columns={
-                "commune_id": "origin_commune",
-                "catchment_id": "origin",
-                "share": "origin_share",
-                "mean_access_min": "origin_access_min",
-            }
-        )
-        dest_map = dest_stats.rename(
-            columns={
-                "commune_id": "destination_commune",
-                "catchment_id": "destination",
-                "share": "destination_share",
-                "mean_access_min": "destination_access_min",
-            }
-        )
-
-        redistributed = od_long_df.merge(origin_map, on="origin_commune", how="inner")
-        redistributed = redistributed.merge(dest_map, on="destination_commune", how="inner")
-        redistributed["flow"] = (
-            redistributed["od_demand"] *
-            redistributed["origin_share"] *
-            redistributed["destination_share"]
-        )
-        redistributed = redistributed[
-            redistributed["origin"] != redistributed["destination"]
-        ].copy()
-        redistributed["origin"] = redistributed["origin"].astype(int)
-        redistributed["destination"] = redistributed["destination"].astype(int)
-        return redistributed
+    if settings.scenario_type == "STATIC":
+        sq_od_dir = "data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static"
+        dev_od_dir = "data/infraScanRoad/traffic_flow/od/development_voronoi/static"
+    elif settings.scenario_type == "GENERATED":
+        sq_od_dir = "data/infraScanRoad/traffic_flow/od/scenarios_voronoi/generated"
+        dev_od_dir = "data/infraScanRoad/traffic_flow/od/development_voronoi/generated"
+    else:
+        raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")
 
     detailed_rows = []
     summary_rows = []
-
-    # 3) Build status-quo commune -> catchment access statistics for every scenario.
-    sq_origin_stats_by_scenario = {}
-    sq_dest_stats_by_scenario = {}
-    for scen in scenarios:
-        origin_mass_raster, destination_mass_raster = load_mass_rasters_for_scenario(scen)
-        sq_origin_stats_by_scenario[scen] = commune_catchment_stats(
-            catchment_raster=sq_source,
-            mass_raster=origin_mass_raster,
-            access_minutes=sq_access_minutes,
-        )
-        sq_dest_stats_by_scenario[scen] = commune_catchment_stats(
-            catchment_raster=sq_source,
-            mass_raster=destination_mass_raster,
-            access_minutes=sq_access_minutes,
-        )
 
     developments = sorted(tt_developments["development"].unique().tolist())
 
@@ -4182,28 +4094,80 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         if sq_tt.empty:
             continue
 
-        valid_sq_ids = set(sq_tt["origin"]).union(set(sq_tt["destination"]))
-        sq_origin_stats = restrict_and_renormalize_stats(sq_origin_stats_by_scenario[scen], valid_sq_ids)
-        sq_dest_stats = restrict_and_renormalize_stats(sq_dest_stats_by_scenario[scen], valid_sq_ids)
-        if sq_origin_stats.empty or sq_dest_stats.empty:
-            print(f"No status-quo population/access stats found for scenario {scen} - skipping.")
-            continue
+        sq_od_path = os.path.join(sq_od_dir, f"od_matrix_{scen}.csv")
+        if not os.path.exists(sq_od_path):
+            raise FileNotFoundError(f"Missing status-quo OD matrix for scenario '{scen}': {sq_od_path}")
 
-        sq_flows = redistribute_commune_od_with_access(
-            od_long_df=od_long,
-            origin_stats=sq_origin_stats,
-            dest_stats=sq_dest_stats,
+        sq_od = pd.read_csv(sq_od_path, index_col=0)
+        sq_od.index = pd.to_numeric(sq_od.index, errors="coerce").astype(int)
+        sq_od.columns = pd.to_numeric(sq_od.columns, errors="coerce").astype(int)
+        sq_flows = sq_od.stack().rename("flow").reset_index()
+        sq_flows.columns = ["origin", "destination", "flow"]
+        sq_flows["flow"] = pd.to_numeric(sq_flows["flow"], errors="coerce")
+        sq_flows = sq_flows[
+            (sq_flows["origin"] != sq_flows["destination"]) &
+            (sq_flows["flow"] > 0)
+        ].copy()
+
+        valid = (
+            (sq_source > 0) &
+            np.isfinite(origin_mass_raster) &
+            np.isfinite(sq_access_minutes) &
+            (origin_mass_raster >= 0)
         )
+        sq_origin_access = pd.DataFrame({
+            "origin": sq_source[valid].astype(int),
+            "mass": origin_mass_raster[valid],
+            "access_weighted": origin_mass_raster[valid] * sq_access_minutes[valid],
+        }).groupby("origin", as_index=False)[["mass", "access_weighted"]].sum()
+        sq_origin_access = sq_origin_access[sq_origin_access["mass"] > 0].copy()
+        sq_origin_access["origin_access_min"] = sq_origin_access["access_weighted"] / sq_origin_access["mass"]
+
+        valid = (
+            (sq_source > 0) &
+            np.isfinite(destination_mass_raster) &
+            np.isfinite(sq_access_minutes) &
+            (destination_mass_raster >= 0)
+        )
+        sq_dest_access = pd.DataFrame({
+            "destination": sq_source[valid].astype(int),
+            "mass": destination_mass_raster[valid],
+            "access_weighted": destination_mass_raster[valid] * sq_access_minutes[valid],
+        }).groupby("destination", as_index=False)[["mass", "access_weighted"]].sum()
+        sq_dest_access = sq_dest_access[sq_dest_access["mass"] > 0].copy()
+        sq_dest_access["destination_access_min"] = sq_dest_access["access_weighted"] / sq_dest_access["mass"]
+
         sq_weighted = sq_flows.merge(
             sq_tt[["origin", "destination", "travel_time"]],
             on=["origin", "destination"],
             how="left",
         )
+        sq_weighted = sq_weighted.merge(
+            sq_origin_access[["origin", "origin_access_min"]],
+            on="origin",
+            how="left",
+        )
+        sq_weighted = sq_weighted.merge(
+            sq_dest_access[["destination", "destination_access_min"]],
+            on="destination",
+            how="left",
+        )
         missing_sq_tt = int(sq_weighted["travel_time"].isna().sum())
         if missing_sq_tt > 0:
-            raise ValueError(
+            missing_sq_flow = float(sq_weighted.loc[sq_weighted["travel_time"].isna(), "flow"].sum())
+            print(
                 f"Missing {missing_sq_tt} status-quo travel-time matches for scenario '{scen}' "
-                f"after commune-to-catchment redistribution."
+                f"after loading {sq_od_path}; dropping {missing_sq_flow:.3f} unrouted OD flow."
+            )
+            sq_weighted = sq_weighted.dropna(subset=["travel_time"]).copy()
+        missing_sq_access = int(
+            sq_weighted["origin_access_min"].isna().sum() +
+            sq_weighted["destination_access_min"].isna().sum()
+        )
+        if missing_sq_access > 0:
+            raise ValueError(
+                f"Missing {missing_sq_access} status-quo access matches for scenario '{scen}' "
+                f"after loading {sq_od_path}."
             )
         sq_weighted["origin_access_component"] = sq_weighted["flow"] * sq_weighted["origin_access_min"]
         sq_weighted["network_component"] = sq_weighted["flow"] * sq_weighted["travel_time"]
@@ -4233,6 +4197,11 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             if dev_tt.empty:
                 continue
 
+            dev_od_path = os.path.join(dev_od_dir, f"od_matrix_dev{dev}_{scen}.csv")
+            if not os.path.exists(dev_od_path):
+                print(f"Missing development OD matrix for dev {dev}, scenario {scen} - skipping.")
+                continue
+
             dev_raster_path = (
                 f"data/infraScanRoad/Network/travel_time/developments/dev{dev}_source_id_raster.tif"
             )
@@ -4251,38 +4220,77 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             with rasterio.open(dev_access_path) as src:
                 dev_access_minutes = src.read(1).astype(float) / 60.0
 
-            dev_origin_stats = commune_catchment_stats(
-                catchment_raster=dev_catchment_raster,
-                mass_raster=origin_mass_raster,
-                access_minutes=dev_access_minutes,
-            )
-            dev_dest_stats = commune_catchment_stats(
-                catchment_raster=dev_catchment_raster,
-                mass_raster=destination_mass_raster,
-                access_minutes=dev_access_minutes,
-            )
-            valid_dev_ids = set(dev_tt["origin"]).union(set(dev_tt["destination"]))
-            dev_origin_stats = restrict_and_renormalize_stats(dev_origin_stats, valid_dev_ids)
-            dev_dest_stats = restrict_and_renormalize_stats(dev_dest_stats, valid_dev_ids)
-            if dev_origin_stats.empty or dev_dest_stats.empty:
-                print(f"No development population/access stats found for dev {dev}, scenario {scen} - skipping.")
-                continue
+            dev_od = pd.read_csv(dev_od_path, index_col=0)
+            dev_od.index = pd.to_numeric(dev_od.index, errors="coerce").astype(int)
+            dev_od.columns = pd.to_numeric(dev_od.columns, errors="coerce").astype(int)
+            dev_flows = dev_od.stack().rename("flow").reset_index()
+            dev_flows.columns = ["origin", "destination", "flow"]
+            dev_flows["flow"] = pd.to_numeric(dev_flows["flow"], errors="coerce")
+            dev_flows = dev_flows[
+                (dev_flows["origin"] != dev_flows["destination"]) &
+                (dev_flows["flow"] > 0)
+            ].copy()
 
-            dev_flows = redistribute_commune_od_with_access(
-                od_long_df=od_long,
-                origin_stats=dev_origin_stats,
-                dest_stats=dev_dest_stats,
+            valid = (
+                (dev_catchment_raster > 0) &
+                np.isfinite(origin_mass_raster) &
+                np.isfinite(dev_access_minutes) &
+                (origin_mass_raster >= 0)
             )
+            dev_origin_access = pd.DataFrame({
+                "origin": dev_catchment_raster[valid].astype(int),
+                "mass": origin_mass_raster[valid],
+                "access_weighted": origin_mass_raster[valid] * dev_access_minutes[valid],
+            }).groupby("origin", as_index=False)[["mass", "access_weighted"]].sum()
+            dev_origin_access = dev_origin_access[dev_origin_access["mass"] > 0].copy()
+            dev_origin_access["origin_access_min"] = dev_origin_access["access_weighted"] / dev_origin_access["mass"]
+
+            valid = (
+                (dev_catchment_raster > 0) &
+                np.isfinite(destination_mass_raster) &
+                np.isfinite(dev_access_minutes) &
+                (destination_mass_raster >= 0)
+            )
+            dev_dest_access = pd.DataFrame({
+                "destination": dev_catchment_raster[valid].astype(int),
+                "mass": destination_mass_raster[valid],
+                "access_weighted": destination_mass_raster[valid] * dev_access_minutes[valid],
+            }).groupby("destination", as_index=False)[["mass", "access_weighted"]].sum()
+            dev_dest_access = dev_dest_access[dev_dest_access["mass"] > 0].copy()
+            dev_dest_access["destination_access_min"] = dev_dest_access["access_weighted"] / dev_dest_access["mass"]
+
             dev_weighted = dev_flows.merge(
                 dev_tt[["origin", "destination", "travel_time"]],
                 on=["origin", "destination"],
                 how="left",
             )
+            dev_weighted = dev_weighted.merge(
+                dev_origin_access[["origin", "origin_access_min"]],
+                on="origin",
+                how="left",
+            )
+            dev_weighted = dev_weighted.merge(
+                dev_dest_access[["destination", "destination_access_min"]],
+                on="destination",
+                how="left",
+            )
             missing_dev_tt = int(dev_weighted["travel_time"].isna().sum())
             if missing_dev_tt > 0:
-                raise ValueError(
+                missing_dev_flow = float(dev_weighted.loc[dev_weighted["travel_time"].isna(), "flow"].sum())
+                print(
                     f"Missing {missing_dev_tt} development travel-time matches for "
-                    f"dev {dev}, scenario '{scen}' after commune-to-catchment redistribution."
+                    f"dev {dev}, scenario '{scen}' after loading {dev_od_path}; "
+                    f"dropping {missing_dev_flow:.3f} unrouted OD flow."
+                )
+                dev_weighted = dev_weighted.dropna(subset=["travel_time"]).copy()
+            missing_dev_access = int(
+                dev_weighted["origin_access_min"].isna().sum() +
+                dev_weighted["destination_access_min"].isna().sum()
+            )
+            if missing_dev_access > 0:
+                raise ValueError(
+                    f"Missing {missing_dev_access} development access matches for "
+                    f"dev {dev}, scenario '{scen}' after loading {dev_od_path}."
                 )
 
             dev_weighted["origin_access_component"] = dev_weighted["flow"] * dev_weighted["origin_access_min"]

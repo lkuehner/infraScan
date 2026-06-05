@@ -10,8 +10,6 @@ real_wage_growth = 0.0069
 appraisal_years = 40
 
 
-
-
 # Road maintenance NISTRA
 road_maintenance_operating_cost_growth = 0.01
 road_traffic_growth = 0.01

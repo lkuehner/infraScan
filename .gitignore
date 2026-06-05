@@ -13,3 +13,5 @@ infraScanRail/_unused_files
 # Python Cache
 __pycache__/
 *.pyc
+
+.codex/

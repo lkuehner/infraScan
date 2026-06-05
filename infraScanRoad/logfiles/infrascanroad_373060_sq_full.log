@@ -1,0 +1,557 @@
+[2026-05-22T11:56:58+02:00] Starting infraScanRoad job 373060
+Host: eu-a2p-279
+Working directory: /cluster/home/lkuehner/MSc_Thesis
+Python: /cluster/home/lkuehner/miniforge3/envs/infrascan/bin/python
+
+================================================================================
+PHASE 1: INITIALIZE VARIABLES
+================================================================================
+
+
+
+
+
+================================================================================
+PHASE 2: DATA IMPORT
+================================================================================
+
+  [CHECKPOINT] Skipping: import_raw_data_corridor
+  [CHECKPOINT] Skipping: protected_area_corridor
+
+================================================================================
+PHASE 3: INFRASTRUCTURE DEVELOPMENTS
+================================================================================
+
+  [CHECKPOINT] Skipping: map_access_points
+  [CHECKPOINT] Skipping: preprocess_network
+  [CHECKPOINT] Skipping: generate_infrastructure
+  [CHECKPOINT] Loaded: generate_infrastructure
+
+================================================================================
+PHASE 4: SCENARIO GENERATION
+================================================================================
+
+  [CHECKPOINT] Skipping: import_scenario_variables
+  [CHECKPOINT] Skipping: scenario_generation_generated
+
+================================================================================
+PHASE 5: COSTS AND ACCESSIBILITY
+================================================================================
+
+  [CHECKPOINT] Skipping: import_raw_data_variables
+  [CHECKPOINT] Skipping: protected_area_variables
+  [CHECKPOINT] Skipping: osm_network
+  [CHECKPOINT] Skipping: elevation_tunnel_bridges
+  [CHECKPOINT] Skipping: construction_costs
+  [CHECKPOINT] Skipping: externalities
+  [CHECKPOINT] Skipping: travel_time_voronoi
+  [CHECKPOINT] Skipping: travel_time_developments
+  [CHECKPOINT] Skipping: combine_tt_voronoi
+  [CHECKPOINT] Skipping: accessibility
+  [CHECKPOINT] Loaded: accessibility
+
+================================================================================
+PHASE 6: TRAVEL TIME SAVINGS
+================================================================================
+
+  -> Using travel time savings method: od
+  [CHECKPOINT] Skipping: od_matrices_generated
+Status quo OD travel times on status-quo Voronoi for scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -18467248.641731285
+            Iterations: 1
+            Function evaluations: 1823
+            Gradient evaluations: 1
+Status quo OD travel times on status-quo Voronoi for scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -5063232.371007312
+            Iterations: 1
+            Function evaluations: 1833
+            Gradient evaluations: 1
+Status quo OD travel times on status-quo Voronoi for scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -26763549.36629668
+            Iterations: 1
+            Function evaluations: 1823
+            Gradient evaluations: 1
+  [CHECKPOINT] Saved: tt_optimization_status_quo_by_od
+Flag: link_traffic_to_map skipped for GENERATED scenarios
+OD TT by development-scenario:   0%|          | 0/36 [00:00<?, ?it/s]/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+OD TT by development-scenario:  89%|████████▉ | 32/36 [02:34<00:19,  4.83s/it]OD TT by development-scenario: 100%|██████████| 36/36 [02:34<00:00,  4.29s/it]
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2925: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2948: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_optimize.py:353: RuntimeWarning: Values in x were outside bounds during a minimize step, clipping to bounds
+  warnings.warn("Values in x were outside bounds during a "
+Flag: tt_optimization_all_developments is complete
+  [CHECKPOINT] Saved: tt_optimization_developments_by_od_raster
+Development: 2 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -5647925.791289063
+            Iterations: 1
+            Function evaluations: 1956
+            Gradient evaluations: 1
+Development: 775 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27715855.359539412
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 201 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -24918805.88175437
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 750 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27912212.842112023
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Saved detailed OD TT savings to: data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv
+Saved aggregated TT savings to: data/infraScanRoad/costs/traveltime_savings_od.csv
+  [CHECKPOINT] Saved: tt_monetization_od
+
+================================================================================
+PHASE 7: COST-BENEFIT INTEGRATION
+================================================================================
+
+ -> Aggregate costs
+Using travel time savings input: data/infraScanRoad/costs/traveltime_savings_od.csv
+Number of developments: 12
+   ID_new     cost_path   cost_bridge   cost_tunnel  building_costs  climate_cost  land_realloc        nature      noise_s1      noise_s2      noise_s3   maintenance  tt_scenario_19  tt_scenario_29  tt_scenario_30  externalities_s1  externalities_s2  externalities_s3  construction_maintenance
+0       2 -7.044788e+07 -2.236500e+07 -0.000000e+00   -1.949129e+08 -1.411283e+07 -2.747573e+06 -4.225031e+07 -4.138493e+08 -3.793808e+08 -4.483178e+08 -1.440526e+08   -2.449900e+10   -8.045652e+09    1.226050e+10     -4.729600e+08     -4.384915e+08     -5.074285e+08             -3.389655e+08
+1     103 -6.809672e+07 -8.946000e+07 -0.000000e+00   -2.596567e+08 -1.762313e+07 -3.206670e+06 -4.084023e+07 -4.274766e+08 -3.920009e+08 -4.629524e+08 -2.015717e+08    5.440373e+06    9.833227e+06    1.225754e+10     -4.891467e+08     -4.536709e+08     -5.246224e+08             -4.612284e+08
+2     201 -1.311975e+08 -1.118250e+07 -1.081451e+08   -3.526251e+08 -2.546915e+07 -5.265015e+06 -7.868420e+07 -6.852187e+08 -6.324920e+08 -7.379453e+08 -2.544263e+08   -7.009611e+07   -4.541845e+07    1.219745e+10     -7.946370e+08     -7.419104e+08     -8.473637e+08             -6.070515e+08
+3     249 -1.199961e+08 -1.597500e+07 -0.000000e+00   -2.380711e+08 -2.274071e+07 -5.047583e+06 -7.196629e+07 -6.306931e+08 -5.819973e+08 -6.793889e+08 -1.826280e+08   -2.492770e+10   -4.615171e+07    1.219857e+10     -7.304477e+08     -6.817519e+08     -7.791435e+08             -4.206991e+08
+4     334 -5.044671e+07 -1.597500e+06 -0.000000e+00   -1.541442e+08 -9.259885e+06 -1.398202e+06 -3.025484e+07 -3.593391e+08 -3.330404e+08 -3.856378e+08 -1.077353e+08    1.000287e+08    2.075525e+07    1.229191e+10     -4.002521e+08     -3.739534e+08     -4.265508e+08             -2.618796e+08
+5     469 -1.311016e+07 -1.597500e+06 -1.113335e+09   -1.230143e+09 -1.250711e+07 -3.398147e+06 -7.862666e+06 -4.032301e+08 -3.695465e+08 -4.369136e+08 -7.543870e+08    1.978702e+07   -7.995111e+09   -2.132557e+08     -4.269980e+08     -3.933144e+08     -4.606816e+08             -1.984530e+09
+6     662 -1.309322e+08 -6.390000e+06 -2.913400e+08   -5.307622e+08 -2.679030e+07 -9.985859e+06 -7.852510e+07 -2.633480e+08 -2.428472e+08 -2.838488e+08 -3.618219e+08   -2.564800e+10   -6.937706e+07    1.217115e+10     -3.786493e+08     -3.581485e+08     -3.991500e+08             -8.925841e+08
+7     689 -9.630153e+07 -7.987500e+06 -4.162000e+07   -2.480090e+08 -1.834168e+07 -5.693912e+06 -5.775574e+07 -4.876105e+08 -4.494908e+08 -5.257301e+08 -1.797885e+08   -5.112624e+07   -2.481003e+07    1.221618e+10     -5.694018e+08     -5.312821e+08     -6.075215e+08             -4.277975e+08
+8     750 -6.852256e+07 -1.309950e+08 -1.040500e+08   -4.056676e+08 -2.107550e+07 -4.841534e+06 -4.109562e+07 -5.726600e+08 -5.282538e+08 -6.170663e+08 -3.024103e+08   -8.661285e+07   -5.437057e+07    1.218622e+10     -6.396727e+08     -5.952665e+08     -6.840789e+08             -7.080779e+08
+9     775 -1.369834e+08 -7.827750e+07 -0.000000e+00   -3.173609e+08 -2.948354e+07 -1.127294e+07 -8.215422e+07 -3.900258e+08 -3.591085e+08 -4.209431e+08 -2.531605e+08   -1.222479e+08   -6.283806e+07    1.217059e+10     -5.129365e+08     -4.820192e+08     -5.438538e+08             -5.705214e+08
+  [CHECKPOINT] Saved: aggregate_costs
+  -> Using total costs input: data/infraScanRoad/costs/total_costs_od.gpkg
+
+================================================================================
+PHASE 8: VISUALIZATION
+================================================================================
+
+   ID_new  ID_current                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             geometry
+0       0           6                                                                                                                                                                                                                                                                                     LINESTRING (2701354.784 1241596.288, 2701350.000 1241450.000, 2701350.000 1241350.000, 2701350.000 1241250.000, 2701350.000 1241150.000, 2701350.000 1241050.000, 2701350.000 1240950.000, 2701250.000 1240850.000, 2701250.000 1240750.000, 2701250.000 1240650.000, 2701250.000 1240550.000, 2701250.000 1240450.000, 2701250.000 1240350.000, 2701250.000 1240250.000, 2701250.000 1240150.000, 2701350.000 1240050.000, 2701350.000 1239950.000, 2701350.000 1239850.000, 2701350.000 1239750.000, 2701350.000 1239650.000, 2701350.000 1239550.000, 2701350.000 1239450.000, 2701350.000 1239350.000, 2701450.000 1239250.000, 2701550.000 1239150.000, 2701650.000 1239050.000, 2701750.000 1238950.000, 2701850.000 1238850.000, 2701834.017 1238740.539)
+1       2          38  LINESTRING (2701280.512 1248935.180, 2701150.000 1248950.000, 2701050.000 1248950.000, 2700950.000 1248850.000, 2700850.000 1248750.000, 2700750.000 1248750.000, 2700650.000 1248750.000, 2700550.000 1248650.000, 2700450.000 1248550.000, 2700350.000 1248450.000, 2700250.000 1248350.000, 2700150.000 1248250.000, 2700050.000 1248150.000, 2699950.000 1248050.000, 2699850.000 1247950.000, 2699750.000 1247950.000, 2699650.000 1247850.000, 2699550.000 1247750.000, 2699450.000 1247650.000, 2699350.000 1247550.000, 2699250.000 1247450.000, 2699150.000 1247350.000, 2699050.000 1247250.000, 2698950.000 1247150.000, 2698850.000 1247050.000, 2698750.000 1246950.000, 2698750.000 1246850.000, 2698650.000 1246750.000, 2698650.000 1246650.000, 2698550.000 1246550.000, 2698450.000 1246550.000, 2698350.000 1246550.000, 2698250.000 1246550.000, 2698150.000 1246550.000, 2698050.000 1246550.000, 2697950.000 1246550.000, 2697850.000 1246450.000, 2697750.000 1246350.000, 2697650.000 1246250.000, 2697566.723 1246277.025)
+2      15           6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               LINESTRING (2701889.682 1240547.590, 2701850.000 1240450.000, 2701850.000 1240350.000, 2701950.000 1240250.000, 2702050.000 1240150.000, 2702050.000 1240050.000, 2702050.000 1239950.000, 2702050.000 1239850.000, 2702150.000 1239750.000, 2702150.000 1239650.000, 2702150.000 1239550.000, 2702150.000 1239450.000, 2702150.000 1239350.000, 2702050.000 1239250.000, 2702050.000 1239150.000, 2702050.000 1239050.000, 2702050.000 1238950.000, 2701950.000 1238850.000, 2701834.017 1238740.539)
+3      57           4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               LINESTRING (2695466.011 1237134.560, 2695450.000 1237250.000, 2695450.000 1237350.000, 2695550.000 1237450.000, 2695650.000 1237550.000, 2695750.000 1237650.000, 2695850.000 1237750.000, 2695950.000 1237850.000, 2696050.000 1237950.000, 2696150.000 1238050.000, 2696250.000 1238150.000, 2696350.000 1238250.000, 2696450.000 1238250.000, 2696550.000 1238350.000, 2696550.000 1238450.000, 2696550.000 1238550.000, 2696450.000 1238650.000, 2696450.000 1238750.000, 2696559.854 1238839.247)
+4      62           5                                                                                                                                                                                                                                                                                                                                                                                                                                                                    LINESTRING (2698497.626 1240473.684, 2698450.000 1240350.000, 2698450.000 1240250.000, 2698450.000 1240150.000, 2698450.000 1240050.000, 2698450.000 1239950.000, 2698450.000 1239850.000, 2698450.000 1239750.000, 2698350.000 1239650.000, 2698350.000 1239550.000, 2698350.000 1239450.000, 2698350.000 1239350.000, 2698350.000 1239250.000, 2698350.000 1239150.000, 2698350.000 1239050.000, 2698350.000 1238950.000, 2698350.000 1238850.000, 2698250.000 1238750.000, 2698150.000 1238650.000, 2698050.000 1238550.000, 2697950.000 1238450.000, 2697858.453 1238353.625)
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/main_pipeline.py", line 114, in <module>
+    infrascanroad()
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/main_pipeline.py", line 79, in infrascanroad
+    phase_8_visualization(voronoi_tt, innerboundary, network, boundary_plot,
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/pipeline.py", line 805, in phase_8_visualization
+    plot_voronoi_development(voronoi_tt, voronoi_dev_2, generated_points, boundary=innerboundary, network=network, access_points=current_access_points, plot_name="new_voronoi")
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/plots.py", line 1194, in plot_voronoi_development
+    plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500)
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/pyplot.py", line 959, in savefig
+    res = fig.savefig(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/figure.py", line 3285, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/backend_bases.py", line 2338, in print_figure
+    result = print_method(
+             ^^^^^^^^^^^^^
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/backend_bases.py", line 2204, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+                                                                 ^^^^^
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/_api/deprecation.py", line 410, in wrapper
+    return func(*inner_args, **inner_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 517, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 464, in _print_pil
+    mpl.image.imsave(
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/matplotlib/image.py", line 1667, in imsave
+    image.save(fname, **pil_kwargs)
+  File "/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/PIL/Image.py", line 2410, in save
+    fp = builtins.open(filename, "w+b")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'plots/results/04_new_voronoi.png'
+Development: 2 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -4214262.074693233
+            Iterations: 1
+            Function evaluations: 1956
+            Gradient evaluations: 1
+Development: 775 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19091745.574866302
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 201 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27814046.808958266
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 662 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19615114.777414933
+            Iterations: 1
+            Function evaluations: 1944
+            Gradient evaluations: 1
+Development: 249 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -5665702.9759002635
+            Iterations: 1
+            Function evaluations: 1956
+            Gradient evaluations: 1
+Development: 249 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19154735.35350775
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 789 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25995041.87885295
+            Iterations: 1
+            Function evaluations: 1944
+            Gradient evaluations: 1
+Development: 103 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27982001.411762726
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 469 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -28183536.14365329
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 750 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25030433.734167725
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 895 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19185461.032842837
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 201 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19133692.192041747
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 689 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25048107.883989405
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 469 in scenario: scenario_29
+Inequality constraints incompatible    (Exit mode 4)
+            Current function value: -4225323.787148077
+            Iterations: 1
+            Function evaluations: 1945
+            Gradient evaluations: 1
+Development: 334 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -35948551.45648574
+            Iterations: 1
+            Function evaluations: 1934
+            Gradient evaluations: 1
+Development: 775 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -24830457.85271539
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 334 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -22312104.169291668
+            Iterations: 1
+            Function evaluations: 1934
+            Gradient evaluations: 1
+Development: 469 in scenario: scenario_30
+Inequality constraints incompatible    (Exit mode 4)
+            Current function value: -5215091.396122093
+            Iterations: 1
+            Function evaluations: 1945
+            Gradient evaluations: 1
+Development: 789 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -28941523.2049652
+            Iterations: 1
+            Function evaluations: 1944
+            Gradient evaluations: 1
+Development: 2 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25174475.907258604
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 689 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19171854.544877935
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 249 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -24973571.74916773
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 689 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27925898.960518368
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 895 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -27966501.051818848
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 103 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25100381.282137323
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 750 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19166971.78555223
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 789 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19591185.54933241
+            Iterations: 1
+            Function evaluations: 1944
+            Gradient evaluations: 1
+Development: 334 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -29982144.731731705
+            Iterations: 1
+            Function evaluations: 1934
+            Gradient evaluations: 1
+Development: 662 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -26011553.48944389
+            Iterations: 1
+            Function evaluations: 1944
+            Gradient evaluations: 1
+Development: 895 in scenario: scenario_30
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -25087546.790148117
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 103 in scenario: scenario_29
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -19194862.12538378
+            Iterations: 1
+            Function evaluations: 1946
+            Gradient evaluations: 1
+Development: 662 in scenario: scenario_19
+Optimization terminated successfully    (Exit mode 0)
+            Current function value: -5727819.592498981
+            Iterations: 1
+            Function evaluations: 1954
+            Gradient evaluations: 1

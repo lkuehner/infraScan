@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=infrascanroad
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem-per-cpu=8G
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=24
+#SBATCH --mem-per-cpu=5G
+#SBATCH --time=35:00:00
 #SBATCH --output=infrascanroad_%j.log
 #SBATCH --error=infrascanroad_%j.log
 

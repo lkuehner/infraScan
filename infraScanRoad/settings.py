@@ -5,8 +5,8 @@ import time
 
 import pandas as pd
 
-#MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
-MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
+#MAIN = '/Volumes/WD_Windows/MSc_Thesis'
 
 ##################################################################################
 # Define settings 
@@ -42,11 +42,14 @@ start_valuation_year = 2050
 # Optional debug throttles for Phase 6 travel-time computation
 # When enabled, these limits are applied in both aggregate and OD modes.
 travel_time_debug_enabled = True  # True or False
-travel_time_debug_scenarios = ("scenario_1", "scenario_30", "scenario_18")#("scenario_29", "scenario_61", "scenario_66", "scenario_76", "scenario_83", "scenario_81", "scenario_71", "scenario_45", "scenario_31", "scenario_3", "scenario_58", "scenario_14", "scenario_50", "scenario_77", "scenario_41", "scenario_84", "scenario_53", "scenario_1", "scenario_87", "scenario_19")  # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
-aggregate_debug_max_developments = 10  # e.g. 1
-aggregate_debug_developments_ids = [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
+travel_time_debug_scenarios = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
+#("scenario_26", "scenario_44", "scenario_64", "scenario_19", "scenario_78")
+#('scenario_23', 'scenario_47', 'scenario_26', 'scenario_85', 'scenario_100', 'scenario_39', 'scenario_81', 'scenario_11', 'scenario_55', 'scenario_31', 'scenario_96', 'scenario_38', 'scenario_41', 'scenario_84', 'scenario_36', 'scenario_35', 'scenario_63', 'scenario_98', 'scenario_97', 'scenario_10') # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
+#("scenario_29", "scenario_30", "scenario_19", "scenario_81", "scenario_11")
+aggregate_debug_max_developments = None # e.g. 1
+aggregate_debug_developments_ids = None # [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
 od_max_developments = None  # e.g. 1
-od_debug_development_ids = [2] # [2, 103, 469, 895, 249, 662, 201, 689, 775, 750, 789, 334]  # Explicit ID_new list for OD debug runs; overrides od_max_developments when set
+od_debug_development_ids = None #[254, 109, 28, 267] #[2, 103, 469, 895, 249, 662, 201, 689, 775, 750, 789, 334]  # Explicit ID_new list for OD debug runs; overrides od_max_developments when set
 
 def get_travel_time_debug_scenarios():
     if not travel_time_debug_enabled:
