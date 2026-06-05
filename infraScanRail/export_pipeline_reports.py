@@ -41,8 +41,8 @@ def export_pipeline_comparison_report_statistics():
     print("="*80 + "\n")
 
     # Load data from both pipelines
-    new_data_path = "data/costs/total_costs_raw.csv"
-    old_data_path = "data/costs/total_costs_raw_old.csv"
+    new_data_path = "data/infraScanRail/costs/total_costs_raw.csv"
+    old_data_path = "data/infraScanRail/costs/total_costs_raw_old.csv"
 
     if not os.path.exists(new_data_path) or not os.path.exists(old_data_path):
         print(f"  ⚠ Data files not found - skipping report statistics export")

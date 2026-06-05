@@ -14,7 +14,9 @@ import rasterio
 from infraScan.infraScanRail import paths as rail_paths
 from infraScan.infraScanRail.TT_Delay import analyze_travel_times
 
-SCENARIOS = ("scenario_76", "scenario_45", "scenario_67")
+SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
+#("scenario_76", "scenario_45", "scenario_67")
+
 RAIL_COMPARISON_YEAR = 2050
 
 COST_COLORS = {
@@ -22,7 +24,7 @@ COST_COLORS = {
     "maintenance": "#3690c0",
     "operating": "#1f5a89",
     "externalities": "#092245",
-    "tts": "#efdd74",
+    "tts": "#fedf2f",
 }
 
 # Centralized paths (adjust these at top to configure where data and outputs live)
@@ -30,16 +32,16 @@ DATA_ROOT = Path(rail_paths.MAIN)
 COST_OUTPUT_DIR = DATA_ROOT / "plots" / "Integrated" / "CBA_Comparison"
 TTS_OUTPUT_DIR = DATA_ROOT / "plots" / "Integrated" / "TTS_Comparison"
 
-RAIL_COSTS_PATH = DATA_ROOT / "data" / "infraScanRail" / "costs"
-ROAD_COSTS_PATH = DATA_ROOT / "data" / "infraScanRoad" / "costs"
+RAIL_COSTS_PATH = DATA_ROOT / "_archive" / "infraScanRail" /"data" / "costs"
+ROAD_COSTS_PATH = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce"
 RAIL_NETWORK_PATH = DATA_ROOT / "data" / "infraScanRail" / "Network"
 ROAD_NETWORK_PATH = DATA_ROOT / "data" / "infraScanRoad" / "Network"
 
 RAIL_TOTAL_COSTS_CSV = RAIL_COSTS_PATH / "total_costs.csv"
 RAIL_TT_SAVINGS_CSV = RAIL_COSTS_PATH / "traveltime_savings.csv"
-ROAD_TOTAL_COSTS_CSV = ROAD_COSTS_PATH / "total_costs_od.csv"
-ROAD_TT_OD_CSV = ROAD_COSTS_PATH / "traveltime_savings_od.csv"
-ROAD_TT_DETAILED_CSV = DATA_ROOT / "data" / "infraScanRoad" / "traffic_flow" / "od" / "od_tt_savings_detailed.csv"
+ROAD_TOTAL_COSTS_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/total_costs_od.csv"
+ROAD_TT_OD_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/traveltime_savings_od.csv"
+ROAD_TT_DETAILED_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/traffic_flow/od_trust_xi_all10sce/od_tt_savings_detailed.csv"
 
 RAIL_TRAVELTIME_CACHE = RAIL_NETWORK_PATH / "travel_time" / "cache" / "od_times.pkl"
 RAIL_TRAVELTIME_SAVINGS_DIR = RAIL_NETWORK_PATH / "travel_time" / "TravelTime_Savings"
@@ -85,10 +87,10 @@ def load_rail_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> 
 def load_road_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> pd.DataFrame:
     totals_path = pd.read_csv(ROAD_TOTAL_COSTS_CSV)
     tt_path = pd.read_csv(ROAD_TT_OD_CSV)
-    construction = gpd.read_file(ROAD_COSTS_PATH / "construction.gpkg")[["ID_new", "building_costs"]]
-    maintenance = gpd.read_file(ROAD_COSTS_PATH / "maintenance.gpkg")[["ID_new", "maintenance"]]
-    externalities = gpd.read_file(ROAD_COSTS_PATH / "externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
-    noise = gpd.read_file(ROAD_COSTS_PATH / "noise.gpkg")[["ID_new", "noise_s1"]]
+    construction = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/construction.gpkg")[["ID_new", "building_costs"]]
+    maintenance = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/maintenance.gpkg")[["ID_new", "maintenance"]]
+    externalities = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
+    noise = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/noise.gpkg")[["ID_new", "noise_s1"]]
 
     totals_df = (
         construction.merge(maintenance, on="ID_new", how="left")
@@ -615,11 +617,11 @@ def main() -> None:
 
 
     # create_combined_cost_csv() is optional — plots load sources directly
-    plot_combined_top5_final_cost_savings(COST_OUTPUT_DIR)
-    plot_final_tts_boxplot_top5(TTS_OUTPUT_DIR)
+    #plot_combined_top5_final_cost_savings(COST_OUTPUT_DIR)
+    #plot_final_tts_boxplot_top5(TTS_OUTPUT_DIR)
 
     # rail and road separately 
-    plot_all_rail_final_cost_savings(COST_OUTPUT_DIR)
+    #plot_all_rail_final_cost_savings(COST_OUTPUT_DIR)
     plot_all_road_final_cost_savings(COST_OUTPUT_DIR)
 
     # Add scenario plots also here

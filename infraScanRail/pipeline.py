@@ -672,6 +672,8 @@ def phase_10_old_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
         output_suffix="_old"
     )
 
+    train_km_analysis = train_km()
+
     runtimes["Compute construction costs (OLD)"] = time.time() - st
     return construction_and_maintenance_costs_old
 
@@ -709,6 +711,7 @@ def phase_10_new_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
         use_old_capacity_logic=False,
         output_suffix=""
     )
+    train_km_analysis = train_km()
 
     runtimes["Compute construction costs (NEW)"] = time.time() - st
     return construction_and_maintenance_costs_new

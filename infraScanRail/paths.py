@@ -3,8 +3,8 @@ from pathlib import Path
 
 # Use relative path from the script location
 # MAIN = str(Path(__file__).parent.resolve()) 
-# MAIN = '/Volumes/WD_Windows/MSc_Thesis'
-MAIN = '/cluster/home/lkuehner/MSc_Thesis'
+MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+#MAIN = '/cluster/home/lkuehner/MSc_Thesis'
 
 
 RAIL_SERVICES_AK2035_PATH= 'data/infraScanRail/temp/railway_services_ak2035.gpkg'
@@ -33,6 +33,7 @@ RANDOM_SCENARIO_CACHE_PATH = "data/Scenario/cache/rail"
 DISTRICT_PATH = "data/_basic_data/Gemeindegrenzen/UP_BEZIRKE_F.shp"
 
 CONSTRUCTION_COSTS =  "data/infraScanRail/costs/construction_cost.csv"
+TRAIN_KM_COSTS = "data/infraScanRail/Network/processed/train_km.csv"
 TOTAL_COST_WITH_GEOMETRY = "data/infraScanRail/costs/total_costs_with_geometry.csv"
 TOTAL_COST_RAW = "data/infraScanRail/costs/total_costs_raw.csv"
 COST_AND_BENEFITS_DISCOUNTED = "data/infraScanRail/costs/costs_and_benefits_dev_discounted.csv"

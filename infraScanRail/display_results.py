@@ -133,6 +133,6 @@ def create_scenario_analysis_viewer(csv_file):
 # Main script usage
 if __name__ == "__main__":
     # Specify the path to your CSV file
-    csv_file_path = "data/costs/total_costs_with_geometry.csv"
+    csv_file_path = "data/infraScanRail/costs/total_costs_with_geometry.csv"
     # Call the function to create and display the GUI
     create_scenario_analysis_viewer(csv_file_path)

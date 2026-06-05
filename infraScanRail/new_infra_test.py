@@ -6,7 +6,7 @@ from plots import plot_graph, plot_lines_for_each_missing_connection
 os.chdir(paths.MAIN)
 
 df_network = gpd.read_file(settings.infra_generation_rail_network)
-df_points = gpd.read_file('data/Network/processed/points.gpkg')
+df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
 G, pos = prepare_Graph(df_network, df_points)
 
 # Analyze the railway network to find missing connections
@@ -24,8 +24,8 @@ print("\n=== NEW RAILWAY LINES DETAILS ===")
 print_new_railway_lines(new_railway_lines)
 
 # Export to GeoPackage for further analysis and visualization in GIS software
-export_new_railway_lines(new_railway_lines, pos, "data/Network/processed/new_railway_lines.gpkg")
-print("\nNew railway lines exported to data/Network/processed/new_railway_lines.gpkg")
+export_new_railway_lines(new_railway_lines, pos, "data/infraScanRail/Network/processed/new_railway_lines.gpkg")
+print("\nNew railway lines exported to data/infraScanRail/Network/processed/new_railway_lines.gpkg")
 
 # Visualize the new railway lines on the network graph
 print("\n=== VISUALIZATION ===")

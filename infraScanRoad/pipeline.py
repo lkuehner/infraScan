@@ -472,7 +472,7 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
 
     if not checkpoint_exists("construction_costs"):
         construction_costs(highway=cost_parameters.c_openhighway, tunnel=cost_parameters.c_tunnel, bridge=cost_parameters.c_bridge, ramp=cost_parameters.ramp)
-        maintenance_costs(duration=cost_parameters.maintenance_duration, highway=cost_parameters.c_om_openhighway, 
+        maintenance_costs(duration=cost_parameters.duration, highway=cost_parameters.c_om_openhighway, 
                           tunnel=cost_parameters.c_om_tunnel, bridge=cost_parameters.c_om_bridge, structural=cost_parameters.c_structural_maint)
         save_checkpoint("construction_costs")
     else:
@@ -490,10 +490,10 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
 
         externalities_costs(ce_highway=cost_parameters.co2_highway, ce_tunnel=cost_parameters.co2_tunnel,
                             realloc_forest=cost_parameters.forest_reallocation ,realloc_FFF=cost_parameters.meadow_reallocation,
-                            realloc_dry_meadow=cost_parameters.meadow_reallocation, realloc_period=cost_parameters.reallocation_duration,
-                            nat_fragmentation=cost_parameters.fragmentation, fragm_period=cost_parameters.fragmentation_duration,
-                            nat_loss_habitat=cost_parameters.habitat_loss, habitat_period=cost_parameters.habitat_loss_duration)
-        noise_costs(years=cost_parameters.noise_duration, 
+                            realloc_dry_meadow=cost_parameters.meadow_reallocation, realloc_period=cost_parameters.duration,
+                            nat_fragmentation=cost_parameters.fragmentation, fragm_period=cost_parameters.duration,
+                            nat_loss_habitat=cost_parameters.habitat_loss, habitat_period=cost_parameters.duration)
+        noise_costs(years=cost_parameters.duration, 
                     boundaries=cost_parameters.noise_distance, 
                     unit_costs=cost_parameters.noise_values)
         save_checkpoint("externalities")
@@ -571,22 +571,24 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
 
     #################################################################################
     # 6) Compute access time costs
-    # TO DO: to check if i calc this twice
+    # only relevant if travel time savings are computed based on accessibility changes, not for OD-based approach
+    if settings.travel_time_savings_method == "aggregate":
+        if not checkpoint_exists("accessibility"):
+            accessib_status_quo = accessibility_status_quo(VTT_h=cost_parameters.VTTS, 
+                                                       duration=cost_parameters.duration)
 
-    # Compute the accessibility for status quo for scenarios
-    if not checkpoint_exists("accessibility"):
-        accessib_status_quo = accessibility_status_quo(VTT_h=cost_parameters.VTTS, 
-                                                       duration=cost_parameters.travel_time_duration)
-
-        # Compute the benefit in accessibility for each development compared to the status quo
-        # The accessibility for each polygon for every development is store in "data/Voronoi/voronoi_developments_local_accessibility.gpkg"
-        # The benefit of each development compared to the status quo is stored in 'data/costs/local_accessibility.csv'
-        accessibility_developments(accessib_status_quo, VTT_h=cost_parameters.VTTS, 
-                                   duration=cost_parameters.travel_time_duration)  # make this more efficient in terms of for loops and open files
-        save_data_checkpoint("accessibility", {"accessib_status_quo": accessib_status_quo})
+            # Compute the benefit in accessibility for each development compared to the status quo
+            # The accessibility for each polygon for every development is store in "data/Voronoi/voronoi_developments_local_accessibility.gpkg"
+            # The benefit of each development compared to the status quo is stored in 'data/costs/local_accessibility.csv'
+            accessibility_developments(accessib_status_quo, VTT_h=cost_parameters.VTTS, 
+                                    duration=cost_parameters.duration)  # make this more efficient in terms of for loops and open files
+            save_data_checkpoint("accessibility", {"accessib_status_quo": accessib_status_quo})
+        else:
+            print("  [CHECKPOINT] Skipping: accessibility")
+            accessib_status_quo = load_data_checkpoint("accessibility")["accessib_status_quo"]
     else:
-        print("  [CHECKPOINT] Skipping: accessibility")
-        accessib_status_quo = load_data_checkpoint("accessibility")["accessib_status_quo"]
+        print("  [SKIP] accessibility only used for aggregate travel time savings")
+
 
     runtimes["Compute highway access time benefits"] = time.time() - st
     st = time.time()
@@ -735,7 +737,7 @@ def phase_6_travel_time_savings(runtimes):
         print(f"  [CHECKPOINT] Skipping: {developments_checkpoint}")
 
     if not checkpoint_exists(monetization_checkpoint):
-        run_monetization(VTTS=cost_parameters.VTTS, duration=cost_parameters.travel_time_duration)
+        run_monetization(VTTS=cost_parameters.VTTS, duration=cost_parameters.duration)
         save_checkpoint(monetization_checkpoint)
     else:
         print(f"  [CHECKPOINT] Skipping: {monetization_checkpoint}")

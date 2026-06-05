@@ -104,7 +104,7 @@ def reformat_rail_edges(rail_network):
 
 
     edges_gdf = edges_gdf.drop(['first', 'last'],axis=1)
-    edges_gdf.to_file("data/Network/processed/edges.gpkg")
+    edges_gdf.to_file("data/infraScanRail/Network/processed/edges.gpkg")
 
 
 def reformat_rail_nodes():
@@ -120,7 +120,7 @@ def reformat_rail_nodes():
                                       crs="epsg:21781")
     current_points = current_points.to_crs("epsg:2056")
     current_points = current_points.rename(columns={"NR": "ID_point"})
-    current_points.to_file("data/Network/processed/points.gpkg")
+    current_points.to_file("data/infraScanRail/Network/processed/points.gpkg")
 
 
 def add_new_line(stations, frequency, service_name, travel_times, edges, points, via=[]):
@@ -234,7 +234,7 @@ def add_new_line(stations, frequency, service_name, travel_times, edges, points,
 
 def create_railway_services_2024_extended():
     edges_ak2024_ext = gpd.read_file(paths.RAIL_SERVICES_2024_PATH)
-    points = gpd.read_file('data/Network/processed/points.gpkg')
+    points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
 
     edges_ak2024_ext = add_new_line(
         stations=[
@@ -441,7 +441,7 @@ def create_railway_services_2024_extended():
 def create_railway_services_AK2035():
 
     edges_ak2035 = gpd.read_file(paths.RAIL_SERVICES_2024_PATH)
-    points = gpd.read_file('data/Network/processed/points.gpkg')
+    points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
 
     # Double the frequency and capacity for rows where "Service" contains "S9"
     edges_ak2035.loc[edges_ak2035["Service"] == "S9", "Frequency"] *= 2
@@ -691,9 +691,9 @@ def network_in_corridor(poly):
     """
     This function takes a polygon and a network and selects the parts of the network within the polygon.
     # Filter the infrastructure elements that lie within a given polygon
-    # Points within the corridor are stored in "data/Network/processed/points_corridor.gpkg"
-    # Edges within the corridor are stored in "data/Network/processed/edges_corridor.gpkg"
-    # Edges crossing the corridor border are stored in "data/Network/processed/edges_on_corridor.gpkg"
+    # Points within the corridor are stored in "data/infraScanRail/Network/processed/points_corridor.gpkg"
+    # Edges within the corridor are stored in "data/infraScanRail/Network/processed/edges_corridor.gpkg"
+    # Edges crossing the corridor border are stored in "data/infraScanRail/Network/processed/edges_on_corridor.gpkg"
 
     # In general, the final product of this function is edges_with_attributes.gpkg and points_with_attributes.gpkg
 
@@ -705,8 +705,8 @@ def network_in_corridor(poly):
     polygon = gpd.GeoDataFrame({'geometry': [poly]})
     polygon.crs = "epsg:2056"
 
-    edges = gpd.read_file("data/Network/processed/edges.gpkg")
-    points = gpd.read_file("data/Network/processed/points.gpkg")
+    edges = gpd.read_file("data/infraScanRail/Network/processed/edges.gpkg")
+    points = gpd.read_file("data/infraScanRail/Network/processed/points.gpkg")
 
 
     # connect the two edges with id 81 and 70 by their closest end points to make one new out of it
@@ -714,7 +714,7 @@ def network_in_corridor(poly):
     # filter points in polygon
     points_corridor = gpd.sjoin(points, polygon, how="inner")
     points_corridor = points_corridor.drop(columns=["index_right"]) 
-    points_corridor.to_file("data/Network/processed/points_corridor.gpkg")
+    points_corridor.to_file("data/infraScanRail/Network/processed/points_corridor.gpkg")
 
     # Check if point are in polygon if so add True as "within_corridor" attribute otherwise False
     points['within_corridor'] = points.apply(lambda row: polygon.contains(row.geometry), axis=1)
@@ -723,7 +723,7 @@ def network_in_corridor(poly):
     edges_corridor = gpd.sjoin(edges, polygon, how="inner")
     #edges_corridor = edges_corridor.drop(columns=["start_access", "end_access", "index_right"])
     edges_corridor = edges_corridor.drop(columns=["index_right"])
-    edges_corridor.to_file("data/Network/processed/edges_in_corridor.gpkg")
+    edges_corridor.to_file("data/infraScanRail/Network/processed/edges_in_corridor.gpkg")
 
     # Get edges crossed by polygon frame
     # Only keep edges with exactly on endpoint in the polygon and the other outside the polygon (= point_corridor)
@@ -739,7 +739,7 @@ def network_in_corridor(poly):
     # Apply the function to filter edges and save the filtered edges in seperate file
     #edges_crossing_polygon = edges[edges.apply(lambda x: is_one_endpoint_inside(x, polygon), axis=1)]
     edges_crossing_polygon = edges[edges["polygon_border"] == True]
-    edges_crossing_polygon.to_file("data/Network/processed/edges_on_corridor_border.gpkg")
+    edges_crossing_polygon.to_file("data/infraScanRail/Network/processed/edges_on_corridor_border.gpkg")
 
     points_temp = points.copy()
     points_temp['buffered_points'] = points_temp['geometry'].buffer(1e-6)
@@ -771,14 +771,14 @@ def network_in_corridor(poly):
 
     edges["ID_edge"] = edges.index
 
-    points.to_file("data/Network/processed/points_with_attribute.gpkg")
-    edges.to_file("data/Network/processed/edges_with_attribute.gpkg")
+    points.to_file("data/infraScanRail/Network/processed/points_with_attribute.gpkg")
+    edges.to_file("data/infraScanRail/Network/processed/edges_with_attribute.gpkg")
 
 
 def only_links_to_corridor():
     # Load the new_links and all access points datasets
-    new_links = gpd.read_file("data/Network/processed/filtered_new_links.gpkg")
-    all_access_points = gpd.read_file("data/Network/processed/points_with_attribute.gpkg")
+    new_links = gpd.read_file("data/infraScanRail/Network/processed/filtered_new_links.gpkg")
+    all_access_points = gpd.read_file("data/infraScanRail/Network/processed/points_with_attribute.gpkg")
 
     # Filter all_access_points to retain only those within the corridor
     access_corridor = all_access_points[all_access_points["within_corridor"] == 1]
@@ -795,7 +795,7 @@ def only_links_to_corridor():
     filtered_new_links['dev_id'] = 100000 + filtered_new_links.index
 
     # Save the filtered new_links to a new file if needed
-    filtered_new_links.to_file("data/Network/processed/filtered_new_links_in_corridor.gpkg", driver="GPKG")
+    filtered_new_links.to_file("data/infraScanRail/Network/processed/filtered_new_links_in_corridor.gpkg", driver="GPKG")
 
 
 def save_focus_area_shapefile(e_min, e_max, n_min, n_max, margin):

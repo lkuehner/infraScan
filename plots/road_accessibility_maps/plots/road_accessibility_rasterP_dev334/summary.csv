@@ -1,0 +1,2 @@
+scenario,development,sq_grid_mean,dev_grid_mean,delta_grid_sum,delta_grid_min,delta_grid_max,negative_cell_share,positive_cell_share
+scenario_45,334,9262.148029398777,12661.129610855987,220107850.27042452,-10592.746034817264,32040.644468076327,0.0041057099557428615,0.38688467181490493

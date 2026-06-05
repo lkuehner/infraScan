@@ -17,11 +17,6 @@ end_year_scenario = 2100
 start_valuation_year = 2050
 
 # Monetisation / cross-model values
-discount_rate = 0.03
-rail_VTT = 14.43
-road_VTT = 23.29
-rail_annualization_factor = 0.1 * 1 * 250
-road_annualization_factor = 0.1 * 1 * 250
 road_development_sample_size = 1000
 
 # Shared literature assumptions for modal behaviour
@@ -69,10 +64,9 @@ other_modal_split_avg_growth_rate = annualized_growth_rate(
 	start_valuation_year,
 )
 
-# These per-mode volatility inputs are still used, but no longer as direct share
-# noise like in the rail-only generator. In the current logistic-normal setup
-# they are combined into the latent joint-process volatility. The values mirror
-# the original rail calibration idea: sigma grows from 0.015 in 2018 to 0.045
+# In the logistic-normal setup these per-mode volatility inputs are combined into 
+# the latent joint-process volatility. The values mirror
+# the calibration idea: sigma grows from 0.015 in 2018 to 0.045
 # in 2100 and tau is fixed at 0.02, so the Verkehrsperspektiven anchors should
 # remain inside the central 90% of the generated sample.
 rail_modal_split_start_std_dev = 0.015

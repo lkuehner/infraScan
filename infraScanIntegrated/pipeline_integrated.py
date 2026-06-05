@@ -44,6 +44,8 @@ def phase_1_initialization(runtimes):
 
 
 # TODO: PHASE 2 DATA IMPORT 
+# wähle gleiches pop raster! data/independent_variable/processed/raw/pop20.tif
+
 
 # TODO: PHASE 7 Integrated scenario evaluation
 #def collect_rail_results(...): ...

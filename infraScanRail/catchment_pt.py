@@ -575,7 +575,7 @@ def calculate_total_travel_time(bus_times_within_buffer, closest_trainstations_d
     return pd.DataFrame(total_times)
 
 
-def save_points_as_raster(df, output_path='data/catchment_pt/catchement.tif', resolution=100, crs='EPSG:2056'):
+def save_points_as_raster(df, output_path='data/infraScanRail/catchment_pt/catchement.tif', resolution=100, crs='EPSG:2056'):
     """
     Save points from a DataFrame to a GeoTIFF raster file.
 
@@ -698,13 +698,13 @@ def get_catchment(use_cache):
     """
     # Define all output file paths that should exist if using cache
     output_files = {
-        'bus_buffers': "data/catchment_pt/bus_buffers.gpkg",
-        'train_buffers': "data/catchment_pt/train_buffers.gpkg",
-        'final_buffers': "data/catchment_pt/final_buffers.gpkg",
-        'final_clipped_buffers': "data/catchment_pt/final_clipped_buffers.gpkg",
-        'catchment': "data/catchment_pt/catchement.gpkg",
-        'catchment_raster': "data/catchment_pt/catchement.tif",
-        'points_with_diva': "data/Network/processed/points_with_diva_nr_buffered.gpkg"
+        'bus_buffers': "data/infraScanRail/catchment_pt/bus_buffers.gpkg",
+        'train_buffers': "data/infraScanRail/catchment_pt/train_buffers.gpkg",
+        'final_buffers': "data/infraScanRail/catchment_pt/final_buffers.gpkg",
+        'final_clipped_buffers': "data/infraScanRail/catchment_pt/final_clipped_buffers.gpkg",
+        'catchment': "data/infraScanRail/catchment_pt/catchement.gpkg",
+        'catchment_raster': "data/infraScanRail/catchment_pt/catchement.tif",
+        'points_with_diva': "data/infraScanRail/Network/processed/points_with_diva_nr_buffered.gpkg"
     }
     
     # Check if cache should be used and all files exist
@@ -734,12 +734,12 @@ def get_catchment(use_cache):
     outerboundary = polygon_from_points(e_min=e_min, e_max=e_max, n_min=n_min, n_max=n_max, margin=margin)
     
     # Load the GeoPackage for bus lines and stops
-    bus_lines_path = "data/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
+    bus_lines_path = "data/infraScanRail/Network/Buslines/Linien_des_offentlichen_Verkehrs_-OGD.gpkg"
     
     # Load the bus lines and bus stops layers
     layer_name_segmented = 'ZVV_LINIEN_L'
     bus_lines_segmented = gpd.read_file(bus_lines_path, layer=layer_name_segmented)
-    stops = gpd.read_file("data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg")
+    stops = gpd.read_file("data/infraScanRail/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg")
     
     
     # Filter bus stops and bus lines within the boundary
@@ -833,9 +833,9 @@ def get_catchment(use_cache):
     #create_merge is an old function, which does not include the trainbuffers
     #create_merged_trainstation_buffers(closest_trainstations_df, stops, output_path)
     # File paths
-    bus_buffers_path = "data/catchment_pt/bus_buffers.gpkg"
-    train_buffers_path = "data/catchment_pt/train_buffers.gpkg"
-    final_output_path = "data/catchment_pt/final_buffers.gpkg"
+    bus_buffers_path = "data/infraScanRail/catchment_pt/bus_buffers.gpkg"
+    train_buffers_path = "data/infraScanRail/catchment_pt/train_buffers.gpkg"
+    final_output_path = "data/infraScanRail/catchment_pt/final_buffers.gpkg"
     
     # SubStep 1: Create Bus Buffers
     bus_buffers = create_bus_buffers(closest_trainstations_df, stops, bus_buffers_path)
@@ -846,27 +846,27 @@ def get_catchment(use_cache):
     # SubStep 3: Resolve Overlaps and Merge Polygons by Train Station
     resolve_overlaps(bus_buffers, train_buffers, final_output_path)
     clip_and_fill_polygons(
-    merged_buffers_path="data/catchment_pt/final_buffers.gpkg",
+    merged_buffers_path="data/infraScanRail/catchment_pt/final_buffers.gpkg",
     innerboundary_path="data/_basic_data/innerboundary.shp",
-    output_path="data/catchment_pt/final_clipped_buffers.gpkg")
+    output_path="data/infraScanRail/catchment_pt/final_clipped_buffers.gpkg")
     
     #prepare the nodes for matching the DIVANR and the rail node number
     # File paths
-    points_file_path = "data/Network/processed/points.gpkg"
-    stops_file_path = "data/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg"
-    output_file_path = "data/Network/processed/points_with_diva_nr_buffered.gpkg"
+    points_file_path = "data/infraScanRail/Network/processed/points.gpkg"
+    stops_file_path = "data/infraScanRail/Network/Buslines/Haltestellen_des_offentlichen_Verkehrs_-OGD.gpkg"
+    output_file_path = "data/infraScanRail/Network/processed/points_with_diva_nr_buffered.gpkg"
     
     # Mapping
     add_diva_nr_to_points_with_buffer(points_file_path, stops_file_path, output_file_path)
     process_polygons_with_mapping(
-        polygons_file_path="data/catchment_pt/final_clipped_buffers.gpkg",
-        points_file_path="data/Network/processed/points_with_diva_nr_buffered.gpkg",
-        output_path="data/catchment_pt/catchement.gpkg")
+        polygons_file_path="data/infraScanRail/catchment_pt/final_clipped_buffers.gpkg",
+        points_file_path="data/infraScanRail/Network/processed/points_with_diva_nr_buffered.gpkg",
+        output_path="data/infraScanRail/catchment_pt/catchement.gpkg")
     
     #save .gkpk also as .tif raster
     create_raster_from_gpkg(
-    input_gpkg="data/catchment_pt/catchement.gpkg",
-    output_tif="data/catchment_pt/catchement.tif",
+    input_gpkg="data/infraScanRail/catchment_pt/catchement.gpkg",
+    output_tif="data/infraScanRail/catchment_pt/catchement.tif",
     raster_size=settings.raster_size)  # Raster size set to 100x100
     
     print("Catchment generation completed.")

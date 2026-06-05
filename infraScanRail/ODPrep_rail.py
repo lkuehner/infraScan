@@ -44,8 +44,8 @@ def ODPrep_rail():
     limits = [e_min - margin, n_min - margin, e_max + margin, n_max + margin]
     # boundary = LineString([[e_min,n_min],[e_max,n_min],[e_max,n_max],[e_min,n_max],[e_min,n_min]])
     # 1.	define TAZs defined in GVM
-    raster_path = "data/Network/travel_time/source_id_raster.tif"
-    points_street_network_all = gpd.read_file("data/Network/processed/street_network_points.gpkg")
+    raster_path = "data/infraScanRail/Network/travel_time/source_id_raster.tif"
+    points_street_network_all = gpd.read_file("data/infraScanRail/Network/processed/street_network_points.gpkg")
     commune_raster, communedf = GetCommuneShapes(raster_path)
     cantonshape = communedf.dissolve()
     tazgdf = getTAZs(points_street_network_all)
@@ -75,7 +75,7 @@ def ODPrep_rail():
     # GetVoronoiCells(limits,outer,inner)
     ### todo: start from here to go from communal OD to newly tesselated OD for scoring
     # 6.	Identify ‘access points‘ to the canton‘s network from the external tazs
-    points_all = gpd.read_file("data/Network/processed/points.gpkg")
+    points_all = gpd.read_file("data/infraScanRail/Network/processed/points.gpkg")
     points_in_outer = points_all[points_all.within(outer)]
     points_outside_inner = points_in_outer[~points_in_outer.within(inner)]
     # make sure that access points are served by an S-Bahn
@@ -241,7 +241,7 @@ def nw_from_osm(limits):
             gdf_edges = gdf_edges.to_crs("EPSG:2056")
 
             # Save only the edges GeoDataFrame to a GeoPackage
-            output_filename = f"data/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
+            output_filename = f"data/infraScanRail/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
             gdf_edges.to_file(output_filename, driver="GPKG")
 
         except ValueError as e:
@@ -254,7 +254,7 @@ def osm_nw_to_raster(limits):
     # Add comment
 
     # Folder containing all the geopackages
-    gpkg_folder = "data/Network/OSM_road"
+    gpkg_folder = "data/infraScanRail/Network/OSM_road"
 
     # List all geopackage files in the folder
     gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')]
@@ -270,11 +270,11 @@ def osm_nw_to_raster(limits):
     gdf_combined['speed_kph'].fillna(30, inplace=True)
     # print(gdf_combined.crs)
     # print(gdf_combined.head(10).to_string())
-    gdf_combined.to_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined.to_file('data/infraScanRail/Network/OSM_tif/nw_speed_limit.gpkg')
     print("file stored")
 
 
-    gdf_combined = gpd.read_file('data/Network/OSM_tif/nw_speed_limit.gpkg')
+    gdf_combined = gpd.read_file('data/infraScanRail/Network/OSM_tif/nw_speed_limit.gpkg')
 
     # Define the resolution
     resolution = 100
@@ -343,7 +343,7 @@ def osm_nw_to_raster(limits):
 
 
     with rasterio.open(
-            'data/Network/OSM_tif/speed_limit_raster.tif',
+            'data/infraScanRail/Network/OSM_tif/speed_limit_raster.tif',
             'w',
             driver='GTiff',
             height=raster.shape[0],
@@ -506,14 +506,14 @@ def raster_to_graph(raster_data):
 
 def travel_cost_polygon(frame):
 
-    points_all = gpd.read_file("data/Network/processed/points_attribute.gpkg")
+    points_all = gpd.read_file("data/infraScanRail/Network/processed/points_attribute.gpkg")
     # Need the node id as ID_point
     points_all = points_all[points_all["intersection"] == 0]
     points_all_frame = points_all.cx[frame[0]:frame[2], frame[1]:frame[3]]
     # print(points_all_frame.head(10).to_string())
 
     # travel speed
-    raster_file = "data/Network/OSM_tif/speed_limit_raster.tif"
+    raster_file = "data/infraScanRail/Network/OSM_tif/speed_limit_raster.tif"
     # should change lake speed to 0
     # and other area to slightly higher speed to other land covers
     with rasterio.open(raster_file) as dataset:
@@ -577,7 +577,7 @@ def travel_cost_polygon(frame):
 
     # Save the path length raster
     with rasterio.open(
-            'data/Network/travel_time/travel_time_raster.tif', 'w',
+            'data/infraScanRail/Network/travel_time/travel_time_raster.tif', 'w',
             driver='GTiff',
             height=path_length_raster.shape[0],
             width=path_length_raster.shape[1],
@@ -616,7 +616,7 @@ def travel_cost_polygon(frame):
     # Set NaN values to a specific NoData value, e.g., -1
     source_coord_raster[np.isnan(source_coord_raster)] = -1
 
-    path_id_raster = 'data/Network/travel_time/source_id_raster.tif'
+    path_id_raster = 'data/infraScanRail/Network/travel_time/source_id_raster.tif'
     with rasterio.open(path_id_raster, 'w',
         driver='GTiff',
         height=source_coord_raster.shape[0],
@@ -631,7 +631,7 @@ def travel_cost_polygon(frame):
     # get Voronoi polygons in vector data as gpd df
     gdf_polygon = raster_to_polygons(path_id_raster)
     #print(gdf_polygon.head(10).to_string())
-    gdf_polygon.to_file("data/Network/travel_time/Voronoi_statusquo.gpkg")
+    gdf_polygon.to_file("data/infraScanRail/Network/travel_time/Voronoi_statusquo.gpkg")
 
         # how to get the inputs? nodes in which reference system, weights automatically?
         # how to get the coordinates of the closest point?
@@ -704,7 +704,7 @@ def GetVoronoiCells(limits,outer,inner):
     return
 
 def GetNetworkNodes():
-    node_table = pd.read_csv("data/Network/Road_Node.csv", sep=";")
+    node_table = pd.read_csv("data/infraScanRail/Network/Road_Node.csv", sep=";")
     return
 
 def polygon_from_points(bounds=None, e_min=None, e_max=None, n_min=None, n_max=None, margin=0):
@@ -834,7 +834,7 @@ def GetTAZBasis(bbox, street_network_points):
     df_voronoi["ID_point"] = pointlist
     df_voronoi["geometry"] = df_voronoi[0]
     df_voronoi = df_voronoi.iloc[:, 1:]
-    df_voronoi.to_file("data/Voronoi/voronoi_basis.gpkg")
+    df_voronoi.to_file("data/infraScanRail/Voronoi/voronoi_basis.gpkg")
     return df_voronoi
 
 def GetTAZwithCommunes(basis):

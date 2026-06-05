@@ -416,7 +416,7 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
             - capacity_analysis_results: Dict with capacity analysis results for each development
 
     Side Effects:
-        - Writes capacity_intervention_costs.csv to data/costs/
+        - Writes capacity_intervention_costs.csv to data/infraScanRail/costs/
     """
     print("\n" + "="*80)
     print("PHASE 4: INFRASTRUCTURE DEVELOPMENTS")
@@ -807,7 +807,7 @@ def phase_10_old_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
     print("="*80 + "\n")
     st = time.time()
 
-    file_path = "data/Network/Rail-Service_Link_construction_cost.csv"
+    file_path = "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv"
 
     construction_and_maintenance_costs_old = construction_costs(
         file_path=file_path,
@@ -845,7 +845,7 @@ def phase_10_new_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
     print("="*80 + "\n")
     st = time.time()
 
-    file_path = "data/Network/Rail-Service_Link_construction_cost.csv"
+    file_path = "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv"
 
     construction_and_maintenance_costs_new = construction_costs(
         file_path=file_path,
@@ -888,7 +888,7 @@ def phase_11_old_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         settings.start_year_scenario,
         settings.end_year_scenario,
         settings.start_valuation_year,
-        cost_file_path="data/costs/construction_cost.csv" # Note: construction_cost_old replaced
+        cost_file_path="data/infraScanRail/costs/construction_cost.csv" # Note: construction_cost_old replaced
     )
 
     # Apply discounting
@@ -899,7 +899,7 @@ def phase_11_old_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         base_year=settings.start_valuation_year
     )
 
-    old_discounted_path = "data/costs/costs_and_benefits_old_discounted.csv"
+    old_discounted_path = "data/infraScanRail/costs/costs_and_benefits_old_discounted.csv"
     costs_and_benefits_old_discounted.to_csv(old_discounted_path)
     print(f"  ✓ Saved to: {old_discounted_path}")
 
@@ -931,7 +931,7 @@ def phase_11_new_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         settings.start_year_scenario,
         settings.end_year_scenario,
         settings.start_valuation_year,
-        cost_file_path="data/costs/construction_cost.csv"
+        cost_file_path="data/infraScanRail/costs/construction_cost.csv"
     )
 
     # Apply discounting
@@ -942,7 +942,7 @@ def phase_11_new_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         base_year=settings.start_valuation_year
     )
 
-    discounted_path = "data/costs/costs_and_benefits_discounted.csv"
+    discounted_path = "data/infraScanRail/costs/costs_and_benefits_discounted.csv"
     costs_and_benefits_discounted.to_csv(discounted_path)
     print(f"  ✓ Saved to: {discounted_path}")
 
@@ -990,7 +990,7 @@ def phase_12_old_cost_aggregation(runtimes: dict) -> None:
     st = time.time()
 
     # Load the discounted cost-benefit dataframe from Phase 11 OLD
-    costs_old_path = "data/costs/costs_and_benefits_old_discounted.csv"
+    costs_old_path = "data/infraScanRail/costs/costs_and_benefits_old_discounted.csv"
     print(f"  Loading OLD method costs: {costs_old_path}")
     costs_and_benefits_old_discounted = pd.read_csv(costs_old_path)
 
@@ -1017,7 +1017,7 @@ def phase_12_new_cost_aggregation(runtimes: dict) -> None:
     st = time.time()
 
     # Load the discounted cost-benefit dataframe from Phase 11 NEW
-    costs_path = "data/costs/costs_and_benefits_discounted.csv"
+    costs_path = "data/infraScanRail/costs/costs_and_benefits_discounted.csv"
     print(f"  Loading NEW method costs: {costs_path}")
     costs_and_benefits_discounted = pd.read_csv(costs_path)
 
@@ -1108,8 +1108,8 @@ def export_pipeline_comparison_report_statistics():
     print("="*80 + "\n")
 
     # Load data from both pipelines
-    new_data_path = "data/costs/total_costs_raw.csv"
-    old_data_path = "data/costs/total_costs_raw.csv" # Note: no old data file (_old)
+    new_data_path = "data/infraScanRail/costs/total_costs_raw.csv"
+    old_data_path = "data/infraScanRail/costs/total_costs_raw.csv" # Note: no old data file (_old)
 
     if not os.path.exists(new_data_path) or not os.path.exists(old_data_path):
         print(f"  ⚠ Data files not found - skipping report statistics export")
@@ -1837,7 +1837,7 @@ def import_process_network(use_cache):
     """Import and process railway network data."""
     if use_cache:
         print("Using cached rail network data...")
-        return gpd.read_file('data/Network/processed/points.gpkg')
+        return gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
     reformat_rail_nodes()
     network_ak2035, points = create_railway_services_AK2035()
     create_railway_services_AK2035_extended(network_ak2035, points)
@@ -1863,7 +1863,7 @@ def getStationOD(use_cache, stations_in_perimeter, only_demand_from_to_corridor=
 
 def add_construction_info_to_network():
     """Add construction cost information to network edges."""
-    const_cost_path = "data/Network/Rail-Service_Link_construction_cost.csv"
+    const_cost_path = "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv"
     rows = ['NumOfTracks', 'Bridges m', 'Tunnel m', 'TunnelTrack',
             'tot length m', 'length of 1', 'length of 2 ', 'length of 3 and more']
     df_railway_network = gpd.read_file(paths.RAIL_SERVICES_AK2035_PATH)
@@ -1883,7 +1883,7 @@ def add_construction_info_to_network():
 
 def create_travel_time_graphs(network_selection, use_cache, dev_id_lookup_table):
     """Create travel time graphs for status quo and all developments."""
-    cache_file = 'data/Network/travel_time/cache/od_times.pkl'
+    cache_file = 'data/infraScanRail/Network/travel_time/cache/od_times.pkl'
 
     if use_cache and os.path.exists(cache_file):
         print(f"Loading travel time graphs from cache: {cache_file}")
@@ -2075,7 +2075,7 @@ def compute_tts(dev_id_lookup, od_times_dev, od_times_status_quo, use_cache=Fals
         return dev_list, monetized_tt, scenario_list
 
     df_access = pd.read_csv(
-        "data/Network/Rail_Node.csv",
+        "data/infraScanRail/Network/Rail_Node.csv",
         sep=";",
         decimal=",",
         encoding="ISO-8859-1"
@@ -2093,7 +2093,7 @@ def compute_tts(dev_id_lookup, od_times_dev, od_times_status_quo, use_cache=Fals
         df_access
     )
 
-    output_path = "data/costs/traveltime_savings.csv"
+    output_path = "data/infraScanRail/costs/traveltime_savings.csv"
     monetized_tt, scenario_list, dev_list = calculate_monetized_tt_savings(
         TTT_status_quo,
         TTT_developments,
@@ -2130,7 +2130,7 @@ def generate_infra_development(use_cache, mod_type, generate_plots=True):
     if mod_type in ('ALL', 'NEW_DIRECT_CONNECTIONS'):
         print(f"\n  ✓ Generating NEW_DIRECT_CONNECTIONS (mod_type={mod_type})")
         df_network = gpd.read_file(settings.infra_generation_rail_network)
-        df_points = gpd.read_file('data/Network/processed/points.gpkg')
+        df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
         G, pos = prepare_Graph(df_network, df_points)
 
         # Analyze the railway network to find missing connections
@@ -2191,10 +2191,10 @@ def rearange_costs(cost_and_benefits, output_prefix="", csv_only=False):
         csv_only: If True, only generate CSV output (skip .gpkg files)
 
     Outputs:
-        - "data/costs/total_costs_raw{output_prefix}.csv" (without redundant columns)
-        - "data/costs/total_costs{output_prefix}.csv"
-        - "data/costs/total_costs{output_prefix}_with_geometry.gpkg" (unless csv_only=True)
-        - "data/costs/total_costs_summary{output_prefix}.csv" (new summary file)
+        - "data/infraScanRail/costs/total_costs_raw{output_prefix}.csv" (without redundant columns)
+        - "data/infraScanRail/costs/total_costs{output_prefix}.csv"
+        - "data/infraScanRail/costs/total_costs{output_prefix}_with_geometry.gpkg" (unless csv_only=True)
+        - "data/infraScanRail/costs/total_costs_summary{output_prefix}.csv" (new summary file)
 
     Convert all costs in million CHF
     """
@@ -2235,16 +2235,16 @@ def visualize_results(clear_plot_directory=False, plot_preferences=None):
     # Generate core visualizations if any plot type is enabled
     if any_plots_enabled:
         # Generate all visualizations (data processing + plotting)
-        plotting(input_file="data/costs/total_costs_with_geometry.gpkg",
-                 output_file="data/costs/processed_costs.gpkg",
-                 node_file="data/Network/Rail_Node.xlsx")
+        plotting(input_file="data/infraScanRail/costs/total_costs_with_geometry.gpkg",
+                 output_file="data/infraScanRail/costs/processed_costs.gpkg",
+                 node_file="data/infraScanRail/Network/Rail_Node.xlsx")
 
         # Make a plot of the developments
         if plot_preferences.get('small_developments', False):
             plot_developments_expand_by_one_station()
 
         # Load the dataset and generate plots with user preferences
-        results_raw = pd.read_csv("data/costs/total_costs_raw.csv")
+        results_raw = pd.read_csv("data/infraScanRail/costs/total_costs_raw.csv")
         railway_lines = gpd.read_file(paths.NEW_RAILWAY_LINES_PATH)
         create_and_save_plots(df=results_raw, railway_lines=railway_lines, plot_preferences=plot_preferences)
 

@@ -162,7 +162,7 @@ def infrascanrail():
 
     ##here a check for capacity could be added
     # Compute the construction costs for each development
-    file_path = "data/Network/Rail-Service_Link_construction_cost.csv"
+    file_path = "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv"
     construction_and_maintenance_costs = construction_costs(file_path=file_path,
                                                             cost_per_meter=cp.track_cost_per_meter,
                                                             tunnel_cost_per_meter=cp.tunnel_cost_per_meter,
@@ -389,7 +389,7 @@ def compute_tts(dev_id_lookup,
 
     # 3) If we reach here, use_cache=False ⇒ do the “full” computation
     df_access = pd.read_csv(
-        "data/Network/Rail_Node.csv",
+        "data/infraScanRail/Network/Rail_Node.csv",
         sep=";",
         decimal=",",
         encoding="ISO-8859-1"
@@ -413,7 +413,7 @@ def compute_tts(dev_id_lookup,
     print("TTT_developments:", TTT_developments)
 
     # Monetize travel‐time savings
-    output_path = "data/costs/traveltime_savings.csv"
+    output_path = "data/infraScanRail/costs/traveltime_savings.csv"
     monetized_tt, scenario_list, dev_list = calculate_monetized_tt_savings(
         TTT_status_quo,
         TTT_developments,
@@ -434,7 +434,7 @@ def compute_tts(dev_id_lookup,
 def import_process_network(use_cache):
     if use_cache:
         print("Using cached rail network data...")
-        return gpd.read_file('data/Network/processed/points.gpkg')
+        return gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
     reformat_rail_nodes()
     network_ak2035, points = create_railway_services_AK2035()
     create_railway_services_AK2035_extended(network_ak2035, points)
@@ -473,7 +473,7 @@ def getScenarios(od_directory_scenario, railway_station_OD):
 
 
 def add_construction_info_to_network():
-    const_cost_path = "data/Network/Rail-Service_Link_construction_cost.csv"
+    const_cost_path = "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv"
     rows = ['NumOfTracks', 'Bridges m', 'Tunnel m', 'TunnelTrack',
             'tot length m', 'length of 1', 'length of 2 ', 'length of 3 and more']
     df_railway_network = gpd.read_file(paths.RAIL_SERVICES_AK2035_PATH)
@@ -497,7 +497,7 @@ def add_construction_info_to_network():
 
 def create_travel_time_graphs(network_selection, use_cache, dev_id_lookup_table):
     # Define cache file for pickle
-    cache_file = 'data/Network/travel_time/cache/od_times.pkl'
+    cache_file = 'data/infraScanRail/Network/travel_time/cache/od_times.pkl'
 
     od_nodes = [
         'Rüti ZH', 'Nänikon-Greifensee', 'Uster', 'Wetzikon ZH',
@@ -584,8 +584,8 @@ def create_travel_time_graphs(network_selection, use_cache, dev_id_lookup_table)
 def rearange_costs(cost_and_benefits):
     ##################################################################################
     # Aggregate the single cost elements to one dataframe
-    # New dataframe is stored in "data/costs/total_costs.gpkg"
-    # New dataframe also stored in "data/costs/total_costs.csv"
+    # New dataframe is stored in "data/infraScanRail/costs/total_costs.gpkg"
+    # New dataframe also stored in "data/infraScanRail/costs/total_costs.csv"
     # Convert all costs in million CHF
     print(" -> Aggregate costs")
     aggregate_costs(cost_and_benefits, cp.tts_valuation_period)
@@ -637,9 +637,9 @@ def visualize_results(clear_plot_directory=False):
 
     # Generate all visualizations
 
-    plotting(input_file="data/costs/total_costs_with_geometry.gpkg",
-             output_file="data/costs/processed_costs.gpkg",
-             node_file="data/Network/Rail_Node.xlsx")
+    plotting(input_file="data/infraScanRail/costs/total_costs_with_geometry.gpkg",
+             output_file="data/infraScanRail/costs/processed_costs.gpkg",
+             node_file="data/infraScanRail/Network/Rail_Node.xlsx")
     # make a plot of the developments
     plot_developments_expand_by_one_station()
     # plot the scenarios
@@ -650,7 +650,7 @@ def visualize_results(clear_plot_directory=False):
     # plot the empl and pop with the comunal boarders and the catchment
     # to visualize the OD-Transformation 
     # plot_catchment_and_distributions(
-    #     s_bahn_lines_path="data/Network/processed/split_s_bahn_lines.gpkg",
+    #     s_bahn_lines_path="data/infraScanRail/Network/processed/split_s_bahn_lines.gpkg",
     #     water_bodies_path="data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp",
     #     catchment_raster_path="data/catchment_pt/catchement.tif",
     #     communal_borders_path="data/_basic_data/Gemeindegrenzen/UP_GEMEINDEN_F.shp",
@@ -661,7 +661,7 @@ def visualize_results(clear_plot_directory=False):
     # Load the dataset and generate plots:
     # - Enhanced boxplot and strip plot for monetized savings by development.
     # Plots are saved in the 'plots' directory.
-    results_raw = pd.read_csv("data/costs/total_costs_raw.csv")
+    results_raw = pd.read_csv("data/infraScanRail/costs/total_costs_raw.csv")
     railway_lines = gpd.read_file(paths.NEW_RAILWAY_LINES_PATH)
     create_and_save_plots(df=results_raw, railway_lines=railway_lines)
     # Mit dem vorhandenen DataFrame
@@ -685,8 +685,8 @@ def generate_infra_development(use_cache, mod_type):
         # Import the generated points as dataframe
         # Filter the generated links that connect to one of the access point within the considered corridor
         # These access points are defined in the manually defined list of access points
-        # The links to corridor are stored in "data/Network/processed/developments_to_corridor_attribute.gpkg"
-        # The generated points with link to access point in the corridor are stored in "data/Network/processed/generated_nodes_connecting_corridor.gpkg"
+        # The links to corridor are stored in "data/infraScanRail/Network/processed/developments_to_corridor_attribute.gpkg"
+        # The generated points with link to access point in the corridor are stored in "data/infraScanRail/Network/processed/generated_nodes_connecting_corridor.gpkg"
         # The end point [ID_new] of developments_to_corridor_attribute are equivalent to the points in generated_nodes_connecting_corridor
         only_links_to_corridor()
         calculate_new_service_time()
@@ -696,7 +696,7 @@ def generate_infra_development(use_cache, mod_type):
 
     if mod_type in ('ALL', 'NEW_DIRECT_CONNECTIONS'):
         df_network = gpd.read_file(settings.infra_generation_rail_network)
-        df_points = gpd.read_file('data/Network/processed/points.gpkg')
+        df_points = gpd.read_file('data/infraScanRail/Network/processed/points.gpkg')
         G, pos = prepare_Graph(df_network, df_points)
 
         # Analyze the railway network to find missing connections

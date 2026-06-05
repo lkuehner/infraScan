@@ -1514,24 +1514,25 @@ def _plot_modal_split_band(
     year_stats["mean_minus_1_65std"] = year_stats["mean"] - 1.65 * std
 
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], color="grey", alpha=0.3, label="Gesamter Bereich")
-    ax.plot(year_stats["year"], year_stats["mean_plus_1_65std"], color="red", linestyle="-", alpha=0.7, label="+1,65σ (95%)")
-    ax.plot(year_stats["year"], year_stats["mean_minus_1_65std"], color="red", linestyle="-", alpha=0.7, label="-1,65σ (5%)")
-    ax.plot(year_stats["year"], year_stats["mean"], color="grey", linestyle="--", alpha=0.8, label="Mittelwert")
+    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], color="grey", alpha=0.3, label="Total range")
+    ax.plot(year_stats["year"], year_stats["mean_plus_1_65std"], color="red", linestyle="-", alpha=0.7, label="+1.65σ (95%)")
+    ax.plot(year_stats["year"], year_stats["mean_minus_1_65std"], color="red", linestyle="-", alpha=0.7, label="-1.65σ (5%)")
+    ax.plot(year_stats["year"], year_stats["mean"], color="grey", linestyle="--", alpha=0.8, label="Mean")
 
     sample_id = int(df["scenario"].drop_duplicates().sample(n=1, random_state=42).iloc[0])
     sample_df = df[df["scenario"] == sample_id].sort_values("year")
-    ax.plot(sample_df["year"], sample_df["modal_split"], color="blue", linewidth=2, label=f"Beispielszenario {sample_id}")
+    ax.plot(sample_df["year"], sample_df["modal_split"], color="blue", linewidth=2, label=f"Sample scenario {sample_id}")
 
     lower_bound, upper_bound = federal_2050_range
     marker_color = "#E08D3C"
-    marker_description = f"Verkehrsperspektive 2050 ({lower_bound*100:.1f}-{upper_bound*100:.1f}%)"
+    marker_description = f"Transport Perspectives 2050 ({lower_bound*100:.1f}-{upper_bound*100:.1f}%)"
     ax.vlines(x=2050, ymin=lower_bound, ymax=upper_bound, colors=marker_color, linestyles="solid", linewidth=2, label=marker_description)
     ax.plot([2050], [lower_bound], marker="_", markersize=10, color=marker_color)
     ax.plot([2050], [upper_bound], marker="_", markersize=10, color=marker_color)
 
-    ax.set_xlabel("Jahr")
-    ax.set_ylabel("Modal-Split (%)")
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Modal split (%)")
+    ax.set_ylim(0.0, 1.0)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x * 100:.0f}%"))
     ax.set_title(title)
     ax.grid(True)
@@ -1574,6 +1575,43 @@ def _plot_value_band(
     plt.close(fig)
 
 
+def _plot_modal_split_stacked_mean(
+    rail_df: pd.DataFrame,
+    road_df: pd.DataFrame,
+    other_df: pd.DataFrame,
+    output_path: str,
+) -> None:
+    rail_mean = rail_df.groupby("year")["modal_split"].mean().sort_index()
+    road_mean = road_df.groupby("year")["modal_split"].mean().sort_index()
+    other_mean = other_df.groupby("year")["modal_split"].mean().sort_index()
+
+    years = rail_mean.index.to_numpy()
+    rail_values = rail_mean.to_numpy()
+    road_values = road_mean.reindex(rail_mean.index).to_numpy()
+    other_values = other_mean.reindex(rail_mean.index).to_numpy()
+
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    ax.stackplot(
+        years,
+        road_values,
+        rail_values,
+        other_values,
+        labels=["Road", "Rail", "Other"],
+        colors=["#3E7CB1", "#837AC7", "#A8B5A2"],
+        alpha=0.95,
+    )
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Mean modal split (%)")
+    ax.set_ylim(0.0, 1.0)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x * 100:.0f}%"))
+    ax.set_title("Mean modal split composition over time")
+    ax.grid(True, axis="y", alpha=0.25)
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_shared_scenario_components(
     components: Dict[str, Any],
     summary_df: pd.DataFrame,
@@ -1598,6 +1636,12 @@ def plot_shared_scenario_components(
         "Other modal split scenarios",
         os.path.join(output_dir, "modal_split_other.png"),
         federal_2050_range=(0.067, 0.089),
+    )
+    _plot_modal_split_stacked_mean(
+        components["modal_split_rail"],
+        components["modal_split_road"],
+        components["modal_split_other"],
+        os.path.join(output_dir, "modal_split_stacked_mean.png"),
     )
     _plot_value_band(
         components["distance_per_person"],

@@ -1,0 +1,2 @@
+Absolute accessibility maps with catchment boundaries and labeled catchment accessibility values.
+Status quo is shown once; development maps use their own Voronoi overlay and value labels.

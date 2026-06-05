@@ -177,6 +177,60 @@ def read_development_files():
     return developments
 
 
+def train_km():
+    """
+    Calculate annual train-km for the rail status quo and for every development network.
+
+    - The calculation is based on service supply:
+      segment length * service frequency * operating hours * operating days.
+    """
+    base_network = pd.read_csv( "data/infraScanRail/Network/Rail-Service_Link_construction_cost.csv", sep=";", decimal=",",encoding="utf-8-sig",)
+    development_files = sorted(
+        file_path
+        for file_path in glob.glob("data/infraScanRail/Network/processed/developments/*.gpkg")
+        if not os.path.basename(file_path).startswith("._")
+    )
+    # Assumptions for train-km calculation
+    operating_hours_per_day = 18
+    operating_days_per_year = 365
+    empty_train_weight_tonnes = cp.empty_train_weight_tonnes
+
+    # The base rail file stores directed service segments with their service frequency.
+    # Summing length * frequency over all rows therefore gives train-km per operating hour.
+    status_quo_train_km = (
+        base_network["tot length m"].fillna(0).astype(float) / 1000.0
+        * base_network["Frequency"].fillna(0).astype(float)
+    ).sum() * operating_hours_per_day * operating_days_per_year
+
+    results = []
+
+    for file_path in development_files:
+        dev_gdf = gpd.read_file(file_path)
+        dev_id = dev_gdf["dev_id"].iloc[0]
+
+        # Each development file contains the full network with the development already applied.
+        # Geometry is stored in meters and Frequency is trains per hour on the directed segment.
+        development_train_km = (
+            dev_gdf.geometry.length.fillna(0).astype(float) / 1000.0
+            * dev_gdf["Frequency"].fillna(0).astype(float)
+        ).sum() * operating_hours_per_day * operating_days_per_year
+
+        results.append({
+            "Development": dev_id,
+            "StatusQuoTrainKM": status_quo_train_km,
+            "DevelopmentTrainKM": development_train_km,
+            "DeltaTrainKM": development_train_km - status_quo_train_km,
+            "StatusQuoBTKM": status_quo_train_km * empty_train_weight_tonnes,
+            "DevelopmentBTKM": development_train_km * empty_train_weight_tonnes,
+            "DeltaBTKM": (development_train_km - status_quo_train_km) * empty_train_weight_tonnes,
+        })
+
+    train_km_df = pd.DataFrame(results)
+    train_km_df.to_csv(paths.TRAIN_KM_COSTS, index=False)
+    print(f"Train-km saved to: {paths.TRAIN_KM_COSTS}")
+    return train_km_df
+
+
 def process_via_column(df):
     """
     Process the Via column in a DataFrame.
@@ -267,6 +321,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
 
     for i, dev_df in enumerate(developments):
         dev_id = dev_df["dev_id"].iloc[0]
+        dev_track_construction_cost = 0.0
+        dev_tunnel_construction_cost = 0.0
+        dev_bridge_construction_cost = 0.0
 
         if dev_id < settings.dev_id_start_new_direct_connections:
             # ================================================================
@@ -369,6 +426,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
                         # Skip to storing development costs
                         development_costs.append({
                             "Development": dev_id,
+                            "Dev_TrackConstructionCost": dev_track_construction_cost,
+                            "Dev_TunnelConstructionCost": dev_tunnel_construction_cost,
+                            "Dev_BridgeConstructionCost": dev_bridge_construction_cost,
                             "Dev_ConstructionCost": dev_construction_cost,
                             "Dev_MaintenanceCost": dev_maintenance_cost,
                             "uncoveredOperatingCost": uncovered_operating_cost
@@ -463,6 +523,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
                     # ================================================================
 
                     # Summarize total construction and maintenance costs for the current development
+                    dev_track_construction_cost = insufficient_capacity['NewTrackCost'].sum()
+                    dev_tunnel_construction_cost = insufficient_capacity['NewTunnelCost'].sum()
+                    dev_bridge_construction_cost = insufficient_capacity['NewBridgeCost'].sum()
                     dev_construction_cost = insufficient_capacity['construction_cost'].sum()
                     dev_maintenance_cost = insufficient_capacity['maintenance_cost'].sum() * 0.65  # 65% of the total maintenance cost
                 else:
@@ -508,6 +571,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
             bridge_cost = bridge_length * bridge_cost_per_meter
 
             # Total construction cost
+            dev_track_construction_cost = track_cost
+            dev_tunnel_construction_cost = tunnel_cost
+            dev_bridge_construction_cost = bridge_cost
             dev_construction_cost = track_cost + tunnel_cost + bridge_cost
 
             # Calculate maintenance costs
@@ -525,6 +591,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
         # Store development costs
         development_costs.append({
             "Development": dev_id,
+            "Dev_TrackConstructionCost": dev_track_construction_cost,
+            "Dev_TunnelConstructionCost": dev_tunnel_construction_cost,
+            "Dev_BridgeConstructionCost": dev_bridge_construction_cost,
             "Dev_ConstructionCost": dev_construction_cost,
             "Dev_MaintenanceCost": dev_maintenance_cost,
             "uncoveredOperatingCost": uncovered_operating_cost
@@ -555,6 +624,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
                 'construction_cost': 'CapInt_ConstructionCost',
                 'maintenance_cost': 'CapInt_MaintenanceCost_Annual'
             }, inplace=True)
+            cap_int_summary['CapInt_TrackConstructionCost'] = cap_int_summary['CapInt_ConstructionCost']
+            cap_int_summary['CapInt_TunnelConstructionCost'] = 0.0
+            cap_int_summary['CapInt_BridgeConstructionCost'] = 0.0
 
             # Convert annual maintenance to total over duration
             cap_int_summary['CapInt_MaintenanceCost'] = cap_int_summary['CapInt_MaintenanceCost_Annual'] * duration
@@ -568,6 +640,9 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
             )
 
             # Fill NaN with 0 for developments without capacity interventions
+            combined_costs_df['CapInt_TrackConstructionCost'].fillna(0.0, inplace=True)
+            combined_costs_df['CapInt_TunnelConstructionCost'].fillna(0.0, inplace=True)
+            combined_costs_df['CapInt_BridgeConstructionCost'].fillna(0.0, inplace=True)
             combined_costs_df['CapInt_ConstructionCost'].fillna(0.0, inplace=True)
             combined_costs_df['CapInt_MaintenanceCost'].fillna(0.0, inplace=True)
 
@@ -575,17 +650,35 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
             print(f"Warning: Capacity intervention costs file not found at {capacity_intervention_costs_path}")
             print("Setting capacity intervention costs to 0 for all developments.")
             combined_costs_df = development_costs_df.copy()
+            combined_costs_df['CapInt_TrackConstructionCost'] = 0.0
+            combined_costs_df['CapInt_TunnelConstructionCost'] = 0.0
+            combined_costs_df['CapInt_BridgeConstructionCost'] = 0.0
             combined_costs_df['CapInt_ConstructionCost'] = 0.0
             combined_costs_df['CapInt_MaintenanceCost'] = 0.0
     else:
         # OLD METHOD: No capacity intervention costs (capacity is in Dev costs for EXTEND_LINES)
         combined_costs_df = development_costs_df.copy()
+        combined_costs_df['CapInt_TrackConstructionCost'] = 0.0
+        combined_costs_df['CapInt_TunnelConstructionCost'] = 0.0
+        combined_costs_df['CapInt_BridgeConstructionCost'] = 0.0
         combined_costs_df['CapInt_ConstructionCost'] = 0.0
         combined_costs_df['CapInt_MaintenanceCost'] = 0.0
 
     # ================================================================
     # CALCULATE TOTAL COSTS
     # ================================================================
+    combined_costs_df['TrackConstructionCost'] = (
+        combined_costs_df['Dev_TrackConstructionCost'] +
+        combined_costs_df['CapInt_TrackConstructionCost']
+    )
+    combined_costs_df['TunnelConstructionCost'] = (
+        combined_costs_df['Dev_TunnelConstructionCost'] +
+        combined_costs_df['CapInt_TunnelConstructionCost']
+    )
+    combined_costs_df['BridgeConstructionCost'] = (
+        combined_costs_df['Dev_BridgeConstructionCost'] +
+        combined_costs_df['CapInt_BridgeConstructionCost']
+    )
     combined_costs_df['TotalConstructionCost'] = (
         combined_costs_df['Dev_ConstructionCost'] +
         combined_costs_df['CapInt_ConstructionCost']
@@ -603,10 +696,19 @@ def construction_costs(file_path, cost_per_meter, tunnel_cost_per_meter, bridge_
     # Reorder columns for output
     output_columns = [
         'Development',
+        'Dev_TrackConstructionCost',
+        'Dev_TunnelConstructionCost',
+        'Dev_BridgeConstructionCost',
         'Dev_ConstructionCost',
         'Dev_MaintenanceCost',
+        'CapInt_TrackConstructionCost',
+        'CapInt_TunnelConstructionCost',
+        'CapInt_BridgeConstructionCost',
         'CapInt_ConstructionCost',
         'CapInt_MaintenanceCost',
+        'TrackConstructionCost',
+        'TunnelConstructionCost',
+        'BridgeConstructionCost',
         'TotalConstructionCost',
         'TotalMaintenanceCost',
         'YearlyMaintenanceCost',
@@ -898,7 +1000,7 @@ def transform_and_reshape_cost_df(output_prefix="", csv_only=False):
         return None
 
 
-
+"""
 def create_merged_trainstation_buffers(closest_trainstations_df, stops, output_path):
 
     '''
@@ -1000,7 +1102,7 @@ def create_merged_trainstation_buffers(closest_trainstations_df, stops, output_p
     # Process both employment and population rasters
     process_raster(empl_path, output_empl_path)
     process_raster(pop_path, output_pop_path)
-
+"""
 
 #######################################################################################################################
 # From here on the code is destinated to compute the travel time on the highway network

@@ -6,12 +6,12 @@ import re
 rail_network = 'AK_2035'
 
 #CACHE
-use_cache_network = True #Phase 3.1: Baseline network (current + AK2035)
+use_cache_network = False #Phase 3.1: Baseline network (current + AK2035)
 use_cache_pt_catchment = True #Phase 2.2: Public transport catchment areas (OD matrix)
-use_cache_developments = True #Phase 4.1: Infrastructure developments (new networks)
+use_cache_developments = False #Phase 4.1: Infrastructure developments (new networks)
 use_cache_catchmentOD = True #Phase 5
 use_cache_stationsOD = True #Phase 5
-use_cache_traveltime_graph = True #Phase 6: travel time graph with developments
+use_cache_traveltime_graph = False #Phase 6: travel time graph with developments
 use_cache_scenarios = True #Phase 8: Scenario generation (OD matrices for generated scenarios)
 use_cache_tts_calc = False #Phase 9: Travel time savings calculation
 
