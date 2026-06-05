@@ -1,0 +1,6 @@
+maxiter,available_cases,scenario_count,development_count,mean_TT_h,std_TT_h,CV,mean_flow_129,mean_flow_178,mean_TTS_min,runtime_solver_sum_h,solver_case_count,mean_constraint_violation,note
+2,20,5.0,4.0,1.2719,0.3752,0.295,3565.3528,3572.7908,13702.4046,4.2111,25.0,0.0148,
+3,0,,,,,,,,,,,,no saved output found
+5,20,5.0,4.0,0.9691,0.2064,0.213,3000.7855,3466.647,24240.257,8.3306,25.0,0.2536,
+8,20,5.0,4.0,0.8564,0.136,0.1589,2747.0784,3371.5114,10965.3745,20.0361,25.0,0.0722,
+10,0,,,,,,,,,,,,no saved output found

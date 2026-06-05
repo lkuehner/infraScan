@@ -9,3 +9,9 @@ infraScanRail/__pycache__
 infraScanRail/_unused_files
 /infraScanRail/markdowns
 .claude/settings.local.json
+
+# Python Cache
+__pycache__/
+*.pyc
+
+.codex/

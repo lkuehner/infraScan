@@ -2,7 +2,7 @@ from typing import Iterable, Optional
 
 import pandas as pd
 
-from . import cost_parameters
+from . import common_cost_parameters
 
 
 RESULT_COLUMNS = [
@@ -78,8 +78,8 @@ def build_road_construction_result_df(
 
     # Calculate capital recovery factor for converting construction costs to annualized costs 
     crf = capital_recovery_factor(
-        rate=cost_parameters.discount_rate,
-        lifetime_years=cost_parameters.road_construction_lifetime_years,
+        rate=common_cost_parameters.discount_rate,
+        lifetime_years=common_cost_parameters.road_construction_lifetime_years,
     )
 
     # Construction costs are development-specific, not scenario-specific.
@@ -117,9 +117,9 @@ def build_road_maint_result_df(
     # Calculate dynamization factor for converting maintenance costs to annualized costs
     # Using 1% growth rate for maintenance costs (NISTRA) and 2% discount rate (SN-641821) 
     dyn_factor = dynamization_factor(
-        growth_rate=cost_parameters.road_maintenance_operating_cost_growth,
-        appraisal_years=cost_parameters.appraisal_years,
-        discount_rate=cost_parameters.discount_rate,
+        growth_rate=common_cost_parameters.road_maintenance_operating_cost_growth,
+        appraisal_years=common_cost_parameters.appraisal_years,
+        discount_rate=common_cost_parameters.discount_rate,
     )
 
 
@@ -159,9 +159,9 @@ def build_road_tts_result_df(
     # Calculate dynamization factor for converting tts costs to annualized costs
     # Using real wage growth rate of 0.69% and 2% discount rate
     dyn_factor = dynamization_factor(
-        growth_rate=cost_parameters.real_wage_growth,
-        appraisal_years=cost_parameters.appraisal_years,
-        discount_rate=cost_parameters.discount_rate,
+        growth_rate=common_cost_parameters.real_wage_growth,
+        appraisal_years=common_cost_parameters.appraisal_years,
+        discount_rate=common_cost_parameters.discount_rate,
     )
 
 
@@ -209,8 +209,8 @@ def build_rail_construction_result_df(
 
     # Calculate capital recovery factor for converting construction costs to annualized costs 
     crf = capital_recovery_factor(
-        rate=cost_parameters.discount_rate,
-        lifetime_years=cost_parameters.rail_construction_lifetime_years,
+        rate=common_cost_parameters.discount_rate,
+        lifetime_years=common_cost_parameters.rail_construction_lifetime_years,
     )
 
     # Construction costs are development-specific, not scenario-specific.
@@ -244,7 +244,7 @@ def build_rail_maint_result_df(
     """
     rows = []
 
-    dyn_factor = cost_parameters.rail_maintenance_cost_growth
+    dyn_factor = common_cost_parameters.rail_maintenance_cost_growth
 
 
     # Maintenance costs are development-specific, not scenario-specific.
@@ -277,7 +277,7 @@ def build_rail_operation_result_df(
     """
     rows = []
 
-    dyn_factor = cost_parameters.rail_operation_cost_growth
+    dyn_factor = common_cost_parameters.rail_operation_cost_growth
 
 
     # Operation costs are development-specific, not scenario-specific.
@@ -314,12 +314,12 @@ def build_rail_tts_result_df(
     # Calculate dynamization factor for converting tts costs to annualized costs
     # Using real wage growth rate of 0.69% and 2% discount rate
     dyn_factor = dynamization_factor(
-        growth_rate=cost_parameters.real_wage_growth,
-        appraisal_years=cost_parameters.appraisal_years,
-        discount_rate=cost_parameters.discount_rate,
+        growth_rate=common_cost_parameters.real_wage_growth,
+        appraisal_years=common_cost_parameters.appraisal_years,
+        discount_rate=common_cost_parameters.discount_rate,
     )
     tts_df["year"] = tts_df["year"].astype(int)
-    tts_df = tts_df[tts_df["year"] == cost_parameters.prognosis_year].copy()
+    tts_df = tts_df[tts_df["year"] == common_cost_parameters.prognosis_year].copy()
 
     for row in tts_df.itertuples(index=False):
             rows.append({

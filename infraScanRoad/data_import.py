@@ -1075,7 +1075,7 @@ def landuse(limits, suffix=None):
     protected_area_full = fill_raster_dataframe(protected_area)
     print(protected_area_full.head(10).to_string())
     # Correction of the reference of each raster cell from bottom left to top left
-    # protected_area_full["N_COORD"] = protected_area_full["N_COORD"] + 100
+    protected_area_full["N_COORD"] = protected_area_full["N_COORD"] + 100
     suffix_token = f"_{suffix}" if suffix else ""
     csv_to_tiff(protected_area_full, attribute="AS18_27", path=f"data/landuse_landcover/processed/protected_area{suffix_token}.tif")
     # print(areal_stat.head(50).to_string())
@@ -1098,7 +1098,7 @@ def get_unproductive_area(limits, suffix=None):
     unproductive_area_full = fill_raster_dataframe(unproductive_area)
     #print(unproductive_area_full.head(10).to_string())
     # Correction of the reference of each raster cell from bottom left to top left
-    # unproductive_area_full["N_COORD"] = unproductive_area_full["N_COORD"] + 100
+    unproductive_area_full["N_COORD"] = unproductive_area_full["N_COORD"] + 100
     suffix_token = f"_{suffix}" if suffix else ""
     csv_to_tiff(unproductive_area_full, attribute="AS18_27", path=f"data/landuse_landcover/processed/unproductive_area{suffix_token}.tif")
 

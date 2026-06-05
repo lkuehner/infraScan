@@ -1,0 +1,161 @@
+[2026-05-25T18:40:21+02:00] Starting infraScanRoad job 611035
+Host: eu-a2p-313
+Working directory: /cluster/home/lkuehner/MSc_Thesis
+Python: /cluster/home/lkuehner/miniforge3/envs/infrascan/bin/python
+
+================================================================================
+PHASE 1: INITIALIZE VARIABLES
+================================================================================
+
+
+
+
+
+================================================================================
+PHASE 2: DATA IMPORT
+================================================================================
+
+  [CHECKPOINT] Skipping: import_raw_data_corridor
+  [CHECKPOINT] Skipping: protected_area_corridor
+
+================================================================================
+PHASE 3: INFRASTRUCTURE DEVELOPMENTS
+================================================================================
+
+  [CHECKPOINT] Skipping: map_access_points
+  [CHECKPOINT] Skipping: preprocess_network
+  [CHECKPOINT] Skipping: generate_infrastructure
+  [CHECKPOINT] Loaded: generate_infrastructure
+
+================================================================================
+PHASE 4: SCENARIO GENERATION
+================================================================================
+
+  [CHECKPOINT] Skipping: import_scenario_variables
+  [CHECKPOINT] Skipping: scenario_generation_generated
+
+================================================================================
+PHASE 5: COSTS AND ACCESSIBILITY
+================================================================================
+
+  [CHECKPOINT] Skipping: import_raw_data_variables
+  [CHECKPOINT] Skipping: protected_area_variables
+  [CHECKPOINT] Skipping: osm_network
+  [CHECKPOINT] Skipping: elevation_tunnel_bridges
+  [CHECKPOINT] Skipping: construction_costs
+  [CHECKPOINT] Skipping: externalities
+  [CHECKPOINT] Skipping: travel_time_voronoi
+  [CHECKPOINT] Skipping: travel_time_developments
+  [CHECKPOINT] Skipping: combine_tt_voronoi
+  [CHECKPOINT] Skipping: accessibility
+  [CHECKPOINT] Loaded: accessibility
+
+================================================================================
+PHASE 6: TRAVEL TIME SAVINGS
+================================================================================
+
+  -> Using travel time savings method: od
+  [CHECKPOINT] Skipping: od_matrices_generated
+  [CHECKPOINT] Skipping: tt_optimization_status_quo_by_od
+Flag: link_traffic_to_map skipped for GENERATED scenarios
+OD TT by development-scenario:   0%|          | 0/6 [00:00<?, ?it/s]OD TT by development-scenario: 100%|██████████| 6/6 [00:00<00:00, 1337.26it/s]
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2950: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  points = gpd.GeoDataFrame(pd.concat([points, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/scoring.py:2973: FutureWarning: In a future version, object-dtype columns with all-bool values will not be included in reductions with bool_only=True. Explicitly cast to bool dtype instead.
+  edges = gpd.GeoDataFrame(pd.concat([edges, pd.DataFrame(temp).T], ignore_index=True))
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+/cluster/home/lkuehner/miniforge3/envs/infrascan/lib/python3.11/site-packages/scipy/optimize/_hessian_update_strategy.py:182: UserWarning: delta_grad == 0.0. Check if the approximated function is linear. If the function is linear better results can be obtained by defining the Hessian as zero instead of using quasi-Newton approximations.
+  warn('delta_grad == 0.0. Check if the approximated '
+Flag: tt_optimization_all_developments is complete
+  [CHECKPOINT] Saved: tt_optimization_developments_by_od_raster
+Saved detailed OD TT savings to: data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv
+Saved aggregated TT savings to: data/infraScanRoad/costs/traveltime_savings_od.csv
+  [CHECKPOINT] Saved: tt_monetization_od
+
+================================================================================
+PHASE 7: COST-BENEFIT INTEGRATION
+================================================================================
+
+ -> Aggregate costs
+Using travel time savings input: data/infraScanRoad/costs/traveltime_savings_od.csv
+Number of developments: 2
+   ID_new     cost_path  cost_bridge  cost_tunnel  building_costs  climate_cost  land_realloc        nature      noise_s1      noise_s2      noise_s3   maintenance  tt_scenario_29  tt_scenario_30  externalities_s1  externalities_s2  externalities_s3  construction_maintenance
+0       2 -7.386245e+07   -3195000.0         -0.0   -1.791575e+08 -1.360826e+07 -5.783002e+06 -4.429816e+07 -2.762353e+08 -2.536205e+08 -2.988500e+08 -1.300683e+08   -1.073459e+10   -3.062629e+08     -3.399247e+08     -3.173099e+08     -3.625395e+08             -3.092258e+08
+1     103 -8.757629e+07   -3195000.0         -0.0   -1.928713e+08 -1.610006e+07 -6.007466e+06 -5.252288e+07 -2.967161e+08 -2.725875e+08 -3.208447e+08 -1.423167e+08   -1.075953e+10   -3.209955e+08     -3.713465e+08     -3.472179e+08     -3.954751e+08             -3.351879e+08
+  [CHECKPOINT] Saved: aggregate_costs
+  -> Using total costs input: data/infraScanRoad/costs/total_costs_od.gpkg
+
+================================================================================
+PHASE 8: VISUALIZATION
+================================================================================
+
+   ID_new  ID_current                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                geometry
+0       0           6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        LINESTRING (2701354.784 1241596.288, 2701350.000 1241450.000, 2701350.000 1241350.000, 2701350.000 1241250.000, 2701350.000 1241150.000, 2701350.000 1241050.000, 2701350.000 1240950.000, 2701350.000 1240850.000, 2701250.000 1240750.000, 2701250.000 1240650.000, 2701250.000 1240550.000, 2701250.000 1240450.000, 2701250.000 1240350.000, 2701250.000 1240250.000, 2701250.000 1240150.000, 2701350.000 1240050.000, 2701350.000 1239950.000, 2701350.000 1239850.000, 2701350.000 1239750.000, 2701350.000 1239650.000, 2701350.000 1239550.000, 2701350.000 1239450.000, 2701350.000 1239350.000, 2701350.000 1239250.000, 2701450.000 1239150.000, 2701550.000 1239050.000, 2701650.000 1238950.000, 2701750.000 1238850.000, 2701834.017 1238740.539)
+1       2          38                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              LINESTRING (2701280.512 1248935.180, 2701150.000 1248950.000, 2701050.000 1248950.000, 2700950.000 1248850.000, 2700850.000 1248750.000, 2700750.000 1248750.000, 2700650.000 1248650.000, 2700550.000 1248550.000, 2700450.000 1248450.000, 2700350.000 1248350.000, 2700250.000 1248250.000, 2700150.000 1248150.000, 2700050.000 1248050.000, 2699950.000 1247950.000, 2699850.000 1247850.000, 2699750.000 1247850.000, 2699650.000 1247850.000, 2699550.000 1247850.000, 2699450.000 1247750.000, 2699350.000 1247650.000, 2699250.000 1247550.000, 2699150.000 1247450.000, 2699050.000 1247450.000, 2698950.000 1247450.000, 2698850.000 1247450.000, 2698750.000 1247450.000, 2698650.000 1247450.000, 2698550.000 1247350.000, 2698450.000 1247250.000, 2698350.000 1247150.000, 2698250.000 1247050.000, 2698150.000 1246950.000, 2698050.000 1246850.000, 2697950.000 1246750.000, 2697850.000 1246650.000, 2697850.000 1246550.000, 2697750.000 1246450.000, 2697650.000 1246350.000, 2697566.723 1246277.025)
+2       9           7  LINESTRING (2707083.735 1245499.765, 2707050.000 1245350.000, 2707050.000 1245250.000, 2707050.000 1245150.000, 2707050.000 1245050.000, 2707050.000 1244950.000, 2707050.000 1244850.000, 2707050.000 1244750.000, 2707050.000 1244650.000, 2706950.000 1244650.000, 2706850.000 1244650.000, 2706750.000 1244650.000, 2706750.000 1244550.000, 2706650.000 1244550.000, 2706650.000 1244450.000, 2706550.000 1244450.000, 2706450.000 1244450.000, 2706350.000 1244450.000, 2706250.000 1244450.000, 2706150.000 1244450.000, 2706050.000 1244450.000, 2705950.000 1244450.000, 2705850.000 1244450.000, 2705850.000 1244350.000, 2705850.000 1244250.000, 2705750.000 1244250.000, 2705650.000 1244250.000, 2705650.000 1244150.000, 2705650.000 1244050.000, 2705650.000 1243950.000, 2705650.000 1243850.000, 2705650.000 1243750.000, 2705650.000 1243650.000, 2705650.000 1243550.000, 2705650.000 1243450.000, 2705550.000 1243450.000, 2705450.000 1243450.000, 2705350.000 1243450.000, 2705350.000 1243350.000, 2705250.000 1243350.000, 2705250.000 1243250.000, 2705250.000 1243150.000, 2705250.000 1243050.000, 2705250.000 1242950.000, 2705250.000 1242850.000, 2705250.000 1242750.000, 2705250.000 1242650.000, 2705250.000 1242550.000, 2705150.000 1242550.000, 2705150.000 1242450.000, 2705050.000 1242450.000, 2704950.000 1242450.000, 2704850.000 1242450.000, 2704750.000 1242450.000, 2704650.000 1242450.000, 2704650.000 1242350.000, 2704650.000 1242250.000, 2704550.000 1242250.000, 2704450.000 1242250.000, 2704350.000 1242250.000, 2704250.000 1242250.000, 2704150.000 1242250.000, 2704050.000 1242250.000, 2703950.000 1242150.000, 2703850.000 1242050.000, 2703850.000 1241950.000, 2703850.000 1241850.000, 2703750.000 1241750.000, 2703650.000 1241650.000, 2703550.000 1241550.000, 2703450.000 1241450.000, 2703350.000 1241350.000, 2703250.000 1241250.000, 2703150.000 1241150.000, 2703050.000 1241150.000, 2702950.000 1241150.000, 2702850.000 1241150.000, 2702750.000 1241050.000, 2702650.000 1241150.000, 2702550.000 1241150.000, 2702450.000 1241250.000, 2702350.000 1241150.000, 2702350.000 1241050.000, 2702350.000 1240950.000, 2702350.000 1240850.000, 2702350.000 1240750.000, 2702350.000 1240650.000, 2702350.000 1240550.000, 2702350.000 1240450.000, 2702450.000 1240350.000, 2702450.000 1240250.000, 2702450.000 1240150.000, 2702450.000 1240050.000, 2702450.000 1239950.000, 2702450.000 1239850.000, 2702550.000 1239750.000, 2702650.000 1239650.000, 2702750.000 1239550.000, 2702850.000 1239450.000, 2702850.000 1239350.000, 2702950.000 1239250.000, 2703050.000 1239150.000, 2703150.000 1239050.000, 2703250.000 1238950.000, 2703350.000 1238850.000, 2703450.000 1238850.000, 2703550.000 1238850.000, 2703650.000 1238850.000, 2703750.000 1238850.000, 2703850.000 1238750.000, 2703950.000 1238650.000, 2704050.000 1238550.000, 2704150.000 1238550.000, 2704250.000 1238550.000, 2704367.197 1238505.537)
+3      12           7                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    LINESTRING (2706462.913 1242215.412, 2706450.000 1242350.000, 2706450.000 1242450.000, 2706350.000 1242450.000, 2706250.000 1242450.000, 2706150.000 1242450.000, 2706050.000 1242450.000, 2705950.000 1242450.000, 2705850.000 1242450.000, 2705750.000 1242450.000, 2705650.000 1242450.000, 2705550.000 1242450.000, 2705450.000 1242450.000, 2705450.000 1242350.000, 2705450.000 1242250.000, 2705450.000 1242150.000, 2705350.000 1242150.000, 2705250.000 1242150.000, 2705150.000 1242150.000, 2705050.000 1242150.000, 2705050.000 1242050.000, 2704950.000 1242050.000, 2704850.000 1242050.000, 2704750.000 1242050.000, 2704650.000 1242050.000, 2704550.000 1242050.000, 2704450.000 1242050.000, 2704350.000 1242050.000, 2704250.000 1242050.000, 2704150.000 1242050.000, 2704050.000 1242050.000, 2703950.000 1241950.000, 2703850.000 1241850.000, 2703750.000 1241750.000, 2703650.000 1241650.000, 2703550.000 1241550.000, 2703450.000 1241450.000, 2703350.000 1241350.000, 2703250.000 1241250.000, 2703150.000 1241150.000, 2703050.000 1241150.000, 2702950.000 1241150.000, 2702850.000 1241150.000, 2702750.000 1241050.000, 2702650.000 1241150.000, 2702550.000 1241150.000, 2702450.000 1241250.000, 2702350.000 1241150.000, 2702350.000 1241050.000, 2702350.000 1240950.000, 2702350.000 1240850.000, 2702350.000 1240750.000, 2702350.000 1240650.000, 2702350.000 1240550.000, 2702350.000 1240450.000, 2702450.000 1240350.000, 2702450.000 1240250.000, 2702450.000 1240150.000, 2702450.000 1240050.000, 2702450.000 1239950.000, 2702450.000 1239850.000, 2702550.000 1239750.000, 2702650.000 1239650.000, 2702750.000 1239550.000, 2702850.000 1239450.000, 2702850.000 1239350.000, 2702950.000 1239250.000, 2703050.000 1239150.000, 2703150.000 1239050.000, 2703250.000 1238950.000, 2703350.000 1238850.000, 2703450.000 1238850.000, 2703550.000 1238850.000, 2703650.000 1238850.000, 2703750.000 1238850.000, 2703850.000 1238750.000, 2703950.000 1238650.000, 2704050.000 1238550.000, 2704150.000 1238550.000, 2704250.000 1238550.000, 2704367.197 1238505.537)
+4      15           6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  LINESTRING (2701889.682 1240547.590, 2701850.000 1240450.000, 2701850.000 1240350.000, 2701950.000 1240250.000, 2702050.000 1240150.000, 2702050.000 1240050.000, 2702050.000 1239950.000, 2702050.000 1239850.000, 2702150.000 1239750.000, 2702150.000 1239650.000, 2702150.000 1239550.000, 2702150.000 1239450.000, 2702150.000 1239350.000, 2702150.000 1239250.000, 2702050.000 1239150.000, 2702050.000 1239050.000, 2702050.000 1238950.000, 2701950.000 1238850.000, 2701834.017 1238740.539)
+  [PHASE 8] Using columns -> tt: tt_scenario_29, externalities: externalities_s1
+min: -335.1879444410149, max: -309.22576308749626
+min: -10759.53204076117, max: -10734.585535985583
+min: -371.3464781669901, max: -339.9247006899593
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/main_pipeline.py", line 114, in <module>
+    infrascanroad()
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/main_pipeline.py", line 79, in infrascanroad
+    phase_8_visualization(voronoi_tt, innerboundary, network, boundary_plot,
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/pipeline.py", line 909, in phase_8_visualization
+    plot_benefit_distribution_bar_single(df_costs=gdf_costs, column=overall_bar_col)
+  File "/cluster/home/lkuehner/MSc_Thesis/infraScan/infraScanRoad/plots.py", line 674, in plot_benefit_distribution_bar_single
+    plt.axvspan(min_shaded_region-0.5, custom_ticks.max()+0.5, color='lightgray', alpha=0.5)
+                ~~~~~~~~~~~~~~~~~^~~~
+TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
+Development: 103 in scenario: scenario_30
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 4.77e+02, constraint violation: 1.59e-02, execution time: 4.6e+02 s.
+Development: 2 in scenario: scenario_30
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 4.76e+02, constraint violation: 1.71e-02, execution time: 4.6e+02 s.
+Development: 2 in scenario: scenario_29
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 2.95e+02, constraint violation: 1.71e-02, execution time: 4.6e+02 s.
+Development: 103 in scenario: scenario_29
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 2.95e+02, constraint violation: 1.62e-02, execution time: 4.6e+02 s.
+Development: 2 in scenario: scenario_29
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 2.95e+02, constraint violation: 1.71e-02, execution time: 4.6e+02 s.
+Development: 103 in scenario: scenario_29
+The maximum number of function evaluations is exceeded.
+Number of iterations: 2, function evaluations: 3890, CG iterations: 1, optimality: 2.95e+02, constraint violation: 1.62e-02, execution time: 4.6e+02 s.
