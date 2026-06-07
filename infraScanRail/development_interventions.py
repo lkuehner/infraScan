@@ -263,6 +263,7 @@ def calculate_intervention_costs_per_development(
                 maintenance_cost = 0.0
                 intervention_count = 0
                 intervention_ids = ''
+                passing_siding_length_m = 0.0
             else:
                 # Deduplicate by intervention_id
                 interventions_df = interventions_df.drop_duplicates(subset=['intervention_id'])
@@ -271,13 +272,21 @@ def calculate_intervention_costs_per_development(
                 maintenance_cost = interventions_df['maintenance_cost_annual_chf'].sum()
                 intervention_count = len(interventions_df)
                 intervention_ids = ','.join(interventions_df['intervention_id'].tolist())
+                passing_siding_length_m = pd.to_numeric(
+                    interventions_df.loc[
+                        interventions_df['type'] == 'segment_passing_siding',
+                        'length_m'
+                    ],
+                    errors='coerce'
+                ).fillna(0.0).sum()
             
             results.append({
                 'dev_id': dev_id,
                 'intervention_construction_cost': construction_cost,
                 'intervention_maintenance_annual': maintenance_cost,
                 'intervention_count': intervention_count,
-                'intervention_ids': intervention_ids
+                'intervention_ids': intervention_ids,
+                'passing_siding_length_m': passing_siding_length_m,
             })
             
         except Exception as e:
@@ -287,7 +296,8 @@ def calculate_intervention_costs_per_development(
                 'intervention_construction_cost': 0.0,
                 'intervention_maintenance_annual': 0.0,
                 'intervention_count': 0,
-                'intervention_ids': ''
+                'intervention_ids': '',
+                'passing_siding_length_m': 0.0,
             })
     
     return pd.DataFrame(results)

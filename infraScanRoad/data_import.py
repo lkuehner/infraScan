@@ -120,6 +120,7 @@ def fill_raster_dataframe(df, rastersize=100):
 
 
 def csv_to_tiff(data_table, attribute, path, rastersize = 100):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     # Define the geospatial attributes
     crs_value = "epsg:2056"  # Define your desired CRS
     width = len(data_table['E_COORD'].unique())  # Match width to the number of unique X coordinates
@@ -882,6 +883,18 @@ def map_values_to_nodes():
     # Remove duplicate columns, keeping the first occurrence
     neww = neww.loc[:, ~neww.columns.duplicated()]
 
+    # Adjusted by lkuehner
+    # Keep only real access points:
+    # - non-intersection points
+    # - rows with a valid access-point name
+    # - first occurrence per access-point name, ordered by the original ID_point
+    neww = neww[
+        (neww["intersection"] == 0)
+        & neww["name"].notna()
+    ].copy()
+    neww = neww.sort_values("ID_point")
+    neww = neww.drop_duplicates(subset=["name"], keep="first")
+
     neww.to_file("data/infraScanRoad/Network/processed/points_attribute.gpkg")
 
 
@@ -1106,6 +1119,33 @@ def get_unproductive_area(limits, suffix=None):
     # AS85_4  4 Hauptbereiche gemäss Standardnomenklatur der Arealstatistik 1979/85
     # LU85_10 10 Klassen der Bodennutzung der Arealstatistik 1979/85
     # LU85_4  4 Hauptbereiche der Bodennutzung der Arealstatistik 1979/85
+"""
+def get_residential_area(limits, suffix=None):
+    areal_stat = pd.read_csv("/Volumes/WD_Windows/MSc_Thesis/data/landuse_landcover/landcover/ag-b-00.03-37-area-csv.csv", sep=";")
+    if limits:
+        areal_stat = areal_stat[(areal_stat["E_COORD"] >= limits[0]) &
+                                (areal_stat["E_COORD"] <= limits[2]) &
+                                (areal_stat["N_COORD"] >= limits[1]) &
+                                (areal_stat["N_COORD"] <= limits[3])]
+
+    areal_stat = areal_stat[["E_COORD", "N_COORD", "AS18_27"]]
+    #print(areal_stat.shape)
+    # Raster data of residential area
+    residential_zones = [1, 2, 3, 4, 5]
+    residential_area = areal_stat[areal_stat["AS18_27"].isin(residential_zones)]
+    #print(residential_area.shape)
+    residential_area_full = fill_raster_dataframe(residential_area)
+    #print(residential_area_full.head(10).to_string())
+    # Correction of the reference of each raster cell from bottom left to top left
+    residential_area_full["N_COORD"] = residential_area_full["N_COORD"] + 100
+    suffix_token = f"_{suffix}" if suffix else ""
+    csv_to_tiff(residential_area_full, attribute="AS18_27", path=f"/Volumes/WD_Windows/MSc_Thesis/data/landuse_landcover/processed/residential_area{suffix_token}.tif")
+
+    # AS85_17 17 Klassen gemäss Standardnomenklatur der Arealstatistik 1979/85
+    # AS85_4  4 Hauptbereiche gemäss Standardnomenklatur der Arealstatistik 1979/85
+    # LU85_10 10 Klassen der Bodennutzung der Arealstatistik 1979/85
+    # LU85_4  4 Hauptbereiche der Bodennutzung der Arealstatistik 1979/85
+"""
 
 
 def tif_to_shp(path_tif, path_shp):

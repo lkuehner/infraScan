@@ -28,3 +28,5 @@ road_noise_costs = 0.01490 # CHF/Vkm
 road_airpollution_costs = 0.01862 # CHF/Vkm
 road_co2_costs = 0.02105 # CHF/Vkm
 road_accident_costs = 0.08441 # CHF/Vkm
+
+land_consumption_costs = 3272 # CHF/ha

@@ -1,0 +1,6 @@
+Rail externalities are included using the corrected train_km.csv with development-specific IDs.
+Road overview excludes developments without any flow on the new link across all scenarios.
+Annual overview excludes road_climate_cost and road_ecological_disruption_cost because they are not directly comparable to the integrated annual values.
+Road TTS minutes are currently only available as demand-weighted aggregate tt_savings_peak from od_tt_savings_detailed.csv.
+Rail TTS minutes are derived from tt_savings_daily * 60 at prognosis_year.
+Road scenario line plots show total TTS, network TTS and access-only TTS (origin + destination).

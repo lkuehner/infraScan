@@ -227,6 +227,11 @@ def compute_weighted_times(from_idx, to_idx, times, OD_matrix):
     return weighted_sum
 
 
+@numba.njit
+def compute_unweighted_times(times):
+    return times.sum() / 60.0
+
+
 def preprocess_OD_matrix(OD, id_to_name):
     # Convert index and columns from ID to station names
     OD.index = OD.index.astype(int)
@@ -249,7 +254,11 @@ def process_scenario_year_numba(OD_matrix, station_to_index, preprocessed_od_tim
         from_idx = np.array([station_to_index.get(name, -1) for name in from_names])
         to_idx = np.array([station_to_index.get(name, -1) for name in to_names])
         total_time = compute_weighted_times(from_idx, to_idx, times, OD_matrix)
-        dev_total_times[dev_name] = total_time
+        total_time_unweighted = compute_unweighted_times(times)
+        dev_total_times[dev_name] = {
+            "weighted": total_time,
+            "unweighted": total_time_unweighted,
+        }
     return (scenario_name, year, dev_total_times)
 
 
@@ -319,10 +328,18 @@ def calculate_monetized_tt_savings(TTT_status_quo, TTT_developments, VTTS, outpu
         for year, year_tt in development.items():
             for dev_id, dev_tt in year_tt.items():
                 # Get the corresponding status quo travel time
-                status_quo_tt = TTT_status_quo.get(scenario_name, {}).get(year, {}).get('Development_1', 0)
+                status_quo_metrics = TTT_status_quo.get(scenario_name, {}).get(year, {}).get(
+                    'Development_1',
+                    {"weighted": 0, "unweighted": 0},
+                )
+                status_quo_tt = status_quo_metrics["weighted"]
+                status_quo_tt_unweighted = status_quo_metrics["unweighted"]
+                dev_tt_weighted = dev_tt["weighted"]
+                dev_tt_unweighted = dev_tt["unweighted"]
 
                 # Calculate travel time savings (negative if no savings), scaled to daily trips
-                tt_savings_daily = (status_quo_tt - dev_tt) #again scaling with tau?
+                tt_savings_daily = (status_quo_tt - dev_tt_weighted) #again scaling with tau?
+                tt_savings_daily_unweighted = status_quo_tt_unweighted - dev_tt_unweighted
                 monetized_savings_yearly = tt_savings_daily * 365 * VTTS
                 # Monetize the travel time savings
                 dev_id_lookup = dev_id_lookup_table.loc[int(dev_id.removeprefix("Development_")), "dev_id"]
@@ -332,8 +349,11 @@ def calculate_monetized_tt_savings(TTT_status_quo, TTT_developments, VTTS, outpu
                     "scenario": scenario_name,
                     "year": year,
                     "status_quo_tt": status_quo_tt,
-                    "development_tt": dev_tt,
+                    "status_quo_tt_unweighted": status_quo_tt_unweighted,
+                    "development_tt": dev_tt_weighted,
+                    "development_tt_unweighted": dev_tt_unweighted,
                     "tt_savings_daily": tt_savings_daily,
+                    "tt_savings_daily_unweighted": tt_savings_daily_unweighted,
                     "monetized_savings_yearly": monetized_savings_yearly
                 })
 

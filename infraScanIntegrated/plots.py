@@ -20,11 +20,16 @@ SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scena
 RAIL_COMPARISON_YEAR = 2050
 
 COST_COLORS = {
-    "construction": "#a6bddb",
-    "maintenance": "#3690c0",
-    "operating": "#1f5a89",
-    "externalities": "#092245",
-    "tts": "#fedf2f",
+    "construction": "#194583",
+    "maintenance": "#657D8D",
+    "operating": "#9FBFE2",
+    "accident": "#A53D3D",
+    "air": "#BF5A5A",
+    "co2": "#D07A7A",
+    "noise": "#8F2F2F",
+    "land": "#838383",
+    "externalities": "#B64B4B",
+    "tts": "#98A996",
 }
 
 # Centralized paths (adjust these at top to configure where data and outputs live)
@@ -47,6 +52,27 @@ RAIL_TRAVELTIME_CACHE = RAIL_NETWORK_PATH / "travel_time" / "cache" / "od_times.
 RAIL_TRAVELTIME_SAVINGS_DIR = RAIL_NETWORK_PATH / "travel_time" / "TravelTime_Savings"
 ROAD_TRAVELTIME_RASTER = ROAD_NETWORK_PATH / "travel_time" / "travel_time_raster.tif"
 DEV_DIR = DATA_ROOT / rail_paths.DEVELOPMENT_DIRECTORY
+ANALYSIS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_analysis")
+SCORE_RESULTS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_results")
+GENERATED_PLOTS_DIR = Path("infraScan/infraScanIntegrated/plots/generated")
+
+MODE_CONFIG = {
+    "Rail": {"base_vtt": 25.24},
+    "Road": {"base_vtt": 26.85},
+}
+
+VTT_SOURCE_PAIRS = pd.DataFrame(
+    [
+        {"source": "Schmid", "rail_vtt": 15.20, "road_vtt": 31.40},
+        {"source": "NIBA/NISTRA", "rail_vtt": 25.24, "road_vtt": 26.85},
+        {"source": "Average Dist", "rail_vtt": 24.25, "road_vtt": 38.68},
+        {"source": "Average all purpose", "rail_vtt": 16.63, "road_vtt": 26.85},
+    ]
+)
+VTT_SOURCE_PAIRS["label"] = VTT_SOURCE_PAIRS.apply(
+    lambda row: f"{row['source']}: Rail {row['rail_vtt']:.2f} / Road {row['road_vtt']:.2f}",
+    axis=1,
+)
 
 
 
@@ -256,6 +282,449 @@ def combined_order(data: pd.DataFrame) -> list[str]:
         .index.tolist()
     )
     return [f"Rail {dev}" for dev in rail_order] + [f"Road {dev}" for dev in road_order]
+
+
+def _style_axes(ax):
+    ax.grid(axis="y", alpha=0.25)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+
+
+def _load_component_overview(mode: str) -> pd.DataFrame:
+    path = ANALYSIS_DIR / f"{mode.lower()}_component_overview_integrated_vs_standalone.csv"
+    df = pd.read_csv(path)
+    df["development"] = df["development"].astype(str)
+    df["development_label"] = df["development_label"].astype(str)
+    return df
+
+
+def _rail_label_lookup() -> dict[str, str]:
+    df = pd.read_csv(
+        DATA_ROOT / "data" / "infraScanRail" / "costs" / "total_costs.csv",
+        usecols=["development", "Sline"],
+    ).drop_duplicates()
+    dev = df["development"].astype(str).str.removeprefix("Development_").str.replace(r"\.0$", "", regex=True)
+    sline = df["Sline"].astype(str)
+    dev_num = dev.astype(int)
+    label = np.where(
+        sline.isin(["G", "P"]),
+        (dev_num - 99999).astype(str) + "_" + sline,
+        sline,
+    )
+    return dict(zip(dev.astype(str), label.astype(str)))
+
+
+def _component_color(score_id: str) -> str:
+    score_id = str(score_id)
+    if "construction" in score_id:
+        return COST_COLORS["construction"]
+    if "maint" in score_id:
+        return COST_COLORS["maintenance"]
+    if "operation" in score_id:
+        return COST_COLORS["operating"]
+    if "accident" in score_id:
+        return COST_COLORS["accident"]
+    if "airpollution" in score_id:
+        return COST_COLORS["air"]
+    if score_id.endswith("co2_cost"):
+        return COST_COLORS["co2"]
+    if "noise" in score_id:
+        return COST_COLORS["noise"]
+    if "land_consumption" in score_id:
+        return COST_COLORS["land"]
+    if "climate" in score_id or "ecological" in score_id:
+        return COST_COLORS["externalities"]
+    if score_id.endswith("tts_cost"):
+        return COST_COLORS["tts"]
+    return "#777777"
+
+
+def _component_label(score_id: str) -> str:
+    label_map = {
+        "construction_cost": "Construction costs",
+        "maint_cost": "Maintenance costs",
+        "operation_cost": "Operating costs",
+        "accident_cost": "Accident costs",
+        "airpollution_cost": "Air pollution costs",
+        "co2_cost": "CO2 costs",
+        "noise_cost": "Noise costs",
+        "land_consumption_cost": "Land consumption costs",
+        "climate_cost": "Climate costs",
+        "ecological_disruption_cost": "Ecological disruption costs",
+        "tts_cost": "Travel time savings",
+    }
+    for suffix, label in label_map.items():
+        if score_id.endswith(suffix):
+            return label
+    return score_id
+
+
+def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
+    component_df = _load_component_overview(mode)
+    rail_labels = _rail_label_lookup() if mode == "Rail" else {}
+    tts_score = "rail_tts_cost" if mode == "Rail" else "road_tts_cost"
+    order = (
+        component_df[
+            (component_df["value_mode"] == "integrated")
+            & (component_df["score_id"] == tts_score)
+        ]
+        .sort_values("value_mio_chf", ascending=False)["development"]
+        .tolist()
+    )
+
+    pivot = component_df.pivot_table(
+        index=["development", "development_label", "value_mode"],
+        columns="score_id",
+        values="value_mio_chf",
+        aggfunc="median",
+    ).reset_index()
+    pivot["development"] = pd.Categorical(pivot["development"], categories=order, ordered=True)
+    pivot = pivot.sort_values(["development", "value_mode"])
+
+    x = np.arange(len(order))
+    width = 0.36
+    offsets = {"standalone_annual_proxy": -width / 2, "integrated": width / 2}
+
+    component_order = [col for col in pivot.columns if col.endswith("_cost")]
+    component_order = [col for col in component_order if col != tts_score] + [tts_score]
+
+    fig, ax = plt.subplots(figsize=(max(16, len(order) * 0.28), 8))
+    for value_mode, offset in offsets.items():
+        subset = pivot[pivot["value_mode"] == value_mode].copy()
+        subset = subset.set_index("development").reindex(order).reset_index()
+        negative_bottom = np.zeros(len(order))
+        positive_bottom = np.zeros(len(order))
+        for score_id in component_order:
+            if score_id not in subset.columns:
+                continue
+            values = subset[score_id].fillna(0.0).to_numpy()
+            if score_id == tts_score:
+                ax.bar(
+                    x + offset,
+                    values,
+                    width=width,
+                    bottom=positive_bottom,
+                    color=_component_color(score_id),
+                    edgecolor="white",
+                    linewidth=0.2,
+                    label=_component_label(score_id) if value_mode == "integrated" else None,
+                )
+                positive_bottom += values
+            else:
+                plot_values = -values if mode == "Rail" else values
+                ax.bar(
+                    x + offset,
+                    plot_values,
+                    width=width,
+                    bottom=negative_bottom,
+                    color=_component_color(score_id),
+                    edgecolor="white",
+                    linewidth=0.2,
+                    label=_component_label(score_id) if value_mode == "integrated" else None,
+                )
+                negative_bottom += plot_values
+
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.set_xticks(x)
+    labels = (
+        pivot[["development", "development_label"]]
+        .drop_duplicates()
+        .set_index("development")
+        .reindex(order)["development_label"]
+        .fillna(pd.Series(order, index=order))
+        .tolist()
+    )
+    if mode == "Rail":
+        labels = [rail_labels.get(dev, lbl) for dev, lbl in zip(order, labels)]
+    ax.set_xticklabels(labels, rotation=90, fontsize=8 if mode == "Rail" else 7)
+    ax.set_ylabel("Annual value [Mio. CHF/year]")
+    ax.set_xlabel("Development")
+    ax.set_title(f"{mode}: integrated vs standalone annualized stacked costs and TTS")
+    _style_axes(ax)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered = [(h, l) for h, l in zip(handles, labels) if not (l in seen or seen.add(l))]
+    ax.legend(
+        [h for h, _ in filtered],
+        [l for _, l in filtered],
+        frameon=False,
+        bbox_to_anchor=(1.01, 1),
+        loc="upper left",
+    )
+    fig.tight_layout(rect=[0, 0, 0.88, 1])
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_integrated_bcr_top10_by_mode(output_path: Path) -> None:
+    plot_df = pd.read_csv(ANALYSIS_DIR / "integrated_bcr_top10_by_mode_plot_data.csv")
+    plot_df["development"] = plot_df["development"].astype(str)
+    rail_labels = _rail_label_lookup()
+    plot_df["ranking_label_short"] = np.where(
+        plot_df["mode"].eq("Rail"),
+        plot_df["development"].map(rail_labels).fillna(plot_df["ranking_label_short"]),
+        plot_df["ranking_label_short"],
+    )
+    plot_df = plot_df.sort_values("plot_order")
+
+    component_order = [
+        "rail_construction_cost", "rail_maint_cost", "rail_operation_cost",
+        "rail_accident_cost", "rail_airpollution_cost", "rail_co2_cost",
+        "rail_noise_cost", "rail_land_consumption_cost", "rail_tts_cost",
+        "road_construction_cost", "road_maint_cost",
+        "road_accident_cost", "road_airpollution_cost", "road_co2_cost",
+        "road_noise_cost", "road_land_consumption_cost", "road_tts_cost",
+    ]
+    pivot = plot_df.pivot_table(
+        index=["plot_order", "ranking_label_short", "bcr_median"],
+        columns="score_id",
+        values="value_mio_chf",
+        aggfunc="median",
+    ).reset_index().sort_values("plot_order")
+
+    x = np.arange(len(pivot))
+    fig, ax = plt.subplots(figsize=(max(18, len(pivot) * 0.65), 8))
+    neg = np.zeros(len(pivot))
+    pos = np.zeros(len(pivot))
+    for score_id in component_order:
+        if score_id not in pivot.columns:
+            continue
+        values = pivot[score_id].fillna(0.0).to_numpy()
+        if score_id.endswith("tts_cost"):
+            ax.bar(x, values, width=0.7, bottom=pos, color=_component_color(score_id),
+                   edgecolor="white", linewidth=0.2, label=_component_label(score_id) if score_id.startswith("rail_") else None)
+            pos += values
+        else:
+            ax.bar(x, values, width=0.7, bottom=neg, color=_component_color(score_id),
+                   edgecolor="white", linewidth=0.2,
+                   label=_component_label(score_id) if score_id.startswith("rail_") else None)
+            neg += values
+
+    for i, row in enumerate(pivot.itertuples(index=False)):
+        ax.text(i, max(pos[i], 0.0) + 0.5, f"{row.bcr_median:.2f}", ha="center", va="bottom", rotation=90, fontsize=8)
+
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.axvline(9.5, color="black", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot["ranking_label_short"], rotation=90, fontsize=8)
+    ax.set_ylabel("Median annual value over scenarios [Mio. CHF/year]")
+    ax.set_xlabel("Development")
+    ax.set_title("Top 10 integrated benefit-cost ratios by mode with stacked cost components")
+    _style_axes(ax)
+    ymax = ax.get_ylim()[1]
+    ax.text(4.5, ymax * 0.95, "Rail top 10", ha="center", fontsize=11)
+    ax.text(14.5, ymax * 0.95, "Road top 10", ha="center", fontsize=11)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered = [(h, l) for h, l in zip(handles, labels) if not (l in seen or seen.add(l))]
+    ax.legend([h for h, _ in filtered], [l for _, l in filtered], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.tight_layout(rect=[0, 0, 0.88, 1])
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_weighted_tts_mean_std(output_path: Path) -> None:
+    df = pd.read_csv(ANALYSIS_DIR / "tts_summary_by_development.csv")
+    rail_labels = _rail_label_lookup()
+    fig, axes = plt.subplots(1, 2, figsize=(20, 18), sharex=True)
+    for ax, mode in zip(axes, ["Road", "Rail"]):
+        sub = df[df["mode"] == mode].copy()
+        sub["mean_hours"] = sub["mean_tts_minutes"] / 60.0
+        sub["std_hours"] = sub["std_tts_minutes"] / 60.0
+        sub = sub.sort_values("mean_hours", ascending=False).reset_index(drop=True)
+        y = np.arange(len(sub))
+        ax.hlines(y, sub["mean_hours"] - sub["std_hours"], sub["mean_hours"] + sub["std_hours"],
+                  color="#8EC5E8", linewidth=2)
+        ax.scatter(sub["mean_hours"], y, color="#0E5A9C", s=24, zorder=3)
+        ax.axvline(0, color="black", linestyle="--", linewidth=0.9)
+        ax.set_yticks(y)
+        if mode == "Rail":
+            ylabels = [rail_labels.get(dev, dev) for dev in sub["development"].astype(str)]
+        else:
+            ylabels = sub["development"].astype(str).tolist()
+        ax.set_yticklabels(ylabels, fontsize=7 if mode == "Road" else 8)
+        ax.invert_yaxis()
+        ax.set_xlabel("Travel time savings [hours]")
+        ax.set_ylabel("Development ID")
+        ax.set_title(f"{mode}: mean TTS with standard deviation across scenarios")
+        ax.grid(axis="x", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def build_vtt_ratio_plot_df() -> pd.DataFrame:
+    annual = pd.read_csv(ANALYSIS_DIR / "annual_overview_by_development_scenario.csv")
+    integrated = annual[annual["value_mode"] == "integrated"].copy()
+    integrated["cost_base_integrated"] = integrated["cost_annual"].abs()
+    analysis_df = (
+        integrated.groupby(["mode", "development"], as_index=False)
+        .agg(
+            tts_integrated=("tts_annual", "mean"),
+            cost_base_integrated=("cost_base_integrated", "mean"),
+        )
+    )
+
+    ratio_rows = []
+    for row in VTT_SOURCE_PAIRS.itertuples(index=False):
+        rail_base = analysis_df[analysis_df["mode"] == "Rail"].copy()
+        road_base = analysis_df[analysis_df["mode"] == "Road"].copy()
+
+        rail_base["adjusted_tts"] = rail_base["tts_integrated"] * (row.rail_vtt / MODE_CONFIG["Rail"]["base_vtt"])
+        rail_base["adjusted_ratio"] = rail_base["adjusted_tts"] / rail_base["cost_base_integrated"]
+        rail_base["source"] = row.source
+        rail_base["label"] = row.label
+
+        road_base["adjusted_tts"] = road_base["tts_integrated"] * (row.road_vtt / MODE_CONFIG["Road"]["base_vtt"])
+        road_base["adjusted_ratio"] = road_base["adjusted_tts"] / road_base["cost_base_integrated"]
+        road_base["source"] = row.source
+        road_base["label"] = row.label
+
+        ratio_rows.extend([rail_base, road_base])
+
+    ratio_plot_df = pd.concat(ratio_rows, ignore_index=True)
+    ratio_plot_df["label"] = pd.Categorical(
+        ratio_plot_df["label"],
+        categories=VTT_SOURCE_PAIRS["label"].tolist(),
+        ordered=True,
+    )
+    return ratio_plot_df
+
+
+def plot_vtt_ratio_violin(output_path: Path) -> None:
+    ratio_plot_df = build_vtt_ratio_plot_df()
+    palette = {"Rail": "#DCA7FF", "Road": "#608BA7"}
+
+    fig, ax = plt.subplots(figsize=(18, 7))
+    sns.violinplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        palette=palette,
+        cut=0,
+        inner="quartile",
+        linewidth=0.9,
+        dodge=True,
+        ax=ax,
+    )
+    for collection in ax.collections:
+        collection.set_alpha(0.80)
+
+    sns.stripplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        dodge=True,
+        jitter=0.10,
+        alpha=0.30,
+        size=2.4,
+        zorder=5,
+        ax=ax,
+    )
+
+    ax.axhline(1, color="black", linewidth=1.0)
+    ax.set_title("Development-level CBA ratio by manually paired VTT sources")
+    ax.set_xlabel("VTT source pair")
+    ax.set_ylabel("CBA ratio")
+    plt.xticks(rotation=25, ha="right")
+    _style_axes(ax)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered_handles = []
+    filtered_labels = []
+    for handle, label in zip(handles, labels):
+        if label not in seen:
+            filtered_handles.append(handle)
+            filtered_labels.append(label)
+            seen.add(label)
+    ax.legend(filtered_handles[:2], filtered_labels[:2], title="Mode", frameon=False)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_vtt_ratio_violin_by_scenario(output_path: Path) -> None:
+    annual = pd.read_csv(ANALYSIS_DIR / "annual_overview_by_development_scenario.csv")
+    integrated = annual[annual["value_mode"] == "integrated"].copy()
+    integrated["cost_base_integrated"] = integrated["cost_annual"].abs()
+
+    ratio_rows = []
+    for row in VTT_SOURCE_PAIRS.itertuples(index=False):
+        rail_base = integrated[integrated["mode"] == "Rail"].copy()
+        road_base = integrated[integrated["mode"] == "Road"].copy()
+
+        rail_base["adjusted_tts"] = rail_base["tts_annual"] * (row.rail_vtt / MODE_CONFIG["Rail"]["base_vtt"])
+        rail_base["adjusted_ratio"] = rail_base["adjusted_tts"] / rail_base["cost_base_integrated"]
+        rail_base["source"] = row.source
+        rail_base["label"] = row.label
+
+        road_base["adjusted_tts"] = road_base["tts_annual"] * (row.road_vtt / MODE_CONFIG["Road"]["base_vtt"])
+        road_base["adjusted_ratio"] = road_base["adjusted_tts"] / road_base["cost_base_integrated"]
+        road_base["source"] = row.source
+        road_base["label"] = row.label
+        ratio_rows.extend([rail_base, road_base])
+
+    ratio_plot_df = pd.concat(ratio_rows, ignore_index=True)
+    ratio_plot_df["label"] = pd.Categorical(
+        ratio_plot_df["label"],
+        categories=VTT_SOURCE_PAIRS["label"].tolist(),
+        ordered=True,
+    )
+    palette = {"Rail": "#6788B6", "Road": "#2E5C88"}
+
+    fig, ax = plt.subplots(figsize=(18, 7))
+    sns.violinplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        palette=palette,
+        cut=0,
+        inner="quartile",
+        linewidth=0.9,
+        dodge=True,
+        ax=ax,
+    )
+    for collection in ax.collections:
+        collection.set_alpha(0.80)
+
+    sns.stripplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        dodge=True,
+        jitter=0.12,
+        alpha=0.18,
+        size=1.8,
+        palette={"Rail": "#1E1E1E", "Road": "#1E1E1E"},
+        zorder=5,
+        ax=ax,
+    )
+
+    ax.axhline(1, color="black", linewidth=1.0)
+    ax.set_title("Scenario-level CBA ratio by manually paired VTT sources")
+    ax.set_xlabel("VTT source pair")
+    ax.set_ylabel("CBA ratio")
+    plt.xticks(rotation=25, ha="right")
+    _style_axes(ax)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered_handles = []
+    filtered_labels = []
+    for handle, label in zip(handles, labels):
+        if label not in seen:
+            filtered_handles.append(handle)
+            filtered_labels.append(label)
+            seen.add(label)
+    ax.legend(filtered_handles[:2], filtered_labels[:2], title="Mode", frameon=False)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
 
     
 
@@ -612,21 +1081,30 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
 # ------------------------------------------
 
 def main() -> None:
-    COST_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    TTS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    GENERATED_PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    plot_mode_standalone_vs_integrated(
+        mode="Road",
+        output_path=GENERATED_PLOTS_DIR / "road_stacked_integrated_vs_standalone_annual.png",
+    )
+    plot_mode_standalone_vs_integrated(
+        mode="Rail",
+        output_path=GENERATED_PLOTS_DIR / "rail_stacked_integrated_vs_standalone_annual.png",
+    )
+    plot_integrated_bcr_top10_by_mode(
+        output_path=GENERATED_PLOTS_DIR / "integrated_bcr_top10_by_mode_stacked.png",
+    )
+    plot_weighted_tts_mean_std(
+        output_path=GENERATED_PLOTS_DIR / "weighted_tts_mean_std_by_mode.png",
+    )
+    plot_vtt_ratio_violin(
+        output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode.png",
+    )
+    plot_vtt_ratio_violin_by_scenario(
+        output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_scenarios.png",
+    )
 
-    # create_combined_cost_csv() is optional — plots load sources directly
-    #plot_combined_top5_final_cost_savings(COST_OUTPUT_DIR)
-    #plot_final_tts_boxplot_top5(TTS_OUTPUT_DIR)
-
-    # rail and road separately 
-    #plot_all_rail_final_cost_savings(COST_OUTPUT_DIR)
-    plot_all_road_final_cost_savings(COST_OUTPUT_DIR)
-
-    # Add scenario plots also here
-
-    print("Saved plots to:", COST_OUTPUT_DIR)
+    print("Saved plots to:", GENERATED_PLOTS_DIR)
 
 
 if __name__ == "__main__":
