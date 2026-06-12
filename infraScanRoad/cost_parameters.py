@@ -9,11 +9,11 @@ c_tunnel = 416200 # CHF/m # old: 416000
 c_bridge = 63900 # CHF/m
 ramp = 102100000 # CHF #old: 102000000
 
-# Maintenance costs -> adjusted for 2023
+# Maintenance costs ->  VSS 41 828 adjusted for 2023
 c_structural_maint = 1.2 / 100 # % of cosntruction costs
-c_om_openhighway = 89.7 # CHF/m/a
-c_om_tunnel = 89.7 # CHF/m/a
-c_om_bridge = 368.8 # CHF/m/a
+c_om_openhighway = 148.5 # CHF/m/a
+c_om_tunnel = 148.5  # CHF/m/a
+c_om_bridge = 319.4 # CHF/m/a
 maintenance_duration = 40 # years
 
 # Lifetime of Instrastructure (SN 641 820)

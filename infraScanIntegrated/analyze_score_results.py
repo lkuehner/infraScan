@@ -475,13 +475,13 @@ def build_rail_component_overview(score_df: pd.DataFrame) -> pd.DataFrame:
 
     standalone = (
         rail_df.groupby(["development", "score_id"], as_index=False)
-        .agg(value=("annual_value", "median"))
+        .agg(value=("annual_value", "mean"))
         .assign(value_mode="standalone_annual_proxy")
     )
     standalone.loc[standalone["score_id"].isin(externality_scores), "value"] = np.nan
     integrated = (
         rail_df.groupby(["development", "score_id"], as_index=False)
-        .agg(value=("integrated_value", "median"))
+        .agg(value=("integrated_value", "mean"))
         .assign(value_mode="integrated")
     )
     rail_labels = pd.read_csv(RAIL_TOTAL_COSTS, usecols=["development", "Sline"]).copy()
@@ -552,12 +552,12 @@ def build_road_component_overview(score_df: pd.DataFrame) -> pd.DataFrame:
 
     standalone = (
         road_df.groupby(["development", "score_id"], as_index=False)
-        .agg(value=("annual_value", "median"))
+        .agg(value=("annual_value", "mean"))
         .assign(value_mode="standalone_annual_proxy")
     )
     integrated = (
         road_df.groupby(["development", "score_id"], as_index=False)
-        .agg(value=("integrated_value", "median"))
+        .agg(value=("integrated_value", "mean"))
         .assign(value_mode="integrated")
     )
 
@@ -592,7 +592,7 @@ def build_road_standalone_annual_cost_table(component_df: pd.DataFrame) -> pd.Da
             index=["development", "development_label"],
             columns="score_id",
             values="value",
-            aggfunc="median",
+            aggfunc="mean",
         )
         .reset_index()
     )
@@ -674,11 +674,7 @@ def build_integrated_bcr_outputs(
     integrated["cost_signed"] = np.where(
         integrated["score_id"].str.endswith("_tts_cost"),
         np.nan,
-        np.where(
-            integrated["mode"] == "Rail",
-            -pd.to_numeric(integrated["integrated_value"], errors="coerce"),
-            pd.to_numeric(integrated["integrated_value"], errors="coerce"),
-        ),
+        -pd.to_numeric(integrated["integrated_value"], errors="coerce"),
     )
     integrated["tts_value"] = np.where(
         integrated["score_id"].str.endswith("_tts_cost"),
@@ -854,8 +850,8 @@ def build_integrated_bcr_top10_by_mode_plot_data(
     ) - road_excluded_devs
 
     rail_top = (
-        bcr_summary_df[(bcr_summary_df["mode"] == "Rail") & (bcr_summary_df["bcr_median"] > 0)]
-        .sort_values(["bcr_median", "tts_median_chf"], ascending=[False, False])
+        bcr_summary_df[(bcr_summary_df["mode"] == "Rail") & (bcr_summary_df["bcr_mean"] > 0)]
+        .sort_values(["bcr_mean", "tts_mean_chf"], ascending=[False, False])
         .head(10)
         .copy()
     )
@@ -864,10 +860,10 @@ def build_integrated_bcr_top10_by_mode_plot_data(
     road_top = (
         bcr_summary_df[
             (bcr_summary_df["mode"] == "Road")
-            & (bcr_summary_df["bcr_median"] > 0)
+            & (bcr_summary_df["bcr_mean"] > 0)
             & (bcr_summary_df["development"].isin(road_valid_devs))
         ]
-        .sort_values(["bcr_median", "tts_median_chf"], ascending=[False, False])
+        .sort_values(["bcr_mean", "tts_mean_chf"], ascending=[False, False])
         .head(10)
         .copy()
     )
@@ -919,16 +915,12 @@ def build_integrated_bcr_top10_by_mode_plot_data(
     integrated["plot_value_mio_chf"] = np.where(
         integrated["score_id"].str.endswith("_tts_cost"),
         pd.to_numeric(integrated["integrated_value"], errors="coerce") / 1_000_000.0,
-        np.where(
-            integrated["mode"] == "Rail",
-            -pd.to_numeric(integrated["integrated_value"], errors="coerce") / 1_000_000.0,
-            pd.to_numeric(integrated["integrated_value"], errors="coerce") / 1_000_000.0,
-        ),
+        -pd.to_numeric(integrated["integrated_value"], errors="coerce") / 1_000_000.0,
     )
 
     plot_components = (
         integrated.groupby(["mode", "development", "score_id"], as_index=False)
-        .agg(value_mio_chf=("plot_value_mio_chf", "median"))
+        .agg(value_mio_chf=("plot_value_mio_chf", "mean"))
         .merge(
             selection[
                 [
@@ -937,7 +929,7 @@ def build_integrated_bcr_top10_by_mode_plot_data(
                     "development_label",
                     "ranking_label",
                     "ranking_label_short",
-                    "bcr_median",
+                    "bcr_mean",
                     "plot_group",
                     "plot_order",
                 ]
@@ -993,7 +985,7 @@ def plot_integrated_bcr_top10_by_mode_stacked(plot_df: pd.DataFrame, output_dir:
     ]
 
     ordered_devs = (
-        plot_df[["mode", "development", "ranking_label_short", "bcr_median", "plot_group", "plot_order"]]
+        plot_df[["mode", "development", "ranking_label_short", "bcr_mean", "plot_group", "plot_order"]]
         .drop_duplicates()
         .sort_values("plot_order")
     )
@@ -1002,10 +994,10 @@ def plot_integrated_bcr_top10_by_mode_stacked(plot_df: pd.DataFrame, output_dir:
     fig, ax = plt.subplots(figsize=(fig_width, 8))
 
     pivot = plot_df.pivot_table(
-        index=["mode", "development", "ranking_label_short", "bcr_median", "plot_group", "plot_order"],
+        index=["mode", "development", "ranking_label_short", "bcr_mean", "plot_group", "plot_order"],
         columns="score_id",
         values="value_mio_chf",
-        aggfunc="median",
+        aggfunc="mean",
     ).reset_index()
     pivot = pivot.sort_values("plot_order")
 
@@ -1051,22 +1043,11 @@ def plot_integrated_bcr_top10_by_mode_stacked(plot_df: pd.DataFrame, output_dir:
             )
             negative_bottom += values
 
-    for xpos, (_, row) in zip(x, pivot.iterrows()):
-        ax.text(
-            xpos,
-            max(positive_bottom[xpos], 0.0) + 0.5,
-            f"{row['bcr_median']:.2f}",
-            ha="center",
-            va="bottom",
-            fontsize=8,
-            rotation=90,
-        )
-
     ax.axhline(0, color="black", linewidth=0.8)
     ax.axvline(9.5, color="black", linewidth=0.8)
     ax.set_xticks(x)
     ax.set_xticklabels(pivot["ranking_label_short"], rotation=90, fontsize=8)
-    ax.set_ylabel("Median annual value over scenarios [Mio. CHF/year]")
+    ax.set_ylabel("Mean annual value over scenarios [Mio. CHF/year]")
     ax.set_xlabel("Development")
     ax.set_title("Top 10 integrated benefit-cost ratios by mode with stacked cost components")
     ax.grid(True, axis="y", alpha=0.25)

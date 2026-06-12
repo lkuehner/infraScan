@@ -13,6 +13,10 @@ import rasterio
 
 from infraScan.infraScanRail import paths as rail_paths
 from infraScan.infraScanRail.TT_Delay import analyze_travel_times
+from infraScan.infraScanIntegrated.scoring_registry import (
+    compute_settlement_buffer_share,
+    load_settlement_footprint,
+)
 
 SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
 #("scenario_76", "scenario_45", "scenario_67")
@@ -20,16 +24,16 @@ SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scena
 RAIL_COMPARISON_YEAR = 2050
 
 COST_COLORS = {
-    "construction": "#194583",
-    "maintenance": "#657D8D",
-    "operating": "#9FBFE2",
+    "construction": "#263852",
+    "maintenance": "#547285",
+    "operating": "#B2C2D3",
     "accident": "#A53D3D",
     "air": "#BF5A5A",
     "co2": "#D07A7A",
     "noise": "#8F2F2F",
     "land": "#838383",
     "externalities": "#B64B4B",
-    "tts": "#98A996",
+    "tts": "#91B58D",
 }
 
 # Centralized paths (adjust these at top to configure where data and outputs live)
@@ -55,6 +59,9 @@ DEV_DIR = DATA_ROOT / rail_paths.DEVELOPMENT_DIRECTORY
 ANALYSIS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_analysis")
 SCORE_RESULTS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_results")
 GENERATED_PLOTS_DIR = Path("infraScan/infraScanIntegrated/plots/generated")
+ROAD_EXTERNALITY_DETAIL_CSV = Path(
+    "/Volumes/WD_Windows/MSc_Thesis/euler/infraScanRoad_trust_2iter_alldev_10sce/traffic_flow/road_externalities_inputs/road_externalities_link_detail.csv"
+)
 
 MODE_CONFIG = {
     "Rail": {"base_vtt": 25.24},
@@ -63,10 +70,14 @@ MODE_CONFIG = {
 
 VTT_SOURCE_PAIRS = pd.DataFrame(
     [
-        {"source": "Schmid", "rail_vtt": 15.20, "road_vtt": 31.40},
-        {"source": "NIBA/NISTRA", "rail_vtt": 25.24, "road_vtt": 26.85},
-        {"source": "Average Dist", "rail_vtt": 24.25, "road_vtt": 38.68},
-        {"source": "Average all purpose", "rail_vtt": 16.63, "road_vtt": 26.85},
+        {"source": "Literature", "rail_vtt":
+         15.20, "road_vtt": 31.40},
+        {"source": "VSS-Norm by guidelines", 
+         "rail_vtt": 25.24, "road_vtt": 26.85},
+        {"source": "VSS-Norm by distance", 
+         "rail_vtt": 24.25, "road_vtt": 38.68},
+        {"source": "VSS-Norm by purpose", 
+         "rail_vtt": 16.63, "road_vtt": 26.85},
     ]
 )
 VTT_SOURCE_PAIRS["label"] = VTT_SOURCE_PAIRS.apply(
@@ -297,6 +308,8 @@ def _load_component_overview(mode: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     df["development"] = df["development"].astype(str)
     df["development_label"] = df["development_label"].astype(str)
+    if "plot_order" in df.columns:
+        df["plot_order"] = pd.to_numeric(df["plot_order"], errors="coerce")
     return df
 
 
@@ -361,24 +374,39 @@ def _component_label(score_id: str) -> str:
     return score_id
 
 
-def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
+def plot_mode_standalone_vs_integrated(mode: str, output_path: Path, max_developments: int | None = None) -> None:
     component_df = _load_component_overview(mode)
     rail_labels = _rail_label_lookup() if mode == "Rail" else {}
     tts_score = "rail_tts_cost" if mode == "Rail" else "road_tts_cost"
-    order = (
-        component_df[
-            (component_df["value_mode"] == "integrated")
-            & (component_df["score_id"] == tts_score)
-        ]
-        .sort_values("value_mio_chf", ascending=False)["development"]
-        .tolist()
-    )
+    if "plot_order" in component_df.columns and component_df["plot_order"].notna().any():
+        order = (
+            component_df[
+                (component_df["value_mode"] == "integrated")
+                & (component_df["score_id"] == tts_score)
+            ][["development", "plot_order"]]
+            .drop_duplicates()
+            .sort_values("plot_order")["development"]
+            .astype(str)
+            .tolist()
+        )
+    else:
+        order = (
+            component_df[
+                (component_df["value_mode"] == "integrated")
+                & (component_df["score_id"] == tts_score)
+            ]
+            .sort_values("value_mio_chf", ascending=False)["development"]
+            .astype(str)
+            .tolist()
+        )
+    if max_developments is not None:
+        order = order[:max_developments]
 
     pivot = component_df.pivot_table(
         index=["development", "development_label", "value_mode"],
         columns="score_id",
         values="value_mio_chf",
-        aggfunc="median",
+        aggfunc="mean",
     ).reset_index()
     pivot["development"] = pd.Categorical(pivot["development"], categories=order, ordered=True)
     pivot = pivot.sort_values(["development", "value_mode"])
@@ -387,12 +415,36 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
     width = 0.36
     offsets = {"standalone_annual_proxy": -width / 2, "integrated": width / 2}
 
-    component_order = [col for col in pivot.columns if col.endswith("_cost")]
-    component_order = [col for col in component_order if col != tts_score] + [tts_score]
+    if mode == "Rail":
+        component_order = [
+            "rail_construction_cost",
+            "rail_maint_cost",
+            "rail_operation_cost",
+            "rail_accident_cost",
+            "rail_airpollution_cost",
+            "rail_co2_cost",
+            "rail_noise_cost",
+            "rail_land_consumption_cost",
+            "rail_tts_cost",
+        ]
+    else:
+        component_order = [
+            "road_construction_cost",
+            "road_maint_cost",
+            "road_accident_cost",
+            "road_airpollution_cost",
+            "road_co2_cost",
+            "road_noise_cost",
+            "road_land_consumption_cost",
+            "road_climate_cost",
+            "road_ecological_disruption_cost",
+            "road_tts_cost",
+        ]
 
     fig, ax = plt.subplots(figsize=(max(16, len(order) * 0.28), 8))
     for value_mode, offset in offsets.items():
         subset = pivot[pivot["value_mode"] == value_mode].copy()
+        subset = subset.groupby("development", as_index=False).mean(numeric_only=True)
         subset = subset.set_index("development").reindex(order).reset_index()
         negative_bottom = np.zeros(len(order))
         positive_bottom = np.zeros(len(order))
@@ -413,7 +465,18 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
                 )
                 positive_bottom += values
             else:
-                plot_values = -values if mode == "Rail" else values
+                plot_values = (
+                    values
+                    if mode == "Road" and value_mode == "standalone_annual_proxy"
+                    else -values
+                )
+                hatch = None
+                if (
+                    mode == "Road"
+                    and value_mode == "standalone_annual_proxy"
+                    and score_id == "road_noise_cost"
+                ):
+                    hatch = None #"//////"
                 ax.bar(
                     x + offset,
                     plot_values,
@@ -422,6 +485,7 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
                     color=_component_color(score_id),
                     edgecolor="white",
                     linewidth=0.2,
+                    hatch=hatch,
                     label=_component_label(score_id) if value_mode == "integrated" else None,
                 )
                 negative_bottom += plot_values
@@ -431,6 +495,8 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
     labels = (
         pivot[["development", "development_label"]]
         .drop_duplicates()
+        .groupby("development", as_index=False)
+        .first()
         .set_index("development")
         .reindex(order)["development_label"]
         .fillna(pd.Series(order, index=order))
@@ -458,7 +524,11 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_integrated_bcr_top10_by_mode(output_path: Path) -> None:
+def plot_integrated_bcr_top10_by_mode(
+    output_path: Path,
+    top_n_per_mode: int = 10,
+    font_size: int = 9,
+) -> None:
     plot_df = pd.read_csv(ANALYSIS_DIR / "integrated_bcr_top10_by_mode_plot_data.csv")
     plot_df["development"] = plot_df["development"].astype(str)
     rail_labels = _rail_label_lookup()
@@ -467,7 +537,29 @@ def plot_integrated_bcr_top10_by_mode(output_path: Path) -> None:
         plot_df["development"].map(rail_labels).fillna(plot_df["ranking_label_short"]),
         plot_df["ranking_label_short"],
     )
-    plot_df = plot_df.sort_values("plot_order")
+    ordered_selection = (
+        plot_df[["mode", "development", "plot_order", "bcr_mean"]]
+        .drop_duplicates()
+        .sort_values(["mode", "bcr_mean", "plot_order"], ascending=[True, False, True])
+        .groupby("mode", group_keys=False)
+        .head(top_n_per_mode)
+        .copy()
+    )
+    mode_order = {"Rail": 0, "Road": 1}
+    ordered_selection["mode_sort"] = ordered_selection["mode"].map(mode_order).fillna(len(mode_order))
+    ordered_selection = ordered_selection.sort_values(["mode_sort", "bcr_mean", "plot_order"], ascending=[True, False, True])
+    ordered_selection["plot_order"] = np.arange(len(ordered_selection))
+    plot_df = (
+        plot_df.merge(
+            ordered_selection[["mode", "development", "plot_order"]],
+            on=["mode", "development"],
+            how="inner",
+            suffixes=("", "_new"),
+        )
+        .drop(columns="plot_order")
+        .rename(columns={"plot_order_new": "plot_order"})
+        .sort_values("plot_order")
+    )
 
     component_order = [
         "rail_construction_cost", "rail_maint_cost", "rail_operation_cost",
@@ -478,14 +570,14 @@ def plot_integrated_bcr_top10_by_mode(output_path: Path) -> None:
         "road_noise_cost", "road_land_consumption_cost", "road_tts_cost",
     ]
     pivot = plot_df.pivot_table(
-        index=["plot_order", "ranking_label_short", "bcr_median"],
+        index=["plot_order", "ranking_label_short", "bcr_mean"],
         columns="score_id",
         values="value_mio_chf",
-        aggfunc="median",
-    ).reset_index().sort_values("plot_order")
+        aggfunc="mean",
+    ).reset_index().sort_values("plot_order").reset_index(drop=True)
 
-    x = np.arange(len(pivot))
-    fig, ax = plt.subplots(figsize=(max(18, len(pivot) * 0.65), 8))
+    y = np.arange(len(pivot))
+    fig, ax = plt.subplots(figsize=(14, max(8, len(pivot) * 0.95)))
     neg = np.zeros(len(pivot))
     pos = np.zeros(len(pivot))
     for score_id in component_order:
@@ -493,35 +585,43 @@ def plot_integrated_bcr_top10_by_mode(output_path: Path) -> None:
             continue
         values = pivot[score_id].fillna(0.0).to_numpy()
         if score_id.endswith("tts_cost"):
-            ax.bar(x, values, width=0.7, bottom=pos, color=_component_color(score_id),
-                   edgecolor="white", linewidth=0.2, label=_component_label(score_id) if score_id.startswith("rail_") else None)
+            ax.barh(y, values, height=0.55, left=pos, color=_component_color(score_id),
+                    edgecolor="white", linewidth=0.2, label=_component_label(score_id) if score_id.startswith("rail_") else None)
             pos += values
         else:
-            ax.bar(x, values, width=0.7, bottom=neg, color=_component_color(score_id),
-                   edgecolor="white", linewidth=0.2,
-                   label=_component_label(score_id) if score_id.startswith("rail_") else None)
+            ax.barh(y, values, height=0.55, left=neg, color=_component_color(score_id),
+                    edgecolor="white", linewidth=0.2,
+                    label=_component_label(score_id) if score_id.startswith("rail_") else None)
             neg += values
 
-    for i, row in enumerate(pivot.itertuples(index=False)):
-        ax.text(i, max(pos[i], 0.0) + 0.5, f"{row.bcr_median:.2f}", ha="center", va="bottom", rotation=90, fontsize=8)
+    ax.set_yticks(y)
+    ax.set_yticklabels(pivot["ranking_label_short"], fontsize=font_size + 6)
+    ax.tick_params(axis="x", labelsize=font_size + 4)
+    ax.set_xlabel("Annual value [Mio. CHF/year]", fontsize=font_size + 6)
+    ax.set_ylabel("Development ID", fontsize=font_size + 6)
+    ax.set_title(
+        f"Top {top_n_per_mode} integrated benefit-cost ratios by mode",
+        fontsize=font_size + 4,
+    )
+    ax.invert_yaxis()
+    ax.xaxis.set_label_position("top")
+    ax.xaxis.tick_top()
+    ax.tick_params(axis="x", top=True, labeltop=True, bottom=False, labelbottom=False)
 
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.axvline(9.5, color="black", linewidth=0.8)
-    ax.set_xticks(x)
-    ax.set_xticklabels(pivot["ranking_label_short"], rotation=90, fontsize=8)
-    ax.set_ylabel("Median annual value over scenarios [Mio. CHF/year]")
-    ax.set_xlabel("Development")
-    ax.set_title("Top 10 integrated benefit-cost ratios by mode with stacked cost components")
     _style_axes(ax)
-    ymax = ax.get_ylim()[1]
-    ax.text(4.5, ymax * 0.95, "Rail top 10", ha="center", fontsize=11)
-    ax.text(14.5, ymax * 0.95, "Road top 10", ha="center", fontsize=11)
     handles, labels = ax.get_legend_handles_labels()
     seen = set()
     filtered = [(h, l) for h, l in zip(handles, labels) if not (l in seen or seen.add(l))]
-    ax.legend([h for h, _ in filtered], [l for _, l in filtered], frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    ax.legend(
+        [h for h, _ in filtered],
+        [l for _, l in filtered],
+        frameon=False,
+        bbox_to_anchor=(1.01, 1),
+        loc="upper left",
+        fontsize=font_size + 1,
+    )
     fig.tight_layout(rect=[0, 0, 0.88, 1])
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=200, transparent=True)
     plt.close(fig)
 
 
@@ -556,16 +656,29 @@ def plot_weighted_tts_mean_std(output_path: Path) -> None:
 
 
 def build_vtt_ratio_plot_df() -> pd.DataFrame:
-    annual = pd.read_csv(ANALYSIS_DIR / "annual_overview_by_development_scenario.csv")
-    integrated = annual[annual["value_mode"] == "integrated"].copy()
-    integrated["cost_base_integrated"] = integrated["cost_annual"].abs()
-    analysis_df = (
-        integrated.groupby(["mode", "development"], as_index=False)
-        .agg(
-            tts_integrated=("tts_annual", "mean"),
-            cost_base_integrated=("cost_base_integrated", "mean"),
+    component_frames = []
+    for mode in ["Rail", "Road"]:
+        component_df = _load_component_overview(mode)
+        integrated = component_df[component_df["value_mode"] == "integrated"].copy()
+        pivot = (
+            integrated.pivot_table(
+                index="development",
+                columns="score_id",
+                values="value_mio_chf",
+                aggfunc="mean",
+            )
+            .reset_index()
         )
-    )
+        tts_score = "rail_tts_cost" if mode == "Rail" else "road_tts_cost"
+        cost_cols = [col for col in pivot.columns if col.endswith("_cost") and col != tts_score]
+        pivot["tts_integrated"] = pivot[tts_score].fillna(0.0)
+        pivot["cost_base_integrated"] = pivot[cost_cols].fillna(0.0).abs().sum(axis=1)
+        pivot["mode"] = mode
+        component_frames.append(
+            pivot[["mode", "development", "tts_integrated", "cost_base_integrated"]]
+        )
+
+    analysis_df = pd.concat(component_frames, ignore_index=True)
 
     ratio_rows = []
     for row in VTT_SOURCE_PAIRS.itertuples(index=False):
@@ -593,9 +706,270 @@ def build_vtt_ratio_plot_df() -> pd.DataFrame:
     return ratio_plot_df
 
 
+def build_vtt_ratio_mean_scenario_ratio_plot_df() -> pd.DataFrame:
+    annual = pd.read_csv(ANALYSIS_DIR / "annual_overview_by_development_scenario.csv")
+    integrated = annual[annual["value_mode"] == "integrated"].copy()
+    integrated["cost_annual"] = pd.to_numeric(integrated["cost_annual"], errors="coerce")
+    integrated["tts_annual"] = pd.to_numeric(integrated["tts_annual"], errors="coerce")
+    integrated = integrated[integrated["cost_annual"] > 0].copy()
+
+    ratio_rows = []
+    for row in VTT_SOURCE_PAIRS.itertuples(index=False):
+        pair_df = integrated.copy()
+        pair_df["adjusted_tts"] = np.where(
+            pair_df["mode"].eq("Rail"),
+            pair_df["tts_annual"] * (row.rail_vtt / MODE_CONFIG["Rail"]["base_vtt"]),
+            pair_df["tts_annual"] * (row.road_vtt / MODE_CONFIG["Road"]["base_vtt"]),
+        )
+        pair_df["adjusted_ratio"] = pair_df["adjusted_tts"] / pair_df["cost_annual"]
+
+        development_mean = (
+            pair_df.groupby(["mode", "development"], as_index=False)
+            .agg(adjusted_ratio=("adjusted_ratio", "mean"))
+            .assign(source=row.source, label=row.label)
+        )
+        ratio_rows.append(development_mean)
+
+    ratio_plot_df = pd.concat(ratio_rows, ignore_index=True)
+    ratio_plot_df["label"] = pd.Categorical(
+        ratio_plot_df["label"],
+        categories=VTT_SOURCE_PAIRS["label"].tolist(),
+        ordered=True,
+    )
+    return ratio_plot_df
+
+
+def build_externality_normalized_df() -> pd.DataFrame:
+    score_df = pd.read_csv(SCORE_RESULTS_DIR / "score_results_long.csv")
+    score_df["development"] = score_df["development"].astype(str)
+    score_df["integrated_value"] = pd.to_numeric(score_df["integrated_value"], errors="coerce")
+
+    road_ext_scores = [
+        "road_accident_cost",
+        "road_airpollution_cost",
+        "road_co2_cost",
+        "road_noise_cost",
+        "road_land_consumption_cost",
+    ]
+    rail_ext_scores = [
+        "rail_accident_cost",
+        "rail_airpollution_cost",
+        "rail_co2_cost",
+        "rail_noise_cost",
+        "rail_land_consumption_cost",
+    ]
+
+    ext_df = score_df[
+        (
+            (score_df["mode"] == "Road") & score_df["score_id"].isin(road_ext_scores)
+        )
+        | (
+            (score_df["mode"] == "Rail") & score_df["score_id"].isin(rail_ext_scores)
+        )
+    ].copy()
+
+    summary = (
+        ext_df.groupby(["mode", "development", "score_id"], as_index=False)
+        .agg(mean_value_chf=("integrated_value", "mean"))
+    )
+    pivot = summary.pivot_table(
+        index=["mode", "development"],
+        columns="score_id",
+        values="mean_value_chf",
+        aggfunc="mean",
+    ).reset_index()
+
+    pivot["total_externalities_chf"] = 0.0
+    pivot["noise_externality_chf"] = np.nan
+
+    for col in road_ext_scores + rail_ext_scores:
+        if col not in pivot.columns:
+            pivot[col] = np.nan
+
+    road_mask = pivot["mode"] == "Road"
+    rail_mask = pivot["mode"] == "Rail"
+
+    pivot.loc[road_mask, "total_externalities_chf"] = pivot.loc[road_mask, road_ext_scores].fillna(0.0).sum(axis=1)
+    pivot.loc[rail_mask, "total_externalities_chf"] = pivot.loc[rail_mask, rail_ext_scores].fillna(0.0).sum(axis=1)
+    pivot.loc[road_mask, "noise_externality_chf"] = pivot.loc[road_mask, "road_noise_cost"]
+    pivot.loc[rail_mask, "noise_externality_chf"] = pivot.loc[rail_mask, "rail_noise_cost"]
+
+    road_lengths = pd.read_csv(ROAD_EXTERNALITY_DETAIL_CSV)
+    road_lengths["development"] = road_lengths["development"].astype(str)
+    road_new = road_lengths[road_lengths["link_role"] == "new_link"].copy()
+    road_geom = (
+        road_new.groupby("development", as_index=False)
+        .agg(
+            new_link_km=("link_length_m_geometry", lambda s: float(pd.to_numeric(s, errors="coerce").mean()) / 1000.0),
+            surface_route_km=("surface_length_m", lambda s: float(pd.to_numeric(s, errors="coerce").mean()) / 1000.0),
+            settlement_exposed_km=(
+                "noise_relevant_share",
+                lambda s: np.nan,
+            ),
+            road_noise_relevant_share=("noise_relevant_share", lambda s: float(pd.to_numeric(s, errors="coerce").mean())),
+        )
+    )
+    road_geom["settlement_exposed_km"] = road_geom["surface_route_km"] * road_geom["road_noise_relevant_share"]
+    road_geom["development_label"] = road_geom["development"]
+
+    settlement_footprint, _ = load_settlement_footprint()
+    rail_labels = _rail_label_lookup()
+    rail_rows = []
+    for gpkg_path in sorted(DEV_DIR.glob("*.gpkg")):
+        if gpkg_path.name.startswith("._"):
+            continue
+        development = gpkg_path.stem.replace(".0", "")
+        try:
+            dev_gdf = gpd.read_file(gpkg_path)
+        except Exception:
+            continue
+        if "new_dev" not in dev_gdf.columns:
+            continue
+        new_segments = dev_gdf[dev_gdf["new_dev"].astype(str).str.lower() == "yes"].copy()
+        if new_segments.empty:
+            continue
+        segment_length_m = new_segments.geometry.length.astype(float)
+        tunnel_length_m = pd.to_numeric(new_segments.get("Tunnel m", 0.0), errors="coerce").fillna(0.0)
+        surface_length_m = np.maximum(segment_length_m - tunnel_length_m, 0.0)
+        settlement_share = new_segments.geometry.apply(
+            lambda geom: compute_settlement_buffer_share(geom, settlement_footprint)
+        ).astype(float)
+        rail_rows.append(
+            {
+                "development": development,
+                "new_link_km": float(segment_length_m.sum()) / 1000.0,
+                "surface_route_km": float(surface_length_m.sum()) / 1000.0,
+                "settlement_exposed_km": float((surface_length_m * settlement_share).sum()) / 1000.0,
+                "development_label": rail_labels.get(development, development),
+            }
+        )
+
+    rail_geom = pd.DataFrame(rail_rows)
+
+    geom = pd.concat(
+        [
+            road_geom.assign(mode="Road"),
+            rail_geom.assign(mode="Rail"),
+        ],
+        ignore_index=True,
+        sort=False,
+    )
+
+    comparison = pivot.merge(geom, on=["mode", "development"], how="left")
+    comparison["development_label"] = comparison["development_label"].fillna(comparison["development"])
+    comparison["total_externalities_mio_chf"] = comparison["total_externalities_chf"] / 1_000_000.0
+    comparison["noise_externality_mio_chf"] = comparison["noise_externality_chf"] / 1_000_000.0
+    comparison["externality_per_new_link_km"] = comparison["total_externalities_mio_chf"] / comparison["new_link_km"]
+    comparison["externality_per_surface_route_km"] = comparison["total_externalities_mio_chf"] / comparison["surface_route_km"]
+    comparison["noise_per_settlement_exposed_km"] = comparison["noise_externality_mio_chf"] / comparison["settlement_exposed_km"]
+    return comparison
+
+
+def plot_externality_per_km_violin(comparison_df: pd.DataFrame, output_path: Path) -> None:
+    plot_df = comparison_df.melt(
+        id_vars=["mode", "development", "development_label"],
+        value_vars=["externality_per_new_link_km", "externality_per_surface_route_km"],
+        var_name="metric",
+        value_name="value_mio_chf_per_km",
+    ).dropna()
+    metric_labels = {
+        "externality_per_new_link_km": "Externalities / new link-km",
+        "externality_per_surface_route_km": "Externalities / surface route-km",
+    }
+    plot_df["metric"] = plot_df["metric"].map(metric_labels)
+    palette = {"Rail": "#D2B8E3", "Road": "#608BA7"}
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    sns.violinplot(
+        data=plot_df,
+        x="metric",
+        y="value_mio_chf_per_km",
+        hue="mode",
+        palette=palette,
+        cut=0,
+        inner="quartile",
+        linewidth=0.9,
+        dodge=True,
+        ax=ax,
+    )
+    for collection in ax.collections:
+        collection.set_alpha(0.80)
+        collection.set_edgecolor("none")
+    sns.stripplot(
+        data=plot_df,
+        x="metric",
+        y="value_mio_chf_per_km",
+        hue="mode",
+        dodge=True,
+        jitter=0.10,
+        color="black",
+        alpha=0.22,
+        size=2.2,
+        zorder=5,
+        ax=ax,
+    )
+    ax.set_title("Integrated externalities normalized by route length")
+    ax.set_xlabel("")
+    ax.set_ylabel("Mean annual externalities [Mio. CHF / km]")
+    _style_axes(ax)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered = [(h, l) for h, l in zip(handles, labels) if not (l in seen or seen.add(l))]
+    ax.legend([h for h, _ in filtered[:2]], [l for _, l in filtered[:2]], title="Mode", frameon=False)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_externality_total_vs_new_link_km(comparison_df: pd.DataFrame, output_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(10, 7))
+    palette = {"Rail": "#8B6FB2", "Road": "#3D79A1"}
+    for mode in ["Rail", "Road"]:
+        sub = comparison_df[comparison_df["mode"] == mode].copy()
+        ax.scatter(
+            sub["new_link_km"],
+            sub["total_externalities_mio_chf"],
+            s=36,
+            alpha=0.75,
+            color=palette[mode],
+            label=mode,
+        )
+    ax.set_title("Integrated externalities versus new link length")
+    ax.set_xlabel("New link length [km]")
+    ax.set_ylabel("Mean annual externalities [Mio. CHF/year]")
+    _style_axes(ax)
+    ax.legend(frameon=False, title="Mode")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_noise_vs_settlement_exposed_km(comparison_df: pd.DataFrame, output_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(10, 7))
+    palette = {"Rail": "#8B6FB2", "Road": "#3D79A1"}
+    for mode in ["Rail", "Road"]:
+        sub = comparison_df[comparison_df["mode"] == mode].copy()
+        ax.scatter(
+            sub["settlement_exposed_km"],
+            sub["noise_externality_mio_chf"],
+            s=36,
+            alpha=0.75,
+            color=palette[mode],
+            label=mode,
+        )
+    ax.set_title("Integrated noise costs versus settlement-exposed route length")
+    ax.set_xlabel("Settlement-exposed route length [km]")
+    ax.set_ylabel("Mean annual noise costs [Mio. CHF/year]")
+    _style_axes(ax)
+    ax.legend(frameon=False, title="Mode")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
 def plot_vtt_ratio_violin(output_path: Path) -> None:
     ratio_plot_df = build_vtt_ratio_plot_df()
-    palette = {"Rail": "#DCA7FF", "Road": "#608BA7"}
+    palette = {"Rail": "#B070AF", "Road": "#6FB2DE"}
 
     fig, ax = plt.subplots(figsize=(18, 7))
     sns.violinplot(
@@ -612,6 +986,7 @@ def plot_vtt_ratio_violin(output_path: Path) -> None:
     )
     for collection in ax.collections:
         collection.set_alpha(0.80)
+        collection.set_edgecolor("none")
 
     sns.stripplot(
         data=ratio_plot_df,
@@ -620,17 +995,74 @@ def plot_vtt_ratio_violin(output_path: Path) -> None:
         hue="mode",
         dodge=True,
         jitter=0.10,
-        alpha=0.30,
+        color = "black",
+        alpha=0.5,
         size=2.4,
         zorder=5,
         ax=ax,
     )
 
     ax.axhline(1, color="black", linewidth=1.0)
-    ax.set_title("Development-level CBA ratio by manually paired VTT sources")
-    ax.set_xlabel("VTT source pair")
+    ax.set_title("Development-level CBA ratio by cross-modal VTT sources")
+    ax.set_xlabel("VTTS (CHF/hour)")
     ax.set_ylabel("CBA ratio")
-    plt.xticks(rotation=25, ha="right")
+    plt.xticks(ha="right")
+    _style_axes(ax)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    filtered_handles = []
+    filtered_labels = []
+    for handle, label in zip(handles, labels):
+        if label not in seen:
+            filtered_handles.append(handle)
+            filtered_labels.append(label)
+            seen.add(label)
+    ax.legend(filtered_handles[:2], filtered_labels[:2], title="Mode", frameon=False)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def plot_vtt_ratio_violin_mean_scenario_ratios(output_path: Path) -> None:
+    ratio_plot_df = build_vtt_ratio_mean_scenario_ratio_plot_df()
+    palette = {"Rail": "#8A5A9E", "Road": "#4C92C3"}
+
+    fig, ax = plt.subplots(figsize=(18, 7))
+    sns.violinplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        palette=palette,
+        cut=0,
+        inner="quartile",
+        linewidth=0.9,
+        dodge=True,
+        ax=ax,
+    )
+    for collection in ax.collections:
+        collection.set_alpha(0.80)
+        collection.set_edgecolor("none")
+
+    sns.stripplot(
+        data=ratio_plot_df,
+        x="label",
+        y="adjusted_ratio",
+        hue="mode",
+        dodge=True,
+        jitter=0.10,
+        color="black",
+        alpha=0.5,
+        size=2.4,
+        zorder=5,
+        ax=ax,
+    )
+
+    ax.axhline(1, color="black", linewidth=1.0)
+    ax.set_title("Mean of scenario-specific development CBA ratios by cross-modal VTT sources")
+    ax.set_xlabel("VTTS (CHF/hour)")
+    ax.set_ylabel("Mean scenario CBA ratio")
+    plt.xticks(ha="right")
     _style_axes(ax)
     handles, labels = ax.get_legend_handles_labels()
     seen = set()
@@ -691,6 +1123,7 @@ def plot_vtt_ratio_violin_by_scenario(output_path: Path) -> None:
     )
     for collection in ax.collections:
         collection.set_alpha(0.80)
+        collection.set_edgecolor("none")
 
     sns.stripplot(
         data=ratio_plot_df,
@@ -701,7 +1134,7 @@ def plot_vtt_ratio_violin_by_scenario(output_path: Path) -> None:
         jitter=0.12,
         alpha=0.18,
         size=1.8,
-        palette={"Rail": "#1E1E1E", "Road": "#1E1E1E"},
+        color="black",
         zorder=5,
         ax=ax,
     )
@@ -1083,9 +1516,16 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
 def main() -> None:
     GENERATED_PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    externality_comparison = build_externality_normalized_df()
+    externality_comparison.to_csv(
+        GENERATED_PLOTS_DIR / "externality_normalized_comparison.csv",
+        index=False,
+    )
+
     plot_mode_standalone_vs_integrated(
         mode="Road",
         output_path=GENERATED_PLOTS_DIR / "road_stacked_integrated_vs_standalone_annual.png",
+        max_developments=30,
     )
     plot_mode_standalone_vs_integrated(
         mode="Rail",
@@ -1100,8 +1540,23 @@ def main() -> None:
     plot_vtt_ratio_violin(
         output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode.png",
     )
+    plot_vtt_ratio_violin_mean_scenario_ratios(
+        output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_mean_scenario_ratios.png",
+    )
     plot_vtt_ratio_violin_by_scenario(
         output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_scenarios.png",
+    )
+    plot_externality_per_km_violin(
+        externality_comparison,
+        output_path=GENERATED_PLOTS_DIR / "externality_per_km_violin.png",
+    )
+    plot_externality_total_vs_new_link_km(
+        externality_comparison,
+        output_path=GENERATED_PLOTS_DIR / "externality_total_vs_new_link_km.png",
+    )
+    plot_noise_vs_settlement_exposed_km(
+        externality_comparison,
+        output_path=GENERATED_PLOTS_DIR / "noise_vs_settlement_exposed_km.png",
     )
 
     print("Saved plots to:", GENERATED_PLOTS_DIR)

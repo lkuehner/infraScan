@@ -252,7 +252,7 @@ def build_road_construction_result_df(
             "development": row.ID_new,
             "score_id": score_id,
             "standalone_value": -(row.building_costs / STANDALONE_ANNUAL_YEARS),
-            "integrated_value": -(
+            "integrated_value": (
                 cost_open_highway * crf_open_highway
                 + cost_bridge * crf_bridge
                 + cost_tunnel * crf_tunnel
@@ -298,7 +298,7 @@ def build_road_maint_result_df(
             "development": row.ID_new,
             "score_id": score_id,
             "standalone_value": -row.maintenance_annual,
-            "integrated_value": -(row.maintenance_annual * dyn_factor),
+            "integrated_value": row.maintenance_annual * dyn_factor,
         }
 
         for scenario in scenarios:
@@ -461,9 +461,9 @@ def build_road_externalities_result_df(
             integrated_value = None if integrated_column is None else getattr(row, integrated_column)
             if integrated_value is not None and pd.notna(integrated_value):
                 if score_id == "road_land_consumption_cost":
-                    integrated_value = -abs(float(integrated_value))
+                    integrated_value = abs(float(integrated_value))
                 else:
-                    integrated_value = -float(integrated_value)
+                    integrated_value = float(integrated_value)
             rows.append({
                 "development": row.development,
                 "scenario": row.scenario,
