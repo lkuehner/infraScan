@@ -1,7 +1,0 @@
-Status quo is plotted once because it is identical across developments.
-Absolute maps use a common Blues scale across status quo and all selected developments.
-Delta maps use a red-white-green style with an explicit neutral band around zero.
-Absolute scale min/max: 1219.79931640625 / 46106.52734375
-Delta max abs change: 24157.943359375
-Neutral band around zero: +/- 1207.89716796875
-Boundary breaks for delta visualization: -24157.94, -12078.97, -4831.59, -1207.90, 1207.90, 4831.59, 12078.97, 24157.94

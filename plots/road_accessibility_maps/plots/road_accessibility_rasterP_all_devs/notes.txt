@@ -1,7 +1,0 @@
-Raster-based accessibility with TT_ij = A_i + N[a(i), e(j)] + E_j
-Potential P_j remains on raster basis: pop_j + 0.5 * empl_j
-Only network time N remains catchment/access-egress based
-scenario=scenario_45
-n_developments=12
-absolute scale min/max=318.1040676592086,61743.49740798066
-delta scale max abs=32040.644468076327

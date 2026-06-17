@@ -1,4 +1,0 @@
-developments_rendered=12
-absolute min/max=1155.7978349213743,46106.52743481384
-delta max abs=24157.94322164516
-delta cmap is continuous red-white-green centered at 0

@@ -1,3 +1,0 @@
-Labels are catchment ID and either P_j or contribution to E_7.
-Highlighted IDs include 171 and 9999 because the large redistribution occurs there.
-Origin 7 has unchanged own access time; the loss comes mainly from destination-side redistribution.
