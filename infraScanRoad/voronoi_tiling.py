@@ -1,12 +1,254 @@
+"""OSM speed-raster utilities and Voronoi tiling
+
+The Euclidean Voronoi outputs in this module are legacy and are not used for
+the current OD assignment or travel-flow optimization. However, the road
+pipeline currently uses this module's ``nw_from_osm`` and ``osm_nw_to_raster``
+functions to import OSM roads and build the speed-limit raster.
+"""
 import pandas as pd
 from scipy.spatial import Voronoi
 import osmnx as ox
+from osmnx import _downloader, _overpass
 from pyproj import Transformer
+import os
+from pathlib import Path
+import requests
 import sys
 
 from .data_import import *
 from .plots import *
+from . import settings
 
+
+def _offline_overpass_request(data, pause=None, error_pause=60):
+    """Return one cached Overpass response without making a network request."""
+    url = ox.settings.overpass_endpoint.rstrip("/") + "/interpreter"
+    prepared_url = requests.Request("GET", url, params=data).prepare().url
+    response = _downloader._retrieve_from_cache(prepared_url)
+    if response is None:
+        raise FileNotFoundError(
+            "Offline OSM cache miss. No cached response exists for the required "
+            f"query in {settings.OSM_CACHE_DIR}. Run with online_access=True to "
+            "refresh the raw OSM cache."
+        )
+    return response
+
+
+def nw_from_osm(limits):
+
+    cache_dir = Path(settings.OSM_CACHE_DIR)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    ox.settings.use_cache = True
+    ox.settings.cache_folder = str(cache_dir)
+
+    if settings.online_access:
+        cached_files = list(cache_dir.glob("*.json"))
+        for cache_file in cached_files:
+            cache_file.unlink()
+        print(f"Online OSM mode: cleared {len(cached_files)} cached responses")
+    elif not any(cache_dir.glob("*.json")):
+        raise FileNotFoundError(
+            "Offline OSM mode requires cached raw responses, but no JSON files "
+            f"were found in {cache_dir}. Run once with online_access=True first."
+        )
+
+    output_dir = Path("data/infraScanRoad/Network/OSM_road")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for output_file in output_dir.glob("sub_area_edges_*.gpkg"):
+        output_file.unlink()
+
+    original_overpass_request = _overpass._overpass_request
+
+    if not settings.online_access:
+        _overpass._overpass_request = _offline_overpass_request
+
+    # Split the area into smaller polygons
+    num_splits = 10  # Adjust this to get 1/10th of the area (e.g., 3 for a 1/9th split)
+    sub_polygons = split_area(limits, num_splits)
+
+    # Initialize the transformer between LV95 and WGS 84
+    transformer = Transformer.from_crs("EPSG:2056", "EPSG:4326", always_xy=True)
+    try:
+        for i, lv95_sub_polygon in enumerate(sub_polygons):
+
+            # Convert the coordinates of the sub-polygon to lat/lon
+            lat_lon_frame = Polygon([transformer.transform(*point) for point in lv95_sub_polygon.exterior.coords])
+
+            try:
+                # Attempt to process the OSM data for the sub-polygon
+                print(f"Processing sub-polygon {i + 1}/{len(sub_polygons)}", end='\r')
+                G = ox.graph_from_polygon(lat_lon_frame, network_type="drive", simplify=True, truncate_by_edge=True)
+                G = ox.add_edge_speeds(G)
+
+                # Convert the graph to a GeoDataFrame
+                gdf_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+                gdf_edges = gdf_edges[["geometry", "speed_kph"]]
+                gdf_edges = gdf_edges[gdf_edges["speed_kph"] <= 80]
+
+                # Project the edges GeoDataFrame to the desired CRS (if necessary)
+                gdf_edges = gdf_edges.to_crs("EPSG:2056")
+
+                # Save only the edges GeoDataFrame to a GeoPackage
+                output_filename = output_dir / f"sub_area_edges_{i + 1}.gpkg"
+                gdf_edges.to_file(output_filename, driver="GPKG")
+
+            except ValueError as e:
+                # Some boundary tiles can legitimately contain no drivable nodes.
+                print(f"Skipping graph in sub-polygon {i + 1} due to error: {e}")
+                continue
+    finally:
+        _overpass._overpass_request = original_overpass_request
+
+    print(f"\nStored {len(list(output_dir.glob('sub_area_edges_*.gpkg')))} OSM road tiles")
+
+
+def split_area(limits, num_splits):
+    """
+    Split the given area defined by 'limits' into 'num_splits' smaller polygons.
+
+    :param limits: Tuple of (min_x, min_y, max_x, max_y) in LV95 coordinates.
+    :param num_splits: The number of splits along each axis (total areas = num_splits^2).
+    :return: List of shapely Polygon objects representing the smaller areas.
+    """
+    min_x, min_y, max_x, max_y = limits
+    width = (max_x - min_x) / num_splits
+    height = (max_y - min_y) / num_splits
+
+    sub_polygons = []
+    for i in range(num_splits):
+        for j in range(num_splits):
+            # Calculate the corners of the sub-polygon
+            sub_min_x = min_x + i * width
+            sub_max_x = sub_min_x + width
+            sub_min_y = min_y + j * height
+            sub_max_y = sub_min_y + height
+
+            # Create the sub-polygon and add it to the list
+            sub_polygon = box(sub_min_x, sub_min_y, sub_max_x, sub_max_y)
+            sub_polygons.append(sub_polygon)
+            #sub_polygons = gpd.GeoDataFrame(pd.concat([pd.DataFrame(sub_polygons), pd.DataFrame(sub_polygon).T], ignore_index=True))
+
+    return sub_polygons
+    
+def osm_nw_to_raster(limits):
+    # Add comment
+
+    # Folder containing all the geopackages
+    gpkg_folder = "data/infraScanRoad/Network/OSM_road"
+
+    output_dir = Path("data/infraScanRoad/Network/OSM_tif")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for output_name in ("nw_speed_limit.gpkg", "speed_limit_raster.tif"):
+        output_path = output_dir / output_name
+        if output_path.exists():
+            output_path.unlink()
+
+    # List all geopackage files in the folder
+    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')and not f.startswith(".") and not f.startswith("._")]
+    if not gpkg_files:
+        raise FileNotFoundError(f"No processed OSM road tiles found in {gpkg_folder}")
+
+    # Combine all geopackages into one GeoDataFrame
+    gdf_combined = gpd.GeoDataFrame(pd.concat([gpd.read_file(f) for f in gpkg_files], ignore_index=True))
+    # Assuming 'speed' is the column with speed limits
+    # Convert speeds to numeric, handling non-numeric values
+    gdf_combined['speed'] = pd.to_numeric(gdf_combined['speed_kph'], errors='coerce')
+
+    # Drop NaN values or replace them with 0, depending on how you want to handle them
+    #gdf_combined.dropna(subset=['speed_kph'], inplace=True)
+    gdf_combined['speed_kph'].fillna(30, inplace=True)
+    # print(gdf_combined.crs)
+    # print(gdf_combined.head(10).to_string())
+    gdf_combined.to_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
+    print("file stored")
+
+
+    gdf_combined = gpd.read_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
+
+    # Define the resolution
+    resolution = 100
+
+    # Define the bounds of the raster (aligned with your initial limits)
+    minx, miny, maxx, maxy = limits
+    print(limits)
+
+    # Compute the number of rows and columns
+    num_cols = int((maxx - minx) / resolution)
+    num_rows = int((maxy - miny) / resolution)
+
+    # Initialize the raster with 4 = minimal travel speed (or np.nan for no-data value)
+    #raster = np.zeros((num_rows, num_cols), dtype=np.float32)
+    raster = np.full((num_rows, num_cols), 4, dtype=np.float32)
+
+    # Define the transform
+    transform = from_origin(west=minx, north=maxy, xsize=resolution, ysize=resolution)
+
+
+    #lake = gpd.read_file("data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
+    ###############################################################################################################
+
+    print("ready to fill")
+
+    tot_num = num_cols * num_cols
+    count=0
+
+    for row in range(num_rows):
+        for col in range(num_cols):
+
+            #print(row, " - ", col)
+            # Find the bounds of the cell
+            cell_bounds = box(minx + col * resolution,
+                              maxy - row * resolution,
+                              minx + (col + 1) * resolution,
+                              maxy - (row + 1) * resolution)
+
+            # Find the roads that intersect with this cell
+            #print(gdf_combined.head(10).to_string())
+            intersecting_roads = gdf_combined[gdf_combined.intersects(cell_bounds)]
+
+            # Debugging print
+            #print(f"Cell {row},{col} intersects with {len(intersecting_roads)} roads")
+
+            # If there are any intersecting roads, find the maximum speed limit
+            if not intersecting_roads.empty:
+                max_speed = intersecting_roads['speed_kph'].max()
+                raster[row, col] = max_speed
+
+            # Print the progress
+            count += 1
+            progress_percentage = (count / tot_num) * 100
+            sys.stdout.write(f"\rProgress: {progress_percentage:.2f}%")
+            sys.stdout.flush()
+
+    # Check for spatial overlap with the second raster and update values if necessary
+    with rasterio.open("data/landuse_landcover/processed/unproductive_area.tif") as src2:
+        unproductive_area = src2.read(1)
+        if raster.shape == unproductive_area.shape:
+            print("Network raster and unproductive area are overalpping")
+            mask = np.logical_and(unproductive_area > 0, unproductive_area < 100)
+            raster[mask] = 0
+        else:
+            print("Network raster and unproductive area are not overalpping!!!!!")
+
+
+    with rasterio.open(
+            'data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif',
+            'w',
+            driver='GTiff',
+            height=raster.shape[0],
+            width=raster.shape[1],
+            count=1,
+            dtype=str(raster.dtype),
+            crs="EPSG:2056",
+            transform=transform,
+    ) as dst:
+        dst.write(raster, 1)
+
+
+#-----------------------------------------------
+# Voronoi tiling based on euclidean distance
+# NOT ACTIVE IN THE CURRENT PIPELINE
+#------------------------------------------------
 
 def voronoi_finite_polygons_2d(vor, radius=None):
     """
@@ -203,179 +445,5 @@ def get_voronoi_all_developments():
     #points = node_filter_gdf[["XKOORD", "YKOORD"]].to_numpy()
 
 
-def nw_from_osm(limits):
-
-    # Split the area into smaller polygons
-    num_splits = 10  # Adjust this to get 1/10th of the area (e.g., 3 for a 1/9th split)
-    sub_polygons = split_area(limits, num_splits)
-
-    # Initialize the transformer between LV95 and WGS 84
-    transformer = Transformer.from_crs("EPSG:2056", "EPSG:4326", always_xy=True)
-    for i, lv95_sub_polygon in enumerate(sub_polygons):
-
-        # Convert the coordinates of the sub-polygon to lat/lon
-        lat_lon_frame = Polygon([transformer.transform(*point) for point in lv95_sub_polygon.exterior.coords])
-
-        try:
-            # Attempt to process the OSM data for the sub-polygon
-            print(f"Processing sub-polygon {i + 1}/{len(sub_polygons)}", end='\r')
-            #G = ox.graph_from_polygon(lat_lon_frame, network_type="drive", simplify=True, truncate_by_edge=True)
-            # Define a custom filter to exclude highways
-            # This example excludes motorways, motorway_links, trunks, and trunk_links
-            #custom_filter = '["highway"!~"motorway|motorway_link|trunk|trunk_link"]'
-            # Create the graph using the custom filter
-            G = ox.graph_from_polygon(lat_lon_frame, network_type="drive", simplify=True, truncate_by_edge=True) # custom_filter=custom_filter,
-            G = ox.add_edge_speeds(G)
-
-            # Convert the graph to a GeoDataFrame
-            gdf_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
-            gdf_edges = gdf_edges[["geometry", "speed_kph"]]
-            gdf_edges = gdf_edges[gdf_edges["speed_kph"] <= 80]
-
-            # Project the edges GeoDataFrame to the desired CRS (if necessary)
-            gdf_edges = gdf_edges.to_crs("EPSG:2056")
-
-            # Save only the edges GeoDataFrame to a GeoPackage
-            output_filename = f"data/infraScanRoad/Network/OSM_road/sub_area_edges_{i + 1}.gpkg"
-            gdf_edges.to_file(output_filename, driver="GPKG")
-
-        except ValueError as e:
-            # Handle areas with no nodes by logging or printing an error message
-            print(f"Skipping graph in sub-polygon {i + 1} due to error: {e}")
-            # Optionally, continue with the next sub-polygon or perform other error handling
-            continue
 
 
-def split_area(limits, num_splits):
-    """
-    Split the given area defined by 'limits' into 'num_splits' smaller polygons.
-
-    :param limits: Tuple of (min_x, min_y, max_x, max_y) in LV95 coordinates.
-    :param num_splits: The number of splits along each axis (total areas = num_splits^2).
-    :return: List of shapely Polygon objects representing the smaller areas.
-    """
-    min_x, min_y, max_x, max_y = limits
-    width = (max_x - min_x) / num_splits
-    height = (max_y - min_y) / num_splits
-
-    sub_polygons = []
-    for i in range(num_splits):
-        for j in range(num_splits):
-            # Calculate the corners of the sub-polygon
-            sub_min_x = min_x + i * width
-            sub_max_x = sub_min_x + width
-            sub_min_y = min_y + j * height
-            sub_max_y = sub_min_y + height
-
-            # Create the sub-polygon and add it to the list
-            sub_polygon = box(sub_min_x, sub_min_y, sub_max_x, sub_max_y)
-            sub_polygons.append(sub_polygon)
-            #sub_polygons = gpd.GeoDataFrame(pd.concat([pd.DataFrame(sub_polygons), pd.DataFrame(sub_polygon).T], ignore_index=True))
-
-    return sub_polygons
-
-
-def osm_nw_to_raster(limits):
-    # Add comment
-
-    # Folder containing all the geopackages
-    gpkg_folder = "data/infraScanRoad/Network/OSM_road"
-
-    # List all geopackage files in the folder
-    gpkg_files = [os.path.join(gpkg_folder, f) for f in os.listdir(gpkg_folder) if f.endswith('.gpkg')and not f.startswith(".") and not f.startswith("._")]
-
-    # Combine all geopackages into one GeoDataFrame
-    gdf_combined = gpd.GeoDataFrame(pd.concat([gpd.read_file(f) for f in gpkg_files], ignore_index=True))
-    # Assuming 'speed' is the column with speed limits
-    # Convert speeds to numeric, handling non-numeric values
-    gdf_combined['speed'] = pd.to_numeric(gdf_combined['speed_kph'], errors='coerce')
-
-    # Drop NaN values or replace them with 0, depending on how you want to handle them
-    #gdf_combined.dropna(subset=['speed_kph'], inplace=True)
-    gdf_combined['speed_kph'].fillna(30, inplace=True)
-    # print(gdf_combined.crs)
-    # print(gdf_combined.head(10).to_string())
-    gdf_combined.to_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
-    print("file stored")
-
-
-    gdf_combined = gpd.read_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
-
-    # Define the resolution
-    resolution = 100
-
-    # Define the bounds of the raster (aligned with your initial limits)
-    minx, miny, maxx, maxy = limits
-    print(limits)
-
-    # Compute the number of rows and columns
-    num_cols = int((maxx - minx) / resolution)
-    num_rows = int((maxy - miny) / resolution)
-
-    # Initialize the raster with 4 = minimal travel speed (or np.nan for no-data value)
-    #raster = np.zeros((num_rows, num_cols), dtype=np.float32)
-    raster = np.full((num_rows, num_cols), 4, dtype=np.float32)
-
-    # Define the transform
-    transform = from_origin(west=minx, north=maxy, xsize=resolution, ysize=resolution)
-
-
-    #lake = gpd.read_file("data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
-    ###############################################################################################################
-
-    print("ready to fill")
-
-    tot_num = num_cols * num_cols
-    count=0
-
-    for row in range(num_rows):
-        for col in range(num_cols):
-
-            #print(row, " - ", col)
-            # Find the bounds of the cell
-            cell_bounds = box(minx + col * resolution,
-                              maxy - row * resolution,
-                              minx + (col + 1) * resolution,
-                              maxy - (row + 1) * resolution)
-
-            # Find the roads that intersect with this cell
-            #print(gdf_combined.head(10).to_string())
-            intersecting_roads = gdf_combined[gdf_combined.intersects(cell_bounds)]
-
-            # Debugging print
-            #print(f"Cell {row},{col} intersects with {len(intersecting_roads)} roads")
-
-            # If there are any intersecting roads, find the maximum speed limit
-            if not intersecting_roads.empty:
-                max_speed = intersecting_roads['speed_kph'].max()
-                raster[row, col] = max_speed
-
-            # Print the progress
-            count += 1
-            progress_percentage = (count / tot_num) * 100
-            sys.stdout.write(f"\rProgress: {progress_percentage:.2f}%")
-            sys.stdout.flush()
-
-    # Check for spatial overlap with the second raster and update values if necessary
-    with rasterio.open("data/landuse_landcover/processed/unproductive_area.tif") as src2:
-        unproductive_area = src2.read(1)
-        if raster.shape == unproductive_area.shape:
-            print("Network raster and unproductive area are overalpping")
-            mask = np.logical_and(unproductive_area > 0, unproductive_area < 100)
-            raster[mask] = 0
-        else:
-            print("Network raster and unproductive area are not overalpping!!!!!")
-
-
-    with rasterio.open(
-            'data/infraScanRoad/Network/OSM_tif/speed_limit_raster.tif',
-            'w',
-            driver='GTiff',
-            height=raster.shape[0],
-            width=raster.shape[1],
-            count=1,
-            dtype=str(raster.dtype),
-            crs="EPSG:2056",
-            transform=transform,
-    ) as dst:
-        dst.write(raster, 1)

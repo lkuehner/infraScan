@@ -13,10 +13,8 @@ import rasterio
 
 from infraScan.infraScanRail import paths as rail_paths
 from infraScan.infraScanRail.TT_Delay import analyze_travel_times
-from infraScan.infraScanIntegrated.scoring_registry import (
-    compute_settlement_buffer_share,
-    load_settlement_footprint,
-)
+from infraScan.infraScanRoad.externalities_comp import compute_settlement_buffer_share
+from infraScan.infraScanIntegrated.scoring_registry import load_settlement_footprint
 
 SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
 #("scenario_76", "scenario_45", "scenario_67")
@@ -38,29 +36,32 @@ COST_COLORS = {
 
 # Centralized paths (adjust these at top to configure where data and outputs live)
 DATA_ROOT = Path(rail_paths.MAIN)
-COST_OUTPUT_DIR = DATA_ROOT / "plots" / "Integrated" / "CBA_Comparison"
-TTS_OUTPUT_DIR = DATA_ROOT / "plots" / "Integrated" / "TTS_Comparison"
+ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
+INTEGRATED_COSTS_DIR = DATA_ROOT / "data Kopie" / "infraScanIntegrated" / "costs"
+INTEGRATED_PLOTS_DIR = DATA_ROOT / "plots" / "Integrated"
 
 RAIL_COSTS_PATH = DATA_ROOT / "_archive" / "infraScanRail" /"data" / "costs"
-ROAD_COSTS_PATH = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce"
+ROAD_COSTS_PATH = ROAD_DATA_ROOT / "costs"
 RAIL_NETWORK_PATH = DATA_ROOT / "data" / "infraScanRail" / "Network"
-ROAD_NETWORK_PATH = DATA_ROOT / "data" / "infraScanRoad" / "Network"
+ROAD_NETWORK_PATH = ROAD_DATA_ROOT / "Network"
 
 RAIL_TOTAL_COSTS_CSV = RAIL_COSTS_PATH / "total_costs.csv"
 RAIL_TT_SAVINGS_CSV = RAIL_COSTS_PATH / "traveltime_savings.csv"
-ROAD_TOTAL_COSTS_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/total_costs_od.csv"
-ROAD_TT_OD_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/traveltime_savings_od.csv"
-ROAD_TT_DETAILED_CSV = "/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/traffic_flow/od_trust_xi_all10sce/od_tt_savings_detailed.csv"
+ROAD_TOTAL_COSTS_CSV = ROAD_COSTS_PATH / "total_costs_od.csv"
+ROAD_TT_OD_CSV = ROAD_COSTS_PATH / "traveltime_savings_od.csv"
+ROAD_TT_DETAILED_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "od_tt_savings_detailed.csv"
+ROAD_OD_TT_UNWEIGHTED_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "developments_od_tt.csv"
+ROAD_OD_TT_STATUS_QUO_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "status_quo_od_tt.csv"
 
 RAIL_TRAVELTIME_CACHE = RAIL_NETWORK_PATH / "travel_time" / "cache" / "od_times.pkl"
 RAIL_TRAVELTIME_SAVINGS_DIR = RAIL_NETWORK_PATH / "travel_time" / "TravelTime_Savings"
 ROAD_TRAVELTIME_RASTER = ROAD_NETWORK_PATH / "travel_time" / "travel_time_raster.tif"
 DEV_DIR = DATA_ROOT / rail_paths.DEVELOPMENT_DIRECTORY
-ANALYSIS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_analysis")
-SCORE_RESULTS_DIR = Path("infraScan/infraScanIntegrated/outputs/score_results")
-GENERATED_PLOTS_DIR = Path("infraScan/infraScanIntegrated/plots/generated")
+ANALYSIS_DIR = INTEGRATED_COSTS_DIR / "score_analysis"
+SCORE_RESULTS_DIR = INTEGRATED_COSTS_DIR / "score_results"
+GENERATED_PLOTS_DIR = INTEGRATED_PLOTS_DIR / "generated"
 ROAD_EXTERNALITY_DETAIL_CSV = Path(
-    "/Volumes/WD_Windows/MSc_Thesis/euler/infraScanRoad_trust_2iter_alldev_10sce/traffic_flow/road_externalities_inputs/road_externalities_link_detail.csv"
+    ROAD_DATA_ROOT / "traffic_flow" / "link_flow_externalities" / "link_flow_externalities_long.csv"
 )
 
 MODE_CONFIG = {
@@ -124,10 +125,10 @@ def load_rail_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> 
 def load_road_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> pd.DataFrame:
     totals_path = pd.read_csv(ROAD_TOTAL_COSTS_CSV)
     tt_path = pd.read_csv(ROAD_TT_OD_CSV)
-    construction = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/construction.gpkg")[["ID_new", "building_costs"]]
-    maintenance = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/maintenance.gpkg")[["ID_new", "maintenance"]]
-    externalities = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
-    noise = gpd.read_file("/Volumes/WD_Windows/MSc_Thesis/euler/data/infraScanRoad/costs_trust_xi_all10sce/noise.gpkg")[["ID_new", "noise_s1"]]
+    construction = gpd.read_file(ROAD_COSTS_PATH / "construction.gpkg")[["ID_new", "building_costs"]]
+    maintenance = gpd.read_file(ROAD_COSTS_PATH / "maintenance.gpkg")[["ID_new", "maintenance"]]
+    externalities = gpd.read_file(ROAD_COSTS_PATH / "externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
+    noise = gpd.read_file(ROAD_COSTS_PATH / "noise.gpkg")[["ID_new", "noise_s1"]]
 
     totals_df = (
         construction.merge(maintenance, on="ID_new", how="left")
@@ -171,7 +172,7 @@ def load_road_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> 
     return pd.concat(rows, ignore_index=True)
 
 def create_combined_cost_csv() -> Path:
-    combined_cost_csv = COST_OUTPUT_DIR / "rail_road_final_costs_total.csv"
+    combined_cost_csv = GENERATED_PLOTS_DIR / "rail_road_final_costs_total.csv"
     if combined_cost_csv.exists():
         return combined_cost_csv
     combined = pd.concat([load_rail_final_costs_from_sources(), load_road_final_costs_from_sources()], ignore_index=True, sort=False)
@@ -191,36 +192,13 @@ def create_rail_dev_id_lookup_table() -> pd.DataFrame:
 
 def load_rail_od_savings_top(rail_top: list[str]) -> pd.DataFrame:
     """Load rail OD-level travel time savings using analyze_travel_times."""
-    workspace_root = Path(__file__).resolve().parents[2]
-    lookup = create_rail_dev_id_lookup_table()
-
-    cache_path = RAIL_TRAVELTIME_CACHE
-    with cache_path.open("rb") as handle:
-        cache = pickle.load(handle)
-
-    dev_id_to_position = {
-        str(dev_id): idx
-        for idx, dev_id in enumerate(lookup["dev_id"].astype(str).tolist())
-    }
-    selected_positions = [dev_id_to_position[dev_id] for dev_id in rail_top]
-    selected_od_times = [cache["od_times_dev"][idx] for idx in selected_positions]
-    selected_lookup = pd.DataFrame({"dev_id": rail_top}, index=range(1, len(rail_top) + 1))
-
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(workspace_root)
-        analyze_travel_times(
-            od_times_status_quo=cache["od_times_status_quo"],
-            od_times_dev=selected_od_times,
-            od_nodes=list(cache["od_times_status_quo"][0]["from_station"].unique()),
-            dev_id_lookup_table=selected_lookup,
-        )
-    finally:
-        os.chdir(original_cwd)
-
     savings_dir = RAIL_TRAVELTIME_SAVINGS_DIR
     frames: list[pd.DataFrame] = []
-    for dev_id in rail_top:
+    available_rail_top = [dev_id for dev_id in rail_top if (savings_dir / f"TravelTime_Savings_Dev_{dev_id}.csv").exists()]
+    if not available_rail_top:
+        return pd.DataFrame(columns=["mode", "development", "scenario", "origin", "destination", "tts_minutes"])
+
+    for dev_id in available_rail_top:
         csv_path = savings_dir / f"TravelTime_Savings_Dev_{dev_id}.csv"
         df = pd.read_csv(csv_path)
         df["development"] = str(dev_id)
@@ -237,42 +215,44 @@ def load_rail_od_savings_top(rail_top: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def load_road_affected_cell_savings_top(road_top: list[str]) -> pd.DataFrame:
-    """Load road raster-based affected-cell travel time savings."""
-    with rasterio.open(ROAD_TRAVELTIME_RASTER) as src:
-        sq_tt = src.read(1).astype(float)
+def load_road_od_savings_top(road_top: list[str]) -> pd.DataFrame:
+    """Load road OD-level unweighted travel time savings."""
+    dev_od = pd.read_csv(ROAD_OD_TT_UNWEIGHTED_CSV)
+    sq_od = pd.read_csv(ROAD_OD_TT_STATUS_QUO_CSV)
 
-    frames: list[pd.DataFrame] = []
-    for dev_id in road_top:
-        with rasterio.open(ROAD_NETWORK_PATH / "travel_time" / "developments" / f"dev{dev_id}_travel_time_raster.tif") as src:
-            dev_tt = src.read(1).astype(float)
-        with rasterio.open(ROAD_NETWORK_PATH / "travel_time" / "developments" / f"dev{dev_id}_source_id_raster.tif") as src:
-            dev_source_id = src.read(1)
+    dev_od["development"] = dev_od["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+    dev_od["scenario"] = dev_od["scenario"].astype(str)
+    sq_od["scenario"] = sq_od["scenario"].astype(str)
 
-        delta_min = (sq_tt - dev_tt) / 60.0
-        affected_mask = dev_source_id == 9999
-        affected_values = delta_min[affected_mask]
-        affected_values = affected_values[np.isfinite(affected_values)]
+    dev_od = dev_od[
+        dev_od["development"].isin([str(dev) for dev in road_top])
+        & dev_od["scenario"].isin(SCENARIOS)
+    ].copy()
+    sq_od = sq_od[sq_od["scenario"].isin(SCENARIOS)].copy()
 
-        frames.append(
-            pd.DataFrame(
-                {
-                    "mode": "Road",
-                    "development": str(dev_id),
-                    "scenario": "affected_cells",
-                    "tts_minutes": affected_values,
-                }
-            )
-        )
-
-    return pd.concat(frames, ignore_index=True)
+    merged = dev_od.merge(
+        sq_od[["origin", "destination", "scenario", "travel_time"]],
+        on=["origin", "destination", "scenario"],
+        how="left",
+        suffixes=("_dev", "_sq"),
+    )
+    merged["tts_minutes"] = (
+        pd.to_numeric(merged["travel_time_sq"], errors="coerce")
+        - pd.to_numeric(merged["travel_time_dev"], errors="coerce")
+    ) * 60.0
+    merged = merged[np.isfinite(merged["tts_minutes"]) & (np.abs(merged["tts_minutes"]) > 1e-9)].copy()
+    merged["mode"] = "Road"
+    return merged[["mode", "development", "scenario", "origin", "destination", "tts_minutes"]]
 
 
 def load_od_level_tts_top(rail_top: list[str], road_top: list[str]) -> pd.DataFrame:
-    """Combine rail OD savings and road affected-cell savings for final boxplot comparison."""
+    """Combine rail OD savings and road OD savings for final boxplot comparison."""
     rail = load_rail_od_savings_top(rail_top)
-    road = load_road_affected_cell_savings_top(road_top)
-    return pd.concat([rail, road], ignore_index=True, sort=False)
+    road = load_road_od_savings_top(road_top)
+    frames = [frame for frame in [rail, road] if not frame.empty]
+    if not frames:
+        return pd.DataFrame(columns=["mode", "development", "scenario", "tts_minutes"])
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 
@@ -446,6 +426,7 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path, max_develop
         subset = pivot[pivot["value_mode"] == value_mode].copy()
         subset = subset.groupby("development", as_index=False).mean(numeric_only=True)
         subset = subset.set_index("development").reindex(order).reset_index()
+        alpha = 0.45 if value_mode == "standalone_annual_proxy" else 0.90
         negative_bottom = np.zeros(len(order))
         positive_bottom = np.zeros(len(order))
         for score_id in component_order:
@@ -461,15 +442,12 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path, max_develop
                     color=_component_color(score_id),
                     edgecolor="white",
                     linewidth=0.2,
+                    alpha=alpha,
                     label=_component_label(score_id) if value_mode == "integrated" else None,
                 )
                 positive_bottom += values
             else:
-                plot_values = (
-                    values
-                    if mode == "Road" and value_mode == "standalone_annual_proxy"
-                    else -values
-                )
+                plot_values = -np.abs(values)
                 hatch = None
                 if (
                     mode == "Road"
@@ -486,6 +464,7 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path, max_develop
                     edgecolor="white",
                     linewidth=0.2,
                     hatch=hatch,
+                    alpha=alpha,
                     label=_component_label(score_id) if value_mode == "integrated" else None,
                 )
                 negative_bottom += plot_values
@@ -628,17 +607,35 @@ def plot_integrated_bcr_top10_by_mode(
 def plot_weighted_tts_mean_std(output_path: Path) -> None:
     df = pd.read_csv(ANALYSIS_DIR / "tts_summary_by_development.csv")
     rail_labels = _rail_label_lookup()
-    fig, axes = plt.subplots(1, 2, figsize=(20, 18), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(20, 18), sharex=False)
+
+    road_all = df[df["mode"] == "Road"].copy()
+    rail_all = df[df["mode"] == "Rail"].copy()
+    road_all["mean_hours"] = road_all["mean_tts_minutes"] / 60.0
+    road_all["std_hours"] = road_all["std_tts_minutes"] / 60.0
+    rail_all["mean_hours"] = rail_all["mean_tts_minutes"] / 60.0
+    rail_all["std_hours"] = rail_all["std_tts_minutes"] / 60.0
+    shared_positive_xmax = max(
+        float((road_all["mean_hours"] + road_all["std_hours"].fillna(0.0)).max()) if not road_all.empty else 0.0,
+        float((rail_all["mean_hours"] + rail_all["std_hours"].fillna(0.0)).max()) if not rail_all.empty else 0.0,
+    )
+    shared_positive_xmax = max(shared_positive_xmax * 1.05, 1.0)
+
     for ax, mode in zip(axes, ["Road", "Rail"]):
         sub = df[df["mode"] == mode].copy()
         sub["mean_hours"] = sub["mean_tts_minutes"] / 60.0
         sub["std_hours"] = sub["std_tts_minutes"] / 60.0
         sub = sub.sort_values("mean_hours", ascending=False).reset_index(drop=True)
         y = np.arange(len(sub))
-        ax.hlines(y, sub["mean_hours"] - sub["std_hours"], sub["mean_hours"] + sub["std_hours"],
+        lower = sub["mean_hours"] - sub["std_hours"].fillna(0.0)
+        upper = sub["mean_hours"] + sub["std_hours"].fillna(0.0)
+        ax.hlines(y, lower, upper,
                   color="#8EC5E8", linewidth=2)
         ax.scatter(sub["mean_hours"], y, color="#0E5A9C", s=24, zorder=3)
         ax.axvline(0, color="black", linestyle="--", linewidth=0.9)
+        xmin = float(lower.min()) if not sub.empty else 0.0
+        pad = max(shared_positive_xmax * 0.05, 1.0)
+        ax.set_xlim(xmin - pad, shared_positive_xmax)
         ax.set_yticks(y)
         if mode == "Rail":
             ylabels = [rail_labels.get(dev, dev) for dev in sub["development"].astype(str)]
@@ -1284,7 +1281,7 @@ def plot_combined_top5_final_cost_savings(out_dir: Path) -> None:
     ax.spines["bottom"].set_visible(False)
 
     plt.tight_layout(rect=[0, 0, 0.95, 1])
-    plt.savefig(COST_OUTPUT_DIR / "combined_top5_final_cost_savings.png", dpi=600)
+    plt.savefig(out_dir / "combined_top5_final_cost_savings.png", dpi=600)
     plt.close()
 
 def plot_all_rail_final_cost_savings(output_dir: Path) -> None:
@@ -1416,55 +1413,39 @@ def plot_all_road_final_cost_savings(output_dir: Path) -> None:
 def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
     """
     Final cross-mode TTS boxplot:
-    - Rail: affected OD savings from analyze_travel_times
-    - Road: raster-based affected-cell savings
+    - Rail: affected OD savings
+    - Road: affected OD savings
     """
     if output_dir is None:
-        output_dir = TTS_OUTPUT_DIR
+        output_dir = GENERATED_PLOTS_DIR
     output_path = Path(output_dir) / "combined_top5_tts_boxplot.png"
     
-    # Get top 5 developments from costs
-    rail_data = load_rail_final_costs_from_sources()
-    road_data = load_road_final_costs_from_sources()
-    
-    rail_top = (
-        rail_data.groupby(["development", "line_name"], as_index=False)
-        .agg({"net_benefit_mio_chf": "mean"})
-        .sort_values("net_benefit_mio_chf", ascending=False)
-        # Get the top 5 
-        .head(5)["development"].astype(str).tolist()
+    selection_df = (
+        pd.read_csv(ANALYSIS_DIR / "integrated_bcr_top10_by_mode_plot_data.csv")[
+            ["mode", "development", "plot_order", "ranking_label_short"]
+        ]
+        .drop_duplicates()
+        .sort_values("plot_order")
     )
-    road_top = (
-        road_data.groupby(["development", "line_name"], as_index=False)
-        .agg({"net_benefit_mio_chf": "mean"})
-        .sort_values("net_benefit_mio_chf", ascending=False)
-        # Get the top 5 
-        .head(5)["development"].astype(str).tolist()
-    )
-    
-    # Get display labels for top 5 developments
-    display_labels: dict[str, str] = {}
-    rail_top_df = (
-        rail_data[rail_data["development"].astype(str).isin(rail_top)]
-        .drop_duplicates(["development", "line_name"]) 
-    )
-    for _, row in rail_top_df.iterrows():
-        display_labels[f"Rail {str(row['development'])}"] = str(row["line_name"])
-    road_top_df = (
-        road_data[road_data["development"].astype(str).isin(road_top)]
-        .drop_duplicates(["development", "line_name"]) 
-    )
-    for _, row in road_top_df.iterrows():
-        display_labels[f"Road {str(row['development'])}"] = str(row["line_name"])
+    selection_df["development"] = selection_df["development"].astype(str)
+    rail_top = selection_df.loc[selection_df["mode"] == "Rail", "development"].tolist()
+    road_top = selection_df.loc[selection_df["mode"] == "Road", "development"].tolist()
+    display_labels = {
+        f"{row.mode} {row.development}": str(row.ranking_label_short)
+        for row in selection_df.itertuples(index=False)
+    }
     
     
-    # Load OD-level TTS data (rail from analyze_travel_times, road from rasters)
+    # Load unweighted TTS distributions (rail OD relations, road OD relations).
     data = load_od_level_tts_top(rail_top, road_top).copy() 
+    if data.empty:
+        return output_path
     data["label"] = data["mode"] + " " + data["development"].astype(str)
-    order = combined_order(data)
+    order = [f"Rail {dev}" for dev in rail_top] + [f"Road {dev}" for dev in road_top]
+    order = [label for label in order if label in set(data["label"])]
     palette = {label: "#fff3b0" if label.startswith("Rail") else "#e09f3e" for label in order}
 
-    fig, ax = plt.subplots(figsize=(11, 5), dpi=300)
+    fig, ax = plt.subplots(figsize=(18, 6), dpi=300)
 
     sns.boxplot(
         data=data,
@@ -1479,21 +1460,21 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
         ax=ax,
     )
 
-    ax.axvline(x=4.5, color="black", linestyle="-", alpha=0.7, linewidth=0.5)
+    ax.axvline(x=len(rail_top) - 0.5, color="black", linestyle="-", alpha=0.7, linewidth=0.5)
     ax.axhline(y=ax.get_ylim()[0], color="0.7", linestyle="--", alpha=0.7)
     ax.set_xticks(np.arange(len(order)))
     ax.set_xticklabels([display_labels.get(label, label.split(" ", 1)[1]) for label in order], rotation=90)
-    ax.set_title("Distribution of travel time savings for top development alternatives", fontsize=14, pad=20)
+    ax.set_title("Distribution of unweighted travel time savings for developments selected in the integrated BCR ranking", fontsize=14, pad=20)
     ax.set_xlabel("Development ID", fontsize=10, labelpad=20)
     ax.set_ylabel("Travel time savings [minutes]", fontsize=10)
     ax.grid(axis="y", linestyle="--", alpha=0.7)
 
-    ax.text(2, ax.get_ylim()[1] + 0.1, "Rail top 5", ha="center", va="top", fontsize=11)
-    ax.text(7, ax.get_ylim()[1] + 0.1, "Road top 5", ha="center", va="top", fontsize=11)
+    ax.text((len(rail_top) - 1) / 2, ax.get_ylim()[1] + 0.1, "Rail top 10", ha="center", va="top", fontsize=11)
+    ax.text(len(rail_top) + (len(road_top) - 1) / 2, ax.get_ylim()[1] + 0.1, "Road top 10", ha="center", va="top", fontsize=11)
 
     handles = [
         mpatches.Patch(color="#fff3b0", label="Rail affected OD relations"),
-        mpatches.Patch(color="#e09f3e", label="Road raster-cell savings"),
+        mpatches.Patch(color="#e09f3e", label="Road affected OD relations"),
     ]
     ax.legend(handles=handles, bbox_to_anchor=(1.01, 1), loc="upper left", frameon=False, fontsize=8)
 
@@ -1506,7 +1487,6 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
     plt.savefig(output_path, dpi=600)
     plt.close(fig)
     return output_path
-
 
 
 # ------------------------------------------
@@ -1537,27 +1517,31 @@ def main() -> None:
     plot_weighted_tts_mean_std(
         output_path=GENERATED_PLOTS_DIR / "weighted_tts_mean_std_by_mode.png",
     )
+    # plot_combined_top5_final_cost_savings(GENERATED_PLOTS_DIR)
+    # plot_all_rail_final_cost_savings(GENERATED_PLOTS_DIR)
+    # plot_all_road_final_cost_savings(GENERATED_PLOTS_DIR)
+    plot_final_tts_boxplot_top5(GENERATED_PLOTS_DIR)
     plot_vtt_ratio_violin(
         output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode.png",
     )
-    plot_vtt_ratio_violin_mean_scenario_ratios(
-        output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_mean_scenario_ratios.png",
-    )
-    plot_vtt_ratio_violin_by_scenario(
-        output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_scenarios.png",
-    )
-    plot_externality_per_km_violin(
-        externality_comparison,
-        output_path=GENERATED_PLOTS_DIR / "externality_per_km_violin.png",
-    )
+    # plot_vtt_ratio_violin_mean_scenario_ratios(
+    #     output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_mean_scenario_ratios.png",
+    # )
+    # plot_vtt_ratio_violin_by_scenario(
+    #     output_path=GENERATED_PLOTS_DIR / "vtt_ratio_violin_by_mode_scenarios.png",
+    # )
+    # plot_externality_per_km_violin(
+    #     externality_comparison,
+    #     output_path=GENERATED_PLOTS_DIR / "externality_per_km_violin.png",
+    # )
     plot_externality_total_vs_new_link_km(
         externality_comparison,
         output_path=GENERATED_PLOTS_DIR / "externality_total_vs_new_link_km.png",
     )
-    plot_noise_vs_settlement_exposed_km(
-        externality_comparison,
-        output_path=GENERATED_PLOTS_DIR / "noise_vs_settlement_exposed_km.png",
-    )
+    # plot_noise_vs_settlement_exposed_km(
+    #     externality_comparison,
+    #     output_path=GENERATED_PLOTS_DIR / "noise_vs_settlement_exposed_km.png",
+    # )
 
     print("Saved plots to:", GENERATED_PLOTS_DIR)
 

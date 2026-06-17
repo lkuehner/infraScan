@@ -29,6 +29,18 @@ def infrascanroad():
     """
     os.chdir(settings.MAIN)
 
+    print("=" * 80)
+    print("INFRASCANROAD RUNTIME CONFIGURATION")
+    print("=" * 80)
+    print(f"Working directory: {settings.MAIN}")
+    print(f"Online OSM access: {settings.online_access}")
+    print(f"OSM raw cache: {settings.OSM_CACHE_DIR}")
+    print(
+        "OSM source: fresh download" if settings.online_access
+        else "OSM source: raw JSON cache only"
+    )
+    print()
+
     warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
     runtimes = {}
 

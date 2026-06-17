@@ -28,14 +28,27 @@ from itertools import islice
 from joblib import Parallel, delayed
 import warnings
 
-#warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
-
 from . import settings
 
 
 SHARED_SCENARIO_COMPONENTS_PATH = os.path.join(
     "data", "Scenario", "cache", "shared", "shared_scenario_components.pkl"
 )
+
+
+def _get_valid_construction_development_ids():
+    """Return developments with finite, positive assigned construction costs."""
+    construction = gpd.read_file("data/infraScanRoad/costs/construction.gpkg")
+    construction["ID_new"] = pd.to_numeric(construction["ID_new"], errors="coerce")
+    construction["building_costs"] = pd.to_numeric(
+        construction["building_costs"], errors="coerce"
+    )
+    valid = (
+        construction["ID_new"].notna()
+        & np.isfinite(construction["building_costs"])
+        & (construction["building_costs"] > 0)
+    )
+    return set(construction.loc[valid, "ID_new"].astype(int))
 
 
 
@@ -1068,12 +1081,15 @@ def GetHighwayPHDemandPerCommune():
     y0 = 2019
     rawod = pd.read_excel('data/_basic_data/KTZH_00001982_00003903.xlsx')
     communalOD = rawod.loc[
-        (rawod['jahr'] == 2018) & (rawod['kategorie'] == 'Verkehrsaufkommen') & (rawod['verkehrsmittel'] == 'miv')]
+        (rawod['jahr'] == 2018)
+        & (rawod['kategorie'] == 'Verkehrsaufkommen')
+        & (rawod['verkehrsmittel'] == 'miv')
+    ].copy()
     # communalOD = data.drop(['jahr','quelle_name','quelle_gebietart','ziel_name','ziel_gebietart',"kategorie","verkehrsmittel","einheit","gebietsstand_jahr","zeit_dimension"],axis=1)
     # sum(communalOD['wert'])
     # 1 Who will go on highway?
     # # # Not binnenverkehr ... removes about 50% of trips
-    communalOD['wert'].loc[(communalOD['quelle_code'] == communalOD['ziel_code'])] = 0
+    communalOD.loc[communalOD['quelle_code'] == communalOD['ziel_code'], 'wert'] = 0
     # sum(communalOD['wert'])
     # # Take share of OD
     # todo adapt this value
@@ -1458,6 +1474,8 @@ def GetVoronoiOD_multi(selected_developments=None):
 
     # Convert values to integers if needed
     xx_values = sorted(int(xx) for xx in xx_values)
+    valid_construction_ids = _get_valid_construction_development_ids()
+    xx_values = [xx for xx in xx_values if xx in valid_construction_ids]
     if selected_developments is not None:
         selected_set = {int(x) for x in selected_developments}
         xx_values = [xx for xx in xx_values if xx in selected_set]
@@ -1753,7 +1771,9 @@ def GetVoronoiOD_generated_status_quo_pop_based(year=None):
     pairs = []
     overlap_rows = []
     for zone_id in tqdm(unique_voronoi_id, desc='Processing generated status-quo OD'):
-        if zone_id <= 0:
+        # -1 denotes cells without an assigned access point; ID 0 is a valid node.
+        #if zone_id <=0
+        if zone_id < 0:
             continue
         mask_voronoi = voronoi_tif == zone_id
 
@@ -1937,7 +1957,9 @@ def GetVoronoiOD_multi_generated_pop_based(year=None, max_developments=None, sel
         overlap_rows = []
 
         for zone_id in unique_voronoi_id:
-            if zone_id <= 0:
+            # -1 denotes cells without an assigned access point; ID 0 is a valid node.
+            #if zone_id <= 0
+            if zone_id < 0:
                 continue
             mask_voronoi = voronoi_tif == zone_id
 
@@ -2034,8 +2056,8 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
     1. Keep the observed commune OD structure as the base.
     2. Scale commune-commune demand with scenario-specific population growth
        factors plus global modal-split and distance factors.
-    3. Use future population rasters only to split each commune's demand across
-       status-quo Voronoi cells.
+    3. Split each commune's demand across status-quo Voronoi cells using a
+       scenario-population/current-employment activity blend.
     """
     if year is None:
         year = settings.start_valuation_year
@@ -2108,10 +2130,22 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
 
     commune_meta = communes_population.set_index("gemeinde_bfs_nr").loc[common_communes]
 
-    # Load status-quo Voronoi and generated population rasters.
+    # Load status-quo Voronoi, generated population, and current employment rasters.
     commune_raster, _ = GetCommuneShapes(raster_path=base_raster_path)
     with rasterio.open(base_raster_path) as src:
         voronoi_tif = src.read(1)
+
+    employment_raster_path = os.path.join(
+        "data", "independent_variable", "processed", "raw", "empl20.tif"
+    )
+    with rasterio.open(employment_raster_path) as src:
+        employment_tif = src.read(1).astype(float)
+    if employment_tif.shape != voronoi_tif.shape:
+        raise ValueError(
+            "Current employment and status-quo Voronoi rasters do not share the same grid: "
+            f"{employment_raster_path} has shape {employment_tif.shape}, "
+            f"{base_raster_path} has shape {voronoi_tif.shape}."
+        )
 
     scenario_pop_rasters = {}
     available_scenarios = []
@@ -2140,7 +2174,9 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
     pairs = []
     overlap_rows = []
     for zone_id in tqdm(unique_voronoi_id, desc="Processing generated status-quo OD"):
-        if zone_id <= 0:
+        # -1 denotes cells without an assigned access point; ID 0 is a valid node.
+        # if zone_id <= 0
+        if zone_id < 0:
             continue
         mask_voronoi = voronoi_tif == zone_id
 
@@ -2156,6 +2192,7 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
             overlap_entry = {
                 "commune_id": int(commune_id),
                 "voronoi_id": int(zone_id),
+                "employment": float(np.nansum(employment_tif[overlap])),
             }
             for scen_name, scen_pop_tif in scenario_pop_rasters.items():
                 overlap_entry[f"pop_{scen_name}"] = float(np.nansum(scen_pop_tif[overlap]))
@@ -2203,7 +2240,12 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
             commune_growth.append((pop_curr / pop_start) if pop_start > 0 else 1.0)
         commune_growth = pd.Series(commune_growth, index=common_communes, dtype=float)
 
-        scenario_mass_series = overlap_df.reindex(multi_index)[f"pop_{scen_name}"].fillna(0.0)
+        population_mass = overlap_df.reindex(multi_index)[f"pop_{scen_name}"].fillna(0.0)
+        employment_mass = overlap_df.reindex(multi_index)["employment"].fillna(0.0)
+        scenario_mass_series = (
+            float(settings.road_od_blend_pop_rate) * population_mass
+            + float(settings.road_od_blend_empl_rate) * employment_mass
+        )
         commune_mass_totals = scenario_mass_series.groupby(level=1).transform("sum")
         commune_zone_counts = scenario_mass_series.groupby(level=1).transform("size").astype(float)
         mass_values = scenario_mass_series.to_numpy(dtype=float)
@@ -2251,12 +2293,136 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
     return
 
 
-def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_developments=None, output_dir=None):
+def _build_generated_development_od_matrices(
+    xx,
+    directory_path,
+    output_dir,
+    scenario_names,
+    scenario_pop_stack,
+    commune_raster,
+    employment_tif,
+    common_communes,
+    odmat,
+    commune_growth_by_scenario,
+    modal_factors,
+    distance_factors,
+    year,
+):
+    """Build all generated-scenario OD matrices for one development."""
+    if settings.travel_time_suppress_known_warnings:
+        warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+
+    file_path = f"{directory_path}dev{xx}_source_id_raster.tif"
+    with rasterio.open(file_path) as src:
+        voronoi_tif = src.read(1)
+
+    unique_voronoi_id = np.sort(np.unique(voronoi_tif))
+    unique_commune_id = np.sort(np.unique(commune_raster))
+    common_commune_set = set(common_communes)
+
+    pairs = []
+    overlap_rows = []
+    for zone_id in unique_voronoi_id:
+        # -1 denotes cells without an assigned access point; ID 0 is a valid node.
+        if zone_id < 0:
+            continue
+        mask_voronoi = voronoi_tif == zone_id
+
+        for commune_id in unique_commune_id:
+            commune_id = int(commune_id)
+            if commune_id <= 0 or commune_id not in common_commune_set:
+                continue
+
+            overlap = (commune_raster == commune_id) & mask_voronoi
+            if not np.any(overlap):
+                continue
+
+            pairs.append({"commune_id": commune_id, "voronoi_id": int(zone_id)})
+            overlap_entry = {
+                "commune_id": commune_id,
+                "voronoi_id": int(zone_id),
+                "employment": float(np.nansum(employment_tif[overlap])),
+            }
+            for scen_pos, scen_name in enumerate(scenario_names):
+                overlap_entry[f"pop_{scen_name}"] = float(
+                    np.nansum(scenario_pop_stack[scen_pos][overlap])
+                )
+            overlap_rows.append(overlap_entry)
+
+    if not pairs:
+        return 0, True
+
+    pairs_df = pd.DataFrame(pairs)
+    overlap_df = pd.DataFrame(overlap_rows).set_index(["voronoi_id", "commune_id"])
+    tuples = list(zip(pairs_df["voronoi_id"], pairs_df["commune_id"]))
+    multi_index = pd.MultiIndex.from_tuples(tuples, names=["voronoi_id", "commune_id"])
+    od_matrix = pd.DataFrame(
+        np.zeros((len(multi_index), len(multi_index)), dtype=float),
+        index=multi_index,
+        columns=multi_index,
+    )
+
+    destination_communes = [int(col[1]) for col in od_matrix.columns]
+    for commune_id_origin in od_matrix.index.get_level_values(1).unique():
+        extracted_values = odmat.loc[int(commune_id_origin), destination_communes].to_numpy(dtype=float)
+        mask = od_matrix.index.get_level_values(1) == commune_id_origin
+        od_matrix.loc[mask] = extracted_values
+
+    od_matrix_values = od_matrix.to_numpy(copy=False)
+    commune_index = multi_index.get_level_values(1).astype(int)
+    employment_mass = overlap_df.reindex(multi_index)["employment"].fillna(0.0)
+    written_files = 0
+
+    for scen_name in scenario_names:
+        scen_idx = int(scen_name.split("_")[-1]) - 1
+        population_mass = overlap_df.reindex(multi_index)[f"pop_{scen_name}"].fillna(0.0)
+        scenario_mass = (
+            float(settings.road_od_blend_pop_rate) * population_mass
+            + float(settings.road_od_blend_empl_rate) * employment_mass
+        )
+        commune_mass_totals = scenario_mass.groupby(level=1).transform("sum")
+        commune_zone_counts = scenario_mass.groupby(level=1).transform("size").astype(float)
+        share_values = np.divide(
+            scenario_mass.to_numpy(dtype=float),
+            commune_mass_totals.to_numpy(dtype=float),
+            out=1.0 / np.maximum(commune_zone_counts.to_numpy(dtype=float), 1.0),
+            where=commune_mass_totals.to_numpy(dtype=float) > 0,
+        )
+
+        commune_growth = commune_growth_by_scenario[scen_name]
+        sqrt_growth_vector = np.sqrt(commune_growth.reindex(commune_index).to_numpy(dtype=float))
+        combined_vector = sqrt_growth_vector * share_values
+        od_matrix_temp = pd.DataFrame(
+            od_matrix_values * combined_vector[:, None] * combined_vector[None, :]
+            * modal_factors.get((scen_idx, year), 1.0)
+            * distance_factors.get((scen_idx, year), 1.0),
+            index=multi_index,
+            columns=multi_index,
+        )
+
+        od_grouped = od_matrix_temp.reset_index().groupby("voronoi_id").sum()
+        od_grouped = od_grouped.T.groupby("voronoi_id").sum().T
+        od_grouped = od_grouped.drop(columns="commune_id")
+        np.fill_diagonal(od_grouped.values, 0)
+        od_grouped.to_csv(os.path.join(output_dir, f"od_matrix_dev{xx}_{scen_name}.csv"))
+        written_files += 1
+
+    return written_files, False
+
+
+def GetVoronoiOD_multi_generated(
+    year=None,
+    max_developments=None,
+    selected_developments=None,
+    output_dir=None,
+    n_jobs=None,
+):
     """
     Build development-specific generated road OD matrices.
 
-    Observed commune OD demand is scaled first. Generated population rasters are
-    then used only to split each commune's demand across development Voronoi cells.
+    Observed commune OD demand is scaled first. A scenario-population/current-
+    employment activity blend then splits each commune's demand across
+    development Voronoi cells.
     """
     if year is None:
         year = settings.start_valuation_year
@@ -2331,8 +2497,20 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
     commune_meta = communes_population.set_index("gemeinde_bfs_nr").loc[common_communes]
     commune_raster, _ = GetCommuneShapes(raster_path=base_raster_path)
 
-    # Load generated population rasters for the Voronoi split.
-    scenario_pop_rasters = {}
+    # Load generated population and current employment rasters for the Voronoi split.
+    employment_raster_path = os.path.join(
+        "data", "independent_variable", "processed", "raw", "empl20.tif"
+    )
+    with rasterio.open(employment_raster_path) as src:
+        employment_tif = src.read(1).astype(float)
+    if employment_tif.shape != commune_raster.shape:
+        raise ValueError(
+            "Current employment and commune rasters do not share the same grid: "
+            f"{employment_raster_path} has shape {employment_tif.shape}, "
+            f"the commune raster has shape {commune_raster.shape}."
+        )
+
+    scenario_pop_rasters = []
     available_scenarios = []
     for scen_name in scenario_names:
         pop_raster_path = os.path.join(
@@ -2345,12 +2523,31 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
         if not os.path.exists(pop_raster_path):
             continue
         with rasterio.open(pop_raster_path) as src:
-            scenario_pop_rasters[scen_name] = src.read(1)
+            scenario_pop_rasters.append(src.read(1))
         available_scenarios.append(scen_name)
 
     if not available_scenarios:
         raise FileNotFoundError("No generated population rasters were found for generated development OD export.")
     scenario_names = available_scenarios
+    scenario_pop_stack = np.stack(scenario_pop_rasters)
+
+    # Growth depends only on commune and scenario, not on the development.
+    commune_growth_by_scenario = {}
+    for scen_name in scenario_names:
+        scen_idx = int(scen_name.split("_")[-1]) - 1
+        growth = []
+        for commune_id in common_communes:
+            district = commune_meta.at[commune_id, "bezirk"]
+            district_scenario = population_scenarios[district]
+            scenario_slice = district_scenario[district_scenario["scenario"] == scen_idx]
+            pop_start = scenario_slice.loc[
+                scenario_slice["year"] == shared_start_year, "population"
+            ].iloc[0]
+            pop_curr = scenario_slice.loc[scenario_slice["year"] == year, "population"].iloc[0]
+            growth.append((pop_curr / pop_start) if pop_start > 0 else 1.0)
+        commune_growth_by_scenario[scen_name] = pd.Series(
+            growth, index=common_communes, dtype=float
+        )
 
     # Select development Voronoi rasters.
     xx_values = []
@@ -2360,6 +2557,17 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
             xx_values.append(int(match.group(1)))
 
     xx_values = sorted(xx_values)
+
+    # Construction feasibility is the common eligibility criterion for Road
+    # single-mode and Integrated assessments. Filter before creating OD files.
+    valid_construction_ids = _get_valid_construction_development_ids()
+    raster_count = len(xx_values)
+    xx_values = [xx for xx in xx_values if xx in valid_construction_ids]
+    print(
+        f"Development OD eligibility: {len(xx_values)} of {raster_count} raster developments "
+        "have valid construction costs"
+    )
+
     if selected_developments is not None:
         selected_set = {int(x) for x in selected_developments}
         xx_values = [xx for xx in xx_values if xx in selected_set]
@@ -2368,127 +2576,44 @@ def GetVoronoiOD_multi_generated(year=None, max_developments=None, selected_deve
         if max_developments > 0:
             xx_values = xx_values[:max_developments]
 
+    if n_jobs is None:
+        n_jobs = min(len(xx_values), int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+    n_jobs = max(1, int(n_jobs))
+    print(f"Building development OD matrices with {n_jobs} parallel workers")
+
+    development_results = Parallel(
+        n_jobs=n_jobs,
+        batch_size=1,
+        return_as="generator_unordered",
+    )(
+        delayed(_build_generated_development_od_matrices)(
+            xx,
+            directory_path,
+            output_dir,
+            scenario_names,
+            scenario_pop_stack,
+            commune_raster,
+            employment_tif,
+            common_communes,
+            odmat,
+            commune_growth_by_scenario,
+            modal_factors,
+            distance_factors,
+            year,
+        )
+        for xx in xx_values
+    )
+
     written_files = 0
     skipped_no_pairs = 0
-
-    for xx in tqdm(xx_values, desc="Processing generated development ODs"):
-        file_path = f"{directory_path}dev{xx}_source_id_raster.tif"
-        with rasterio.open(file_path) as src:
-            voronoi_tif = src.read(1)
-
-        unique_voronoi_id = np.sort(np.unique(voronoi_tif))
-        unique_commune_id = np.sort(np.unique(commune_raster))
-
-        pairs = []
-        overlap_rows = []
-        # Compute commune/Voronoi overlaps and scenario-specific splitting masses.
-        for zone_id in unique_voronoi_id:
-            if zone_id <= 0:
-                continue
-            mask_voronoi = voronoi_tif == zone_id
-
-            for commune_id in unique_commune_id:
-                if commune_id <= 0 or int(commune_id) not in common_communes:
-                    continue
-
-                overlap = (commune_raster == commune_id) & mask_voronoi
-                if int(np.nansum(overlap)) <= 0:
-                    continue
-
-                pairs.append({"commune_id": int(commune_id), "voronoi_id": int(zone_id)})
-                overlap_entry = {
-                    "commune_id": int(commune_id),
-                    "voronoi_id": int(zone_id),
-                }
-                for scen_name, scen_pop_tif in scenario_pop_rasters.items():
-                    overlap_entry[f"pop_{scen_name}"] = float(np.nansum(scen_pop_tif[overlap]))
-                overlap_rows.append(overlap_entry)
-
-        if not pairs:
-            skipped_no_pairs += 1
-            continue
-
-        # Build a commune/Voronoi OD template from the observed commune OD.
-        pairs_df = pd.DataFrame(pairs)
-        overlap_df = pd.DataFrame(overlap_rows).set_index(["voronoi_id", "commune_id"])
-
-        tuples = list(zip(pairs_df["voronoi_id"], pairs_df["commune_id"]))
-        multi_index = pd.MultiIndex.from_tuples(tuples, names=["voronoi_id", "commune_id"])
-        temp_df = np.zeros((len(multi_index), len(multi_index)), dtype=float)
-        od_matrix = pd.DataFrame(data=temp_df, index=multi_index, columns=multi_index)
-
-        set_id_destination = [int(col[1]) for col in od_matrix.columns]
-        unique_values_second_index = od_matrix.index.get_level_values(1).unique()
-
-        for commune_id_origin in unique_values_second_index:
-            row_values = odmat.loc[int(commune_id_origin)]
-            extracted_values = row_values[set_id_destination].to_numpy(dtype=float)
-            mask = od_matrix.index.get_level_values(1) == commune_id_origin
-            od_matrix.loc[mask] = extracted_values
-
-        od_matrix_values = od_matrix.to_numpy(copy=False)
-        commune_index = multi_index.get_level_values(1).astype(int)
-
-        for scen_name in scenario_names:
-            # Scale the observed commune OD and split each commune over its Voronoi cells.
-            scen_idx = int(scen_name.split("_")[-1]) - 1
-            m_factor = modal_factors.get((scen_idx, year), 1.0)
-            d_factor = distance_factors.get((scen_idx, year), 1.0)
-
-            commune_growth = []
-            for commune_id in common_communes:
-                district = commune_meta.at[commune_id, "bezirk"]
-                district_scenario = population_scenarios[district]
-                scenario_slice = district_scenario[district_scenario["scenario"] == scen_idx]
-                pop_start = scenario_slice.loc[scenario_slice["year"] == shared_start_year, "population"].iloc[0]
-                pop_curr = scenario_slice.loc[scenario_slice["year"] == year, "population"].iloc[0]
-                commune_growth.append((pop_curr / pop_start) if pop_start > 0 else 1.0)
-            commune_growth = pd.Series(commune_growth, index=common_communes, dtype=float)
-
-            scenario_mass_series = overlap_df.reindex(multi_index)[f"pop_{scen_name}"].fillna(0.0)
-            commune_mass_totals = scenario_mass_series.groupby(level=1).transform("sum")
-            commune_zone_counts = scenario_mass_series.groupby(level=1).transform("size").astype(float)
-            mass_values = scenario_mass_series.to_numpy(dtype=float)
-            total_values = commune_mass_totals.to_numpy(dtype=float)
-            fallback_values = 1.0 / np.maximum(commune_zone_counts.to_numpy(dtype=float), 1.0)
-            share_values = np.divide(
-                mass_values,
-                total_values,
-                out=fallback_values.copy(),
-                where=total_values > 0,
-            )
-            scenario_share_series = pd.Series(
-                share_values,
-                index=multi_index,
-                dtype=float,
-            )
-
-            sqrt_growth_vector = np.sqrt(commune_growth.reindex(commune_index).to_numpy(dtype=float))
-            share_vector = scenario_share_series.to_numpy(dtype=float)
-            combined_vector = sqrt_growth_vector * share_vector
-
-            od_matrix_temp_values = (
-                od_matrix_values
-                * combined_vector[:, None]
-                * combined_vector[None, :]
-                * m_factor
-                * d_factor
-            )
-            od_matrix_temp = pd.DataFrame(
-                data=od_matrix_temp_values,
-                index=multi_index,
-                columns=multi_index,
-            )
-
-            od_grouped = od_matrix_temp.reset_index().groupby("voronoi_id").sum()
-            od_grouped = od_grouped.T.groupby("voronoi_id").sum().T
-            od_grouped = od_grouped.drop(columns="commune_id")
-            np.fill_diagonal(od_grouped.values, 0)
-
-            od_grouped.to_csv(
-                os.path.join(output_dir, f"od_matrix_dev{xx}_{scen_name}.csv")
-            )
-            written_files += 1
+    for files_written, no_pairs in tqdm(
+        development_results,
+        total=len(xx_values),
+        desc="Generated development OD matrices",
+        unit="development",
+    ):
+        written_files += files_written
+        skipped_no_pairs += int(no_pairs)
 
     print(
         "Generated development OD export summary: "
@@ -2650,10 +2775,10 @@ def get_nw_data(OD_matrix, points, voronoi_gdf, edges):
     OD_matrix.columns = OD_matrix.columns.map(lambda x: int(float(x)))
 
     valid_ids = sorted(set(common_ID) & set(OD_matrix.index.astype(int)) & set(OD_matrix.columns.astype(int)))
-    valid_ids = [id_ for id_ in valid_ids if id_ > 0]
+    valid_ids = [id_ for id_ in valid_ids if id_ >= 0]
 
     if not valid_ids:
-        raise ValueError("No overlapping positive IDs between network demand nodes and OD matrix.")
+        raise ValueError("No overlapping non-negative IDs between network demand nodes and OD matrix.")
 
     # new column "generate_demand" where ID_point is in valid_ids
     points["generate_demand"] = points["ID_point"].astype(int).isin(valid_ids)
@@ -3054,6 +3179,7 @@ def SUE_C_Logit(nroutes, D_od, par, delta_ir, delta_odr, cf_r, theta):
     # res=least_squares(fun, D_r0.flatten(),jac=fun_der,bounds=bounds)
 
     # D_r to be optimized -> demand on each route
+    show_solver_output = settings.travel_time_show_solver_output
     res = minimize(fun, D_r0.flatten(),
                     method='trust-constr',
                     # method='SLSQP',
@@ -3062,7 +3188,7 @@ def SUE_C_Logit(nroutes, D_od, par, delta_ir, delta_odr, cf_r, theta):
                    options={ #'ftol': 1e5, 'eps': 1e5,
                        'maxiter': 2,
                        'verbose': 0,
-                       'disp': True},
+                       'disp': show_solver_output},
                    bounds=bounds
                    )
     # callback=callback_function
@@ -3455,6 +3581,19 @@ def process_development_travel_time_by_od(dev, scenarios):
     Each parallel job owns one development and loops through that
     development's scenario files.
     """
+    if settings.travel_time_suppress_known_warnings:
+        warnings.filterwarnings(
+            "ignore",
+            message=r"delta_grad == 0\.0.*",
+            category=UserWarning,
+            module=r"scipy\.optimize\._hessian_update_strategy",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"In a future version, object-dtype columns with all-bool values.*",
+            category=FutureWarning,
+        )
+
     # Import generated links that describe all candidate developments.
     links_developments = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
     if dev not in links_developments["ID_new"].values:
@@ -3526,7 +3665,8 @@ def process_development_travel_time_by_od(dev, scenarios):
 
     scenario_results = []
     for scen in scenarios:
-        print(f"Development: {dev} in scenario: {scen}")
+        if settings.travel_time_show_task_starts:
+            print(f"Development: {dev} in scenario: {scen}")
 
         # Load the OD matrix for this development-scenario combination.
         od_path = f"{od_base_path}/od_matrix_dev{dev}_{scen}.csv"
@@ -3683,7 +3823,47 @@ def tt_optimization_status_quo(scenarios=None):
 
     pd.DataFrame(results_status_quo).to_csv(r"data/infraScanRoad/traffic_flow/travel_time_status_quo_aggregate.csv", index=False)
 
-def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
+def _process_status_quo_scenario_by_od(scen, od_dir, points, edges, voronoi_df):
+    """Compute OD travel times for one status-quo scenario."""
+    if settings.travel_time_suppress_known_warnings:
+        warnings.filterwarnings(
+            "ignore",
+            message=r"delta_grad == 0\.0.*",
+            category=UserWarning,
+            module=r"scipy\.optimize\._hessian_update_strategy",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=r"In a future version, object-dtype columns with all-bool values.*",
+            category=FutureWarning,
+        )
+
+    if settings.travel_time_show_task_starts:
+        print(f"Status quo OD travel times on status-quo Voronoi for scenario: {scen}")
+
+    od_path = os.path.join(od_dir, f"od_matrix_{scen}.csv")
+    if not os.path.exists(od_path):
+        print(f"Missing status-quo OD matrix for scenario {scen} - skipping")
+        return None
+
+    OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
+    flow_output_path = (
+        f"data/infraScanRoad/traffic_flow/od/link_flows/status_quo_{scen}.csv"
+    )
+    od_tt_df = travel_flow_optimization_by_od(
+        OD_matrix=OD_matrix,
+        points=points.copy(),
+        edges=edges.copy(),
+        voronoi=voronoi_df.copy(),
+        dev="status_quo",
+        scen=scen,
+        export_link_flows=True,
+        flow_output_path=flow_output_path,
+    )
+    return scen, od_tt_df
+
+
+def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None, n_jobs=None):
     """
     Compute OD-level travel times for the status-quo network using the
     status-quo catchment system and corresponding OD matrices.
@@ -3714,8 +3894,6 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
     edges["ID_edge"] = edges["ID_edge"].astype(int)
     edges = edges.sort_values(by=["ID_edge"])
 
-    results_status_quo = {}
-
     if settings.scenario_type == "STATIC":
         od_dir = "data/infraScanRoad/traffic_flow/od/scenarios_voronoi/static"
     elif settings.scenario_type == "GENERATED":
@@ -3725,31 +3903,33 @@ def tt_optimization_status_quo_by_od(scenarios=None, max_developments=None):
 
     voronoi_df = gpd.read_file("data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
 
-    for scen in scenarios:
-        print(f"Status quo OD travel times on status-quo Voronoi for scenario: {scen}")
+    if n_jobs is None:
+        allocated_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
+        n_jobs = min(len(scenarios), allocated_cpus)
+    n_jobs = max(1, int(n_jobs))
+    print(f"Running {len(scenarios)} status-quo scenarios with {n_jobs} parallel workers")
 
-        od_path = os.path.join(od_dir, f"od_matrix_{scen}.csv")
-        if not os.path.exists(od_path):
-            print(f"Missing status-quo OD matrix for scenario {scen} - skipping")
+    scenario_results = Parallel(
+        n_jobs=n_jobs,
+        batch_size=1,
+        return_as="generator_unordered",
+    )(
+        delayed(_process_status_quo_scenario_by_od)(
+            scen, od_dir, points, edges, voronoi_df
+        )
+        for scen in scenarios
+    )
+    results_status_quo = {}
+    for result in tqdm(
+        scenario_results,
+        total=len(scenarios),
+        desc="Status quo OD TT scenarios",
+        unit="scenario",
+    ):
+        if result is None:
             continue
-
-        OD_matrix = pd.read_csv(od_path, sep=",", index_col=0)
-
-        flow_output_path = (
-            f"data/infraScanRoad/traffic_flow/od/link_flows/status_quo_{scen}.csv"
-        )
-        od_tt_df = travel_flow_optimization_by_od(
-            OD_matrix=OD_matrix,
-            points=points.copy(),
-            edges=edges.copy(),
-            voronoi=voronoi_df,
-            dev="status_quo",
-            scen=scen,
-            export_link_flows=True,
-            flow_output_path=flow_output_path,
-        )
-
-        results_status_quo[scen] = od_tt_df
+        scen, frame = result
+        results_status_quo[scen] = frame
 
     if not results_status_quo:
         print("No OD travel-time results were generated for status quo.")
@@ -3815,9 +3995,7 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
             developments = developments[:max_developments]
 
     # Check which developments have valid cost-link-data
-    valid_developments = set(
-        gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")["ID_new"].astype(int)
-    )
+    valid_developments = _get_valid_construction_development_ids()
     original_development_count = len(developments)
     developments = [dev for dev in developments if dev in valid_developments]
     if len(developments) != original_development_count:
@@ -3833,17 +4011,31 @@ def tt_optimization_all_developments_by_od(scenarios=None, max_developments=None
         if os.path.exists(os.path.join(directory_path, f"od_matrix_dev{dev}_{scen}.csv"))
     ]
 
-    # Parallelize over development-scenario pairs. 
-    scenario_results = Parallel(n_jobs=n_jobs, batch_size=1)(
-        delayed(process_development_scenario_travel_time_by_od)(dev, scen)
-        for dev, scen in tqdm(tasks, desc="OD TT by development-scenario")
+    print(
+        f"Running {len(tasks)} development-scenario travel-time tasks "
+        f"with {n_jobs} parallel workers"
     )
 
-    scenario_frames = [
-        frame
-        for frame in scenario_results
-        if frame is not None and not frame.empty
-    ]
+    # Yield results as workers finish so the progress bar reports completed
+    # optimizations rather than tasks merely submitted to joblib.
+    scenario_results = Parallel(
+        n_jobs=n_jobs,
+        batch_size=1,
+        return_as="generator_unordered",
+    )(
+        delayed(process_development_scenario_travel_time_by_od)(dev, scen)
+        for dev, scen in tasks
+    )
+
+    scenario_frames = []
+    for frame in tqdm(
+        scenario_results,
+        total=len(tasks),
+        desc="OD TT by development-scenario",
+        unit="case",
+    ):
+        if frame is not None and not frame.empty:
+            scenario_frames.append(frame)
 
     if not scenario_frames:
         print("No OD travel-time results were generated for developments.")
@@ -3963,9 +4155,8 @@ def _monetize_tts_network_generated(VTTS, duration):
     """
     GENERATED network TTS:
     - OD demand itself is taken from the generated OD matrices
-    - origin access is weighted by generated scenario population
-    - destination egress is weighted by current employment, because no generated
-      employment scenarios are available
+    - origin access and destination egress are weighted by the same generated
+      population/current-employment activity blend used for the OD matrices
     """
     def load_mass_rasters_for_scenario(scen):
         pop_candidates = [
@@ -3984,21 +4175,28 @@ def _monetize_tts_network_generated(VTTS, duration):
                 f"Missing generated population raster for scenario '{scen}'. Tried: {pop_candidates}"
             )
         with rasterio.open(pop_raster_path) as src:
-            origin_mass = src.read(1).astype(float)
+            population_mass = src.read(1).astype(float)
 
         employment_raster_path = os.path.join(
             "data", "independent_variable", "processed", "raw", "empl20.tif"
         )
         with rasterio.open(employment_raster_path) as src:
-            destination_mass = src.read(1).astype(float)
+            employment_mass = src.read(1).astype(float)
 
-        if origin_mass.shape != destination_mass.shape:
+        if population_mass.shape != employment_mass.shape:
             raise ValueError(
                 "Generated population raster and current employment raster do not share the same grid: "
-                f"{pop_raster_path} has shape {origin_mass.shape}, "
-                f"{employment_raster_path} has shape {destination_mass.shape}."
+                f"{pop_raster_path} has shape {population_mass.shape}, "
+                f"{employment_raster_path} has shape {employment_mass.shape}."
             )
-        return origin_mass, destination_mass
+
+        population_mass = np.nan_to_num(population_mass, nan=0.0)
+        employment_mass = np.nan_to_num(employment_mass, nan=0.0)
+        activity_mass = (
+            float(settings.road_od_blend_pop_rate) * population_mass
+            + float(settings.road_od_blend_empl_rate) * employment_mass
+        )
+        return activity_mass, activity_mass
 
     return _monetize_tts_network_core(
         VTTS=VTTS,
@@ -4085,6 +4283,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
 
     detailed_rows = []
     summary_rows = []
+    raw_od_rows = []
 
     developments = sorted(tt_developments["development"].unique().tolist())
 
@@ -4110,7 +4309,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         ].copy()
 
         valid = (
-            (sq_source > 0) &
+            (sq_source >= 0) &
             np.isfinite(origin_mass_raster) &
             np.isfinite(sq_access_minutes) &
             (origin_mass_raster >= 0)
@@ -4124,7 +4323,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         sq_origin_access["origin_access_min"] = sq_origin_access["access_weighted"] / sq_origin_access["mass"]
 
         valid = (
-            (sq_source > 0) &
+            (sq_source >= 0) &
             np.isfinite(destination_mass_raster) &
             np.isfinite(sq_access_minutes) &
             (destination_mass_raster >= 0)
@@ -4154,11 +4353,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         )
         missing_sq_tt = int(sq_weighted["travel_time"].isna().sum())
         if missing_sq_tt > 0:
-            missing_sq_flow = float(sq_weighted.loc[sq_weighted["travel_time"].isna(), "flow"].sum())
-            print(
-                f"Missing {missing_sq_tt} status-quo travel-time matches for scenario '{scen}' "
-                f"after loading {sq_od_path}; dropping {missing_sq_flow:.3f} unrouted OD flow."
-            )
+            # OD zones outside the modeled corridor are intentionally not routed.
             sq_weighted = sq_weighted.dropna(subset=["travel_time"]).copy()
         missing_sq_access = int(
             sq_weighted["origin_access_min"].isna().sum() +
@@ -4174,19 +4369,10 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
         sq_weighted["destination_access_component"] = (
             sq_weighted["flow"] * sq_weighted["destination_access_min"]
         )
-        sq_weighted["origin_access_component_unweighted"] = sq_weighted["origin_access_min"]
-        sq_weighted["network_component_unweighted"] = sq_weighted["travel_time"]
-        sq_weighted["destination_access_component_unweighted"] = sq_weighted["destination_access_min"]
         sq_total_origin = float(sq_weighted["origin_access_component"].sum(skipna=True))
         sq_total_network = float(sq_weighted["network_component"].sum(skipna=True))
         sq_total_dest = float(sq_weighted["destination_access_component"].sum(skipna=True))
         sq_total_tt = sq_total_origin + sq_total_network + sq_total_dest
-        sq_total_origin_unweighted = float(sq_weighted["origin_access_component_unweighted"].sum(skipna=True))
-        sq_total_network_unweighted = float(sq_weighted["network_component_unweighted"].sum(skipna=True))
-        sq_total_dest_unweighted = float(sq_weighted["destination_access_component_unweighted"].sum(skipna=True))
-        sq_total_tt_unweighted = (
-            sq_total_origin_unweighted + sq_total_network_unweighted + sq_total_dest_unweighted
-        )
 
         # 4) Recompute generalized travel time for each development network on the same OD basis.
         for dev in developments:
@@ -4232,7 +4418,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             ].copy()
 
             valid = (
-                (dev_catchment_raster > 0) &
+                (dev_catchment_raster >= 0) &
                 np.isfinite(origin_mass_raster) &
                 np.isfinite(dev_access_minutes) &
                 (origin_mass_raster >= 0)
@@ -4246,7 +4432,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             dev_origin_access["origin_access_min"] = dev_origin_access["access_weighted"] / dev_origin_access["mass"]
 
             valid = (
-                (dev_catchment_raster > 0) &
+                (dev_catchment_raster >= 0) &
                 np.isfinite(destination_mass_raster) &
                 np.isfinite(dev_access_minutes) &
                 (destination_mass_raster >= 0)
@@ -4276,12 +4462,7 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             )
             missing_dev_tt = int(dev_weighted["travel_time"].isna().sum())
             if missing_dev_tt > 0:
-                missing_dev_flow = float(dev_weighted.loc[dev_weighted["travel_time"].isna(), "flow"].sum())
-                print(
-                    f"Missing {missing_dev_tt} development travel-time matches for "
-                    f"dev {dev}, scenario '{scen}' after loading {dev_od_path}; "
-                    f"dropping {missing_dev_flow:.3f} unrouted OD flow."
-                )
+                # OD zones outside the modeled corridor are intentionally not routed.
                 dev_weighted = dev_weighted.dropna(subset=["travel_time"]).copy()
             missing_dev_access = int(
                 dev_weighted["origin_access_min"].isna().sum() +
@@ -4298,23 +4479,69 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
             dev_weighted["destination_access_component"] = (
                 dev_weighted["flow"] * dev_weighted["destination_access_min"]
             )
-            dev_weighted["origin_access_component_unweighted"] = dev_weighted["origin_access_min"]
-            dev_weighted["network_component_unweighted"] = dev_weighted["travel_time"]
-            dev_weighted["destination_access_component_unweighted"] = dev_weighted["destination_access_min"]
+            sq_raw_od = sq_weighted[
+                [
+                    "origin",
+                    "destination",
+                    "flow",
+                    "origin_access_min",
+                    "travel_time",
+                    "destination_access_min",
+                ]
+            ].rename(
+                columns={
+                    "flow": "status_quo_flow",
+                    "origin_access_min": "status_quo_origin_access_min",
+                    "travel_time": "status_quo_network_min",
+                    "destination_access_min": "status_quo_destination_access_min",
+                }
+            )
+            dev_raw_od = dev_weighted[
+                [
+                    "origin",
+                    "destination",
+                    "flow",
+                    "origin_access_min",
+                    "travel_time",
+                    "destination_access_min",
+                ]
+            ].rename(
+                columns={
+                    "flow": "development_flow",
+                    "origin_access_min": "development_origin_access_min",
+                    "travel_time": "development_network_min",
+                    "destination_access_min": "development_destination_access_min",
+                }
+            )
+            raw_od = sq_raw_od.merge(
+                dev_raw_od,
+                on=["origin", "destination"],
+                how="inner",
+            )
+            raw_od.insert(0, "scenario", str(scen))
+            raw_od.insert(0, "development", int(dev))
+            raw_od["status_quo_raw_tt_min"] = (
+                raw_od["status_quo_origin_access_min"] +
+                raw_od["status_quo_network_min"] +
+                raw_od["status_quo_destination_access_min"]
+            )
+            raw_od["development_raw_tt_min"] = (
+                raw_od["development_origin_access_min"] +
+                raw_od["development_network_min"] +
+                raw_od["development_destination_access_min"]
+            )
+            raw_od["raw_tt_savings_min"] = (
+                raw_od["status_quo_raw_tt_min"] - raw_od["development_raw_tt_min"]
+            )
+            raw_od_rows.append(raw_od)
+
             dev_total_origin = float(dev_weighted["origin_access_component"].sum(skipna=True))
             dev_total_network = float(dev_weighted["network_component"].sum(skipna=True))
             dev_total_dest = float(dev_weighted["destination_access_component"].sum(skipna=True))
             dev_total_tt = dev_total_origin + dev_total_network + dev_total_dest
-            dev_total_origin_unweighted = float(dev_weighted["origin_access_component_unweighted"].sum(skipna=True))
-            dev_total_network_unweighted = float(dev_weighted["network_component_unweighted"].sum(skipna=True))
-            dev_total_dest_unweighted = float(dev_weighted["destination_access_component_unweighted"].sum(skipna=True))
-            dev_total_tt_unweighted = (
-                dev_total_origin_unweighted + dev_total_network_unweighted + dev_total_dest_unweighted
-            )
 
             # 5) Store the full decomposition into access, network, and egress savings.
             tt_savings_peak = sq_total_tt - dev_total_tt
-            tt_savings_peak_unweighted = sq_total_tt_unweighted - dev_total_tt_unweighted
             mon_factor_yearly = (VTTS / 60.0) * 2.5 * 250
             monetized_savings_yearly = tt_savings_peak * mon_factor_yearly
             monetized_savings = monetized_savings_yearly * duration
@@ -4327,32 +4554,14 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
                     "status_quo_network_tt": sq_total_network,
                     "status_quo_destination_access_tt": sq_total_dest,
                     "status_quo_total_tt": sq_total_tt,
-                    "status_quo_origin_access_tt_unweighted": sq_total_origin_unweighted,
-                    "status_quo_network_tt_unweighted": sq_total_network_unweighted,
-                    "status_quo_destination_access_tt_unweighted": sq_total_dest_unweighted,
-                    "status_quo_total_tt_unweighted": sq_total_tt_unweighted,
                     "development_origin_access_tt": dev_total_origin,
                     "development_network_tt": dev_total_network,
                     "development_destination_access_tt": dev_total_dest,
                     "development_total_tt": dev_total_tt,
-                    "development_origin_access_tt_unweighted": dev_total_origin_unweighted,
-                    "development_network_tt_unweighted": dev_total_network_unweighted,
-                    "development_destination_access_tt_unweighted": dev_total_dest_unweighted,
-                    "development_total_tt_unweighted": dev_total_tt_unweighted,
                     "origin_access_savings": sq_total_origin - dev_total_origin,
                     "network_savings": sq_total_network - dev_total_network,
                     "destination_access_savings": sq_total_dest - dev_total_dest,
-                    "origin_access_savings_unweighted": (
-                        sq_total_origin_unweighted - dev_total_origin_unweighted
-                    ),
-                    "network_savings_unweighted": (
-                        sq_total_network_unweighted - dev_total_network_unweighted
-                    ),
-                    "destination_access_savings_unweighted": (
-                        sq_total_dest_unweighted - dev_total_dest_unweighted
-                    ),
                     "tt_savings_peak": tt_savings_peak,
-                    "tt_savings_peak_unweighted": tt_savings_peak_unweighted,
                     "monetized_savings_yearly": monetized_savings_yearly,
                     "monetized_savings": monetized_savings,
                 }
@@ -4373,11 +4582,21 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     detailed_out = "data/infraScanRoad/traffic_flow/od/od_tt_savings_detailed.csv"
     detailed_df.to_csv(detailed_out, index=False)
 
+    if raw_od_rows:
+        raw_od_df = pd.concat(raw_od_rows, ignore_index=True)
+        raw_od_out = "data/infraScanRoad/traffic_flow/od/od_tt_raw_before_weighting.csv"
+        raw_od_df.to_csv(raw_od_out, index=False)
+    else:
+        raw_od_out = None
+
     split_base = "data/infraScanRoad/traffic_flow/od/by_scenario"
     for scen, scen_df in detailed_df.groupby("scenario"):
         scen_dir = os.path.join(split_base, str(scen))
         os.makedirs(scen_dir, exist_ok=True)
         scen_df.to_csv(os.path.join(scen_dir, "od_tt_savings_detailed.csv"), index=False)
+        if raw_od_out is not None:
+            raw_scen_df = raw_od_df[raw_od_df["scenario"] == scen]
+            raw_scen_df.to_csv(os.path.join(scen_dir, "od_tt_raw_before_weighting.csv"), index=False)
 
     # 6) Pivot back to the wide output format expected by cost aggregation.
     tt_wide_total = (
@@ -4404,6 +4623,8 @@ def _monetize_tts_network_core(VTTS, duration, load_mass_rasters_for_scenario):
     tt_wide_yearly.to_csv("data/infraScanRoad/costs/traveltime_savings_od_yearly.csv", index=False)
 
     print(f"Saved detailed OD TT savings to: {detailed_out}")
+    if raw_od_out is not None:
+        print(f"Saved raw OD TT before weighting to: {raw_od_out}")
     print(f"Saved aggregated TT savings to: {wide_out}")
 
     return detailed_df, tt_wide_total

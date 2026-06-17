@@ -5,8 +5,13 @@ import time
 
 import pandas as pd
 
+# Set the active project root manually for Euler or local execution.
 #MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
-MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+MAIN = "/Volumes/WD_Windows/MSc_Thesis"
+
+# True downloads fresh OSM data; False only reads the raw OSM cache.
+online_access = False
+OSM_CACHE_DIR = os.path.join(MAIN, "infraScan", "infraScanRoad", "cache")
 
 ##################################################################################
 # Define settings 
@@ -38,6 +43,17 @@ start_year_scenario = 2018
 end_year_scenario = 2100
 start_valuation_year = 2050
 
+# Spatial allocation of generated commune OD demand to road Voronoi catchments.
+# Population is scenario-specific; employment uses the current empl20 raster
+# because no generated employment scenarios are available.
+road_od_blend_pop_rate = 1.0
+road_od_blend_empl_rate = 1.0
+
+# Phase 6 terminal output. Enable the first two options when detailed solver
+# diagnostics for every status-quo/development scenario are needed.
+travel_time_show_solver_output = False
+travel_time_show_task_starts = False
+travel_time_suppress_known_warnings = True
 
 # Optional debug throttles for Phase 6 travel-time computation
 # When enabled, these limits are applied in both aggregate and OD modes.
@@ -49,7 +65,7 @@ travel_time_debug_scenarios = ('scenario_26', 'scenario_70', 'scenario_89', 'sce
 aggregate_debug_max_developments = None # e.g. 1
 aggregate_debug_developments_ids = None # [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
 od_max_developments = None  # e.g. 1
-od_debug_development_ids = None #[254, 109, 28, 267] #[2, 103, 469, 895, 249, 662, 201, 689, 775, 750, 789, 334]  # Explicit ID_new list for OD debug runs; overrides od_max_developments when set
+od_debug_development_ids = None #[334, 0, 669, 57,423,673,15,938,767,761] #[254, 109, 28, 267] #[2, 103, 469, 895, 249, 662, 201, 689, 775, 750, 789, 334]  # Explicit ID_new list for OD debug runs; overrides od_max_developments when set
 
 def get_travel_time_debug_scenarios():
     if not travel_time_debug_enabled:
@@ -153,4 +169,3 @@ def get_representative_generated_scenarios(
         ]
     positions = sorted(set(int(pos) for pos in positions))
     return [f"scenario_{idx}" for idx in positions]
-

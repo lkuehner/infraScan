@@ -65,7 +65,7 @@ from infraScan.infraScanIntegrated import common_cost_parameters
 
 
 INPUT_CSV = Path(__file__).resolve().parent / "notebook_outputs" / "mode_comparison_by_development_scenario.csv"
-OUTPUT_DIR = Path(__file__).resolve().parent / "plots" / "sensitivity_analysis"
+OUTPUT_DIR = Path("/Volumes/WD_Windows/MSc_Thesis/plots/Integrated/sensitivity_analysis")
 
 MODE_CONFIG = {
     "Rail": {

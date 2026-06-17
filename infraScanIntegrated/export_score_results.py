@@ -16,13 +16,14 @@ from ..infraScanRail import paths as rail_paths
 
 
 DATA_ROOT = Path(rail_paths.MAIN)
+ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
+INTEGRATED_COSTS_DIR = DATA_ROOT / "data Kopie" / "infraScanIntegrated" / "costs"
 
 ROAD_COSTS_DIR_CANDIDATES = [
-    DATA_ROOT / "euler" / "infraScanRoad_trust_2iter_alldev_10sce" / "costs",
+    ROAD_DATA_ROOT / "costs",
 ]
 ROAD_EXTERNALITIES_DETAIL_CANDIDATES = [
-    DATA_ROOT / "euler" / "infraScanRoad_trust_2iter_alldev_10sce" / "traffic_flow" / "road_externalities_inputs" / "road_externalities_link_detail.csv",
-    DATA_ROOT / "infraScan" / "infraScanIntegrated" / "outputs" / "road_externalities_inputs" / "road_externalities_link_detail.csv",
+    ROAD_DATA_ROOT / "traffic_flow" / "link_flow_externalities" / "link_flow_externalities_long.csv",
 ]
 RAIL_COSTS_DIR_CANDIDATES = [
     DATA_ROOT / "data" / "infraScanRail" / "costs",
@@ -33,7 +34,7 @@ RAIL_TRAIN_KM_CANDIDATES = [
 RAIL_DISCOUNTED_TTS_CANDIDATES = [
     DATA_ROOT / "data" / "infraScanRail" / "costs" / "costs_and_benefits_discounted.csv",
 ]
-DEFAULT_OUTPUT_DIR = Path("infraScan/infraScanIntegrated/outputs/score_results")
+DEFAULT_OUTPUT_DIR = INTEGRATED_COSTS_DIR / "score_results"
 
 
 def first_existing_path(candidates: list[Path], path_kind: str) -> Path:

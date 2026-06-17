@@ -1,23 +1,10 @@
+from . import config as integrated_config
 
-# Shared integrated settings
-# Keep the literal assumptions here so road/rail-specific modules can consume
-# them from a single source of truth.
 
-# Spatial limits of the research corridor.
-# Coordinates must end with 000 to match the input raster grid.
-e_min, e_max = 2687000, 2708000
-n_min, n_max = 1237000, 1254000
 
-# Scenario control
-scenario_type = "GENERATED"
-amount_of_scenarios = 100
-representative_scenarios_count = 3
-start_year_scenario = 2018
-end_year_scenario = 2100
-start_valuation_year = 2050
-
-# Monetisation / cross-model values
-road_development_sample_size = 1000
+# --------------------------------------------------------------
+# PHASE IV: Settings for Scenario Generation
+# --------------------------------------------------------------	
 
 # Shared literature assumptions for modal behaviour
 # Verkehrsperspektiven 2050 start shares
@@ -48,20 +35,20 @@ def annualized_growth_rate(start_value: float, target_value: float, start_year: 
 rail_modal_split_avg_growth_rate = annualized_growth_rate(
 	rail_modal_split_start,
 	rail_modal_split_target,
-	start_year_scenario,
-	start_valuation_year,
+	integrated_config.start_year_scenario,
+	integrated_config.start_valuation_year,
 )
 road_modal_split_avg_growth_rate = annualized_growth_rate(
 	road_modal_split_start,
 	road_modal_split_target,
-	start_year_scenario,
-	start_valuation_year,
+	integrated_config.start_year_scenario,
+	integrated_config.start_valuation_year,
 )
 other_modal_split_avg_growth_rate = annualized_growth_rate(
 	other_modal_split_start,
 	other_modal_split_target,
-	start_year_scenario,
-	start_valuation_year,
+	integrated_config.start_year_scenario,
+	integrated_config.start_valuation_year,
 )
 
 # In the logistic-normal setup these per-mode volatility inputs are combined into 

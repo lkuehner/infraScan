@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import os
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -14,19 +15,56 @@ from shapely.ops import nearest_points, split
 import fiona
 from scipy.optimize import minimize
 from tqdm import tqdm
+from joblib import Parallel, delayed
 import pulp
 import requests
 import shutil
+import sys
 import zipfile
 
 from .data_import import *
 
 
 def _get_pulp_cbc_solver(msg=False):
-    cbc_path = shutil.which("cbc")
-    if cbc_path:
-        return pulp.COIN_CMD(path=cbc_path, msg=msg)
+    cbc_candidates = [
+        shutil.which("cbc"),
+        os.path.join(os.path.dirname(sys.executable), "cbc"),
+    ]
+    for cbc_path in cbc_candidates:
+        if cbc_path and os.path.isfile(cbc_path) and os.access(cbc_path, os.X_OK):
+            return pulp.COIN_CMD(path=cbc_path, msg=msg)
     return pulp.PULP_CBC_CMD(msg=msg)
+
+
+def _optimize_elevation_profile(link_index, values, max_slope, show_solver_output=False):
+    """Optimize one independent elevation profile with the CBC MILP solver."""
+    max_diff = max_slope * 50
+    prob = pulp.LpProblem("SlopeOptimizationMinChanges", pulp.LpMinimize)
+    lp_vars = {i: pulp.LpVariable(f"v_{i}") for i in range(len(values))}
+    change_vars = {
+        i: pulp.LpVariable(f"c_{i}", 0, 1, cat="Binary")
+        for i in range(len(values))
+    }
+
+    prob += pulp.lpSum(change_vars[i] for i in range(len(values)))
+    for i in range(len(values)):
+        if i > 0:
+            prob += lp_vars[i] - lp_vars[i - 1] <= max_diff
+            prob += lp_vars[i - 1] - lp_vars[i] <= max_diff
+        prob += lp_vars[i] - values[i] <= 1e9 * change_vars[i]
+        prob += values[i] - lp_vars[i] <= 1e9 * change_vars[i]
+
+    prob += lp_vars[0] == values[0]
+    prob += change_vars[0] == 0
+    prob += lp_vars[len(values) - 1] == values[len(values) - 1]
+    prob += change_vars[len(values) - 1] == 0
+
+    prob.solve(_get_pulp_cbc_solver(msg=show_solver_output))
+    if prob.status != pulp.LpStatusOptimal:
+        return link_index, None, pulp.LpStatus.get(prob.status, str(prob.status))
+
+    optimized_values = [pulp.value(lp_vars[i]) for i in range(len(values))]
+    return link_index, optimized_values, "Optimal"
 
 
 def generated_access_points(extent,number):
@@ -609,24 +647,30 @@ def get_road_elevation_profile():
         return points
 
     def sample_raster_at_points(points, raster):
-        values = []
-        for point in points:
-            row, col = raster.index(point.x, point.y)
-            value = raster.read(1)[row, col]
-            values.append(value)
-        return values
+        coordinates = [(point.x, point.y) for point in points]
+        return [float(value[0]) for value in raster.sample(coordinates)]
 
     # Define the sampling interval (e.g., every 10 meters)
     sampling_interval = 50
 
     with rasterio.open(elevation_raster) as raster:
-        print(raster.crs)
-        print(links.crs)
-
-        # Interpolate points and extract raster values for each linestring
-        links['elevation_profile'] = links['geometry'].apply(
-            lambda x: sample_raster_at_points(
-                interpolate_linestring(x, sampling_interval), raster))
+        print(
+            f"Sampling elevation profiles for {len(links)} link geometries "
+            f"at {sampling_interval} m intervals"
+        )
+        profiles = []
+        for geometry in tqdm(
+            links.geometry,
+            total=len(links),
+            desc="Sampling road elevation profiles",
+            unit="link",
+        ):
+            profiles.append(
+                sample_raster_at_points(
+                    interpolate_linestring(geometry, sampling_interval), raster
+                )
+            )
+        links['elevation_profile'] = profiles
 
 
     # Somehow find how to investigate the need for tunnels based on the elevation profile
@@ -715,7 +759,6 @@ def get_tunnel_candidates(df):
 
 def tunnel_bridges(df):
     # The aim is to estimate the need of tunnels and bridge based on the elevation profile of each link
-    print(df.head().to_string())
 
     # Define max slope allowed on a highway
     max_slope = 7  # in percent
@@ -821,63 +864,61 @@ def tunnel_bridges(df):
     df['changes'] = change_flags
     """
 
-    def optimize_values_min_changes(values, max_slope):
-        max_diff = max_slope * 50
-
-        # Initialize the LP problem
-        prob = pulp.LpProblem("SlopeOptimizationMinChanges", pulp.LpMinimize)
-
-        # Decision variables
-        lp_vars = {i: pulp.LpVariable(f"v_{i}") for i in range(len(values))}
-        change_vars = {i: pulp.LpVariable(f"c_{i}", 0, 1, cat='Binary') for i in range(len(values))}
-
-        # Objective function: minimize the number of points that are changed
-        prob += pulp.lpSum(change_vars[i] for i in range(len(values)))
-
-        # Constraints for slope and changes
-        for i in range(len(values)):
-            if i > 0:
-                prob += lp_vars[i] - lp_vars[i - 1] <= max_diff
-                prob += lp_vars[i - 1] - lp_vars[i] <= max_diff
-            # Change indicator constraints
-            # If change_var is 0, lp_var must be equal to the original value
-            prob += lp_vars[i] - values[i] <= 1e9 * change_vars[i]
-            prob += values[i] - lp_vars[i] <= 1e9 * change_vars[i]
-
-        # Constraints for keeping first and last values unchanged
-        # Enforce first and last values remain unchanged
-        prob += lp_vars[0] == values[0]
-        prob += change_vars[0] == 0  # No change for the first element
-        prob += lp_vars[len(values) - 1] == values[len(values) - 1]
-        prob += change_vars[len(values) - 1] == 0  # No change for the last element
-
-        # Use the external CBC binary when PuLP's bundled CBC is unavailable.
-        prob.solve(_get_pulp_cbc_solver(msg=True))
-
-        # Check if the problem is infeasible
-        if prob.status != pulp.LpStatusOptimal:
-            print("Infeasible Problem")
-            return None
-
-        # Get the optimized values
-        optimized_values = [pulp.value(lp_vars[i]) for i in range(len(values))]
-        return optimized_values
-
-    # Add new column with optimized elevation profile
-    tqdm.pandas(desc="Optimizing elevation profiles")
-    df['new_elevation'] = df.progress_apply(
-        lambda row: optimize_values_min_changes(row["elevation_profile"], max_slope) if row['check_needed'] else row[
-            'elevation_profile'],
-        axis=1
+    profiles_to_optimize = [
+        (index, list(row["elevation_profile"]))
+        for index, row in df.loc[df["check_needed"]].iterrows()
+    ]
+    allocated_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+    n_jobs = min(len(profiles_to_optimize), allocated_cpus)
+    n_jobs = max(1, int(n_jobs))
+    print(
+        f"Optimizing {len(profiles_to_optimize)} of {len(df)} elevation profiles "
+        f"with {n_jobs} parallel workers"
     )
 
-    # Drop with "new_elevation" == None
+    optimized_by_index = {}
+    failed_profiles = []
+    if profiles_to_optimize:
+        optimization_results = Parallel(
+            n_jobs=n_jobs,
+            batch_size=1,
+            return_as="generator_unordered",
+        )(
+            delayed(_optimize_elevation_profile)(
+                index,
+                values,
+                max_slope,
+                False,
+            )
+            for index, values in profiles_to_optimize
+        )
+        for index, optimized_values, status in tqdm(
+            optimization_results,
+            total=len(profiles_to_optimize),
+            desc="Optimizing elevation profiles",
+            unit="profile",
+        ):
+            if optimized_values is None:
+                failed_profiles.append((index, status))
+            else:
+                optimized_by_index[index] = optimized_values
+
+    failed_indices = {index for index, _ in failed_profiles}
+    df['new_elevation'] = [
+        None
+        if index in failed_indices
+        else optimized_by_index.get(index, row["elevation_profile"])
+        for index, row in df.iterrows()
+    ]
+    if failed_profiles:
+        print(
+            f"Warning: {len(failed_profiles)} elevation profiles could not be optimized; "
+            "these developments are excluded from subsequent construction-cost calculations."
+        )
     df = df.dropna(subset=['new_elevation'])
 
     # Add new column showing the difference between the old and new elevation profile, 0 if not - 1 if yes
     df['changes'] = df.apply(lambda row: np.array(row['elevation_profile']) != np.array(row['new_elevation']), axis=1)
-
-    print(df.head(20).to_string())
 
     def check_for_bridge_tunnel(elevation, new_elevation, changes):
         elevation = np.array(elevation)

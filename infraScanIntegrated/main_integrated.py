@@ -21,19 +21,52 @@ from infraScan.infraScanRail import paths as rail_paths
 from infraScan.infraScanRoad import pipeline as road_pipeline
 from infraScan.infraScanRoad import settings as road_settings
 
+# what folder structure is needed?
+# what names do already have to exist? 
+# what kind of data is active used?
+
+
 
 def infrascan_integrated():
     # ================================================================================
     # Phase 1: Initialization
     # Shared Initialization (e.g., workspace, settigs, corridor)
     # ================================================================================
+
+    """
+    modell like this only works for scenario random generation!
+
+    configuration of what should be modelled:
+    - legacy fuchs
+    - legacy road (old road with aggregate approach, is aggregate running with the new scenario generation?)
+
+    - integrated:
+        >incl. standalone? -> yes, fuchs, annualy to be comparable
+                                road, od approach annualy
+        > integrated: my integrated comparison
+
+    
+    """
+
+
+    # choose CBA approach (infrascanrail, as it is / inrascanroas as it is or integrated)
+    # always select scenario generation nothing else can be choosen: random_scenarios (so for road and rail scenario_type = "GENERATED") 
+
+    # always priozite the settings form the integrated module (override the others)
+    # eg start_valuation_year, cost indexes, growth rates, etc.
+
+    # selection for which plots to show (old rail, old road and an integrated one)
+
+
+
+
+
     warnings.filterwarnings("ignore")  # TODO: No warnings should be ignored
     runtimes = {}
     
 
     integrated_config.configure_rail()
-    # Global Pipeline?
-    # Checkpoints?
+ 
 
     os.chdir(rail_paths.MAIN) # TODO: Adjust for global pipeline
 
@@ -42,9 +75,12 @@ def infrascan_integrated():
 
     # ================================================================================
     # Phase 2: Data Import
-    # ! AGIRIS adjusts this step in the rail module - to be integrated !
     # ================================================================================
 
+
+    # how to harmonize? 
+    # or just seperate for road and rail?
+    # create a new pop and empl raster based on aggiris idea 
     road_pipeline.phase_2_data_import(limits_corridor,runtimes)
 
     # ================================================================================
