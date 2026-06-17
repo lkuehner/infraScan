@@ -6,7 +6,7 @@ from pathlib import Path
 from statistics import mean, median
 
 
-DATA_ROOT = Path("/Volumes/WD_Windows/MSc_Thesis/euler/infraScanRoad_trust_2iter_alldev_10sce")
+DATA_ROOT = Path("/Volumes/WD_Windows/MSc_Thesis/euler/alldev/data/infraScanRoad")
 LINK_FLOW_DIR = DATA_ROOT / "traffic_flow" / "od" / "link_flows"
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "road_vkt_summary"
 SELECTED_SCENARIOS = (

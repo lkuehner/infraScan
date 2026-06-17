@@ -9,29 +9,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from . import common_cost_parameters
-from ..infraScanRail import paths as rail_paths
+from .. import common_cost_parameters
+from ...infraScanRail import paths as rail_paths
 
 
 DATA_ROOT = Path(rail_paths.MAIN)
-SCORE_RESULTS_LONG = Path("infraScan/infraScanIntegrated/outputs/score_results/score_results_long.csv")
-OUTPUT_DIR = Path("infraScan/infraScanIntegrated/outputs/score_analysis")
+ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
+INTEGRATED_COSTS_DIR = DATA_ROOT / "data Kopie" / "infraScanIntegrated" / "costs"
+SCORE_RESULTS_LONG = INTEGRATED_COSTS_DIR / "score_results" / "score_results_long.csv"
+OUTPUT_DIR = INTEGRATED_COSTS_DIR / "score_analysis"
+PLOT_OUTPUT_DIR = DATA_ROOT / "plots" / "Integrated" / "score_analysis"
 
 ROAD_TTS_DETAIL = (
-    DATA_ROOT
-    / "euler"
-    / "infraScanRoad_trust_2iter_alldev_10sce"
+    ROAD_DATA_ROOT
     / "traffic_flow"
     / "od"
     / "od_tt_savings_detailed.csv"
 )
 ROAD_VKM_MONETIZATION = (
-    DATA_ROOT
-    / "euler"
-    / "infraScanRoad_trust_2iter_alldev_10sce"
-    / "traffic_flow"
-    / "road_externalities_inputs"
-    / "road_externalities_monetization.csv"
+    INTEGRATED_COSTS_DIR
+    / "road_externalities_costs_long.csv"
 )
 RAIL_TTS = DATA_ROOT / "data" / "infraScanRail" / "costs" / "traveltime_savings.csv"
 RAIL_TOTAL_COSTS = DATA_ROOT / "data" / "infraScanRail" / "costs" / "total_costs.csv"
@@ -89,12 +86,9 @@ def normalize_development(values: pd.Series) -> pd.Series:
 
 def save_analysis_notes(path: Path) -> None:
     notes = [
-        "Rail externalities are included using the corrected train_km.csv with development-specific IDs.",
-        "Road overview excludes developments without any flow on the new link across all scenarios.",
-        "Annual overview excludes road_climate_cost and road_ecological_disruption_cost because they are not directly comparable to the integrated annual values.",
         "Road TTS minutes are currently only available as demand-weighted aggregate tt_savings_peak from od_tt_savings_detailed.csv.",
         "Rail TTS minutes are derived from tt_savings_daily * 60 at prognosis_year.",
-        "Road scenario line plots show total TTS, network TTS and access-only TTS (origin + destination).",
+        "Road overview excludes developments with no detected flow on the new development link.",
     ]
     path.write_text("\n".join(notes))
 
@@ -159,7 +153,9 @@ def annual_proxy_value(row: pd.Series) -> float:
         "rail_operation_cost",
     }
     if score_id in road_standalone_is_annual and pd.notna(standalone_value):
-        return float(standalone_value)
+        if score_id == "road_tts_cost":
+            return float(standalone_value)
+        return abs(float(standalone_value))
     if score_id in construction_scores and pd.notna(standalone_value):
         return float(standalone_value) / CONSTRUCTION_PROXY_YEARS
     if score_id in standalone_is_annual and pd.notna(standalone_value):
@@ -177,6 +173,7 @@ def get_road_developments_without_new_link_flow() -> set[str]:
             scenario_count=("scenario", "nunique"),
         )
     )
+    # Exclude developments with no detected flow on the new development link
     return set(summary.loc[summary["max_abs_new_link"] <= 1e-9, "development"].astype(str))
 
 
@@ -541,11 +538,11 @@ def build_road_component_overview(score_df: pd.DataFrame) -> pd.DataFrame:
     ].copy()
 
     def road_standalone_component_value(row: pd.Series) -> float:
-        score_id = row["score_id"]
         standalone_value = row["standalone_value"]
-
         if pd.notna(standalone_value):
-            return float(standalone_value)
+            if row["score_id"] == "road_tts_cost":
+                return float(standalone_value)
+            return abs(float(standalone_value))
         return np.nan
 
     road_df["annual_value"] = road_df.apply(road_standalone_component_value, axis=1)
@@ -720,6 +717,11 @@ def build_integrated_bcr_outputs(
     )
     summary_df["cost_median_chf_magnitude"] = -summary_df["cost_median_chf_negative"]
     summary_df["cost_mean_chf_magnitude"] = -summary_df["cost_mean_chf_negative"]
+    summary_df["bcr_mean"] = np.where(
+        summary_df["cost_mean_chf_magnitude"] > 0,
+        summary_df["tts_mean_chf"] / summary_df["cost_mean_chf_magnitude"],
+        np.nan,
+    )
     summary_df["tts_median_mio_chf"] = summary_df["tts_median_chf"] / 1_000_000.0
     summary_df["cost_median_mio_chf_negative"] = summary_df["cost_median_chf_negative"] / 1_000_000.0
     summary_df["cost_median_mio_chf_magnitude"] = summary_df["cost_median_chf_magnitude"] / 1_000_000.0
@@ -768,12 +770,12 @@ def plot_road_standalone_annual_bars(cost_table: pd.DataFrame, output_dir: Path)
     noise = plot_df["road_noise_cost_mio_chf"].fillna(0.0).to_numpy()
     tts = plot_df["road_tts_cost_mio_chf"].fillna(0.0).to_numpy()
 
-    ax.bar(x, construction, width=width, color=COST_COLORS["construction"], label="Construction costs")
-    ax.bar(x, maintenance, width=width, bottom=construction, color=COST_COLORS["maintenance"], label="Maintenance costs")
-    ax.bar(x, climate, width=width, bottom=construction + maintenance, color=COST_COLORS["co2"], label="Climate costs")
-    ax.bar(x, land, width=width, bottom=construction + maintenance + climate, color=COST_COLORS["land"], label="Land consumption costs")
-    ax.bar(x, ecology, width=width, bottom=construction + maintenance + climate + land, color=COST_COLORS["operating"], label="Ecological disruption costs")
-    ax.bar(x, noise, width=width, bottom=construction + maintenance + climate + land + ecology, color=COST_COLORS["noise"], label="Noise costs")
+    ax.bar(x, -construction, width=width, color=COST_COLORS["construction"], label="Construction costs")
+    ax.bar(x, -maintenance, width=width, bottom=-construction, color=COST_COLORS["maintenance"], label="Maintenance costs")
+    ax.bar(x, -climate, width=width, bottom=-(construction + maintenance), color=COST_COLORS["co2"], label="Climate costs")
+    ax.bar(x, -land, width=width, bottom=-(construction + maintenance + climate), color=COST_COLORS["land"], label="Land consumption costs")
+    ax.bar(x, -ecology, width=width, bottom=-(construction + maintenance + climate + land), color=COST_COLORS["operating"], label="Ecological disruption costs")
+    ax.bar(x, -noise, width=width, bottom=-(construction + maintenance + climate + land + ecology), color=COST_COLORS["noise"], label="Noise costs")
     ax.bar(x, tts, width=width, color=COST_COLORS["tts"], label="Travel time savings")
 
     ax.axhline(0, color="black", linewidth=0.8)
@@ -1308,7 +1310,7 @@ def plot_road_stacked_integrated_vs_standalone(
             if is_cost:
                 ax.bar(
                     x + offset,
-                    values,
+                    -values,
                     width=width,
                     bottom=negative_bottom,
                     color=COST_COLORS[color_key],
@@ -1316,7 +1318,7 @@ def plot_road_stacked_integrated_vs_standalone(
                     linewidth=0.2,
                     label=label if value_mode == "integrated" else None,
                 )
-                negative_bottom += values
+                negative_bottom -= values
             else:
                 ax.bar(
                     x + offset,
@@ -1365,9 +1367,9 @@ def plot_road_cost_bars_integrated_vs_standalone(
     """
     Grouped vertical bar chart: standalone annual costs vs integrated annual costs per development.
 
-    Standalone totals come from road_standalone_annual_cost_table (costs already forced negative,
+    Standalone totals come from road_standalone_annual_cost_table (cost magnitudes stored positive,
     TTS keeps its sign). Integrated totals are derived from road_component_overview by negating
-    cost component values (matching the sign convention used in the stacked plot) and taking TTS
+    cost component values for plotting and taking TTS
     directly. Bars are sorted by integrated net annual value (TTS + costs, descending).
     """
     ROAD_COST_SCORES = [
@@ -1388,7 +1390,7 @@ def plot_road_cost_bars_integrated_vs_standalone(
     integrated_cost = (
         integrated_comp[integrated_comp["score_id"].isin(ROAD_COST_SCORES)]
         .groupby("development", as_index=False)
-        .agg(total_cost_mio_chf=("value_mio_chf", lambda s: float(-s.sum())))
+        .agg(total_cost_mio_chf=("value_mio_chf", lambda s: float(s.sum())))
     )
     integrated_tts = (
         integrated_comp[integrated_comp["score_id"] == "road_tts_cost"][["development", "value_mio_chf"]]
@@ -1396,7 +1398,7 @@ def plot_road_cost_bars_integrated_vs_standalone(
     )
     integrated_df = integrated_cost.merge(integrated_tts, on="development", how="left")
     integrated_df["net_mio_chf"] = (
-        integrated_df["tts_mio_chf"].fillna(0.0) + integrated_df["total_cost_mio_chf"].fillna(0.0)
+        integrated_df["tts_mio_chf"].fillna(0.0) - integrated_df["total_cost_mio_chf"].fillna(0.0)
     )
 
     standalone_df = cost_table[
@@ -1420,9 +1422,9 @@ def plot_road_cost_bars_integrated_vs_standalone(
     sa = standalone_df.set_index("development").reindex(order)
     ig = integrated_df.set_index("development").reindex(order)
 
-    sa_cost = sa["road_total_cost_without_tts_mio_chf"].fillna(0.0).to_numpy()
+    sa_cost = -sa["road_total_cost_without_tts_mio_chf"].fillna(0.0).to_numpy()
     sa_tts = sa["road_tts_cost_mio_chf"].fillna(0.0).to_numpy()
-    ig_cost = ig["total_cost_mio_chf"].fillna(0.0).to_numpy()
+    ig_cost = -ig["total_cost_mio_chf"].fillna(0.0).to_numpy()
     ig_tts = ig["tts_mio_chf"].fillna(0.0).to_numpy()
 
     ax.bar(x - width / 2, sa_tts, width=width, color=COST_COLORS["tts"], alpha=0.5, label="TTS standalone")
@@ -1697,37 +1699,38 @@ def plot_road_tts_component_lines(component_df: pd.DataFrame, output_dir: Path) 
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    PLOT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     score_df, duplicate_counts = load_score_results()
     coverage = build_coverage_summary(score_df)
 
     annual_long, annual_summary = build_annual_overview(score_df)
-    plot_overview_bars(annual_summary, OUTPUT_DIR)
+    plot_overview_bars(annual_summary, PLOT_OUTPUT_DIR)
     integrated_bcr_scenario, integrated_bcr_summary, integrated_bcr_top10 = build_integrated_bcr_outputs(score_df)
-    plot_integrated_bcr_top10(integrated_bcr_top10, OUTPUT_DIR)
+    plot_integrated_bcr_top10(integrated_bcr_top10, PLOT_OUTPUT_DIR)
     integrated_bcr_top10_by_mode_plot = build_integrated_bcr_top10_by_mode_plot_data(
         score_df,
         integrated_bcr_summary,
     )
-    plot_integrated_bcr_top10_by_mode_stacked(integrated_bcr_top10_by_mode_plot, OUTPUT_DIR)
+    plot_integrated_bcr_top10_by_mode_stacked(integrated_bcr_top10_by_mode_plot, PLOT_OUTPUT_DIR)
     road_access_only_annual_summary = build_road_access_only_annual_summary(score_df)
-    plot_road_access_only_overview_bars(road_access_only_annual_summary, OUTPUT_DIR)
+    plot_road_access_only_overview_bars(road_access_only_annual_summary, PLOT_OUTPUT_DIR)
     road_component_overview = build_road_component_overview(score_df)
     road_standalone_annual_costs = build_road_standalone_annual_cost_table(road_component_overview)
     plot_road_stacked_integrated_vs_standalone(
         road_component_overview,
         road_standalone_annual_costs,
-        OUTPUT_DIR,
+        PLOT_OUTPUT_DIR,
     )
-    plot_road_standalone_annual_bars(road_standalone_annual_costs, OUTPUT_DIR)
-    plot_road_cost_bars_integrated_vs_standalone(road_standalone_annual_costs, road_component_overview, OUTPUT_DIR)
+    plot_road_standalone_annual_bars(road_standalone_annual_costs, PLOT_OUTPUT_DIR)
+    plot_road_cost_bars_integrated_vs_standalone(road_standalone_annual_costs, road_component_overview, PLOT_OUTPUT_DIR)
     rail_component_overview = build_rail_component_overview(score_df)
-    plot_rail_stacked_integrated_vs_standalone(rail_component_overview, OUTPUT_DIR)
+    plot_rail_stacked_integrated_vs_standalone(rail_component_overview, PLOT_OUTPUT_DIR)
 
     tts_df = build_tts_frame(score_df)
     tts_summary = summarize_tts_by_development(tts_df)
-    plot_tts_boxplots(tts_df, OUTPUT_DIR)
-    plot_tts_mean_std(tts_summary, OUTPUT_DIR)
+    plot_tts_boxplots(tts_df, PLOT_OUTPUT_DIR)
+    plot_tts_mean_std(tts_summary, PLOT_OUTPUT_DIR)
 
     road_excluded_devs = get_road_developments_without_new_link_flow()
     road_valid_devs = (
@@ -1739,7 +1742,7 @@ def main() -> None:
     ) - road_excluded_devs
     road_vkm_df, road_vkm_summary = analyze_vkm(road_valid_devs)
     road_tts_components_df, road_tts_components_summary = build_road_tts_components(road_valid_devs)
-    plot_road_tts_component_lines(road_tts_components_df, OUTPUT_DIR)
+    plot_road_tts_component_lines(road_tts_components_df, PLOT_OUTPUT_DIR)
 
     duplicate_counts.to_csv(OUTPUT_DIR / "score_result_duplicate_counts.csv", index=False)
     coverage.to_csv(OUTPUT_DIR / "score_result_coverage_summary.csv", index=False)
