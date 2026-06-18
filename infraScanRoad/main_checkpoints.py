@@ -18,11 +18,11 @@ from traveltime_delay import *
 
 # ==================================================================================
 # CHECKPOINT UTILITIES
-# Checkpoints are saved to the 'checkpoints/' folder as .pkl or sentinel files.
+# Checkpoints are saved to the configured road checkpoint folder as .pkl or sentinel files.
 # To re-run a section from scratch, delete its checkpoint file.
 # ==================================================================================
 
-CHECKPOINT_DIR = "checkpoints"
+CHECKPOINT_DIR = settings.CHECKPOINT_DIR
 
 def _phase_label_for_checkpoint(name):
     phase_map = {

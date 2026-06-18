@@ -43,11 +43,12 @@ TRAVEL_TIME_SAVINGS_PIPELINES = {
 
 # ==================================================================================
 # CHECKPOINT UTILITIES
-# Checkpoints are saved to the 'checkpoints/' folder as .pkl or sentinel files.
+# Checkpoints are saved to the configured road checkpoint folder as .pkl or sentinel files.
 # To re-run a section from scratch, delete its checkpoint file.
 # ==================================================================================
 
-CHECKPOINT_DIR = "checkpoints"
+CHECKPOINT_DIR = settings.CHECKPOINT_DIR
+USE_CHECKPOINTS = True
 
 def _phase_label_for_checkpoint(name):
     if name.startswith("od_matrices_"):
@@ -101,6 +102,8 @@ def _legacy_cp_path(name, ext="sentinel"):
     return os.path.join(CHECKPOINT_DIR, f"{name}.{ext}")
 
 def checkpoint_exists(name):
+    if not USE_CHECKPOINTS:
+        return False
     return os.path.exists(_cp_path(name)) or os.path.exists(_legacy_cp_path(name))
 
 def save_checkpoint(name):
@@ -176,6 +179,9 @@ def phase_2_data_import(limits_corridor,runtimes):
     print("PHASE 2: DATA IMPORT")
     print("="*80 + "\n")
     st = time.time()
+
+    # import pop and empl rasters of the corridor
+    import_population_and_employment_rasters(limits=limits_corridor)
 
     # Import shapes of lake for plots
     get_lake_data()
@@ -350,7 +356,7 @@ def phase_4_scenario_generation(limits_variables, runtimes):
 
 
     # Import the raw data, reshape it partially and store it as tif
-    # Tif are stored to "data/independent_variable/processed/raw/pop20.tif"
+    # TIFs are stored via Road settings as corridor rasters pop23 and empl23.
     # File name indicates population (pop) and employment (empl), the year (20), and the extent swisswide (_ch) or only for corridor (no suffix)
     if not checkpoint_exists("import_scenario_variables"):
         import_data(limits_variables)
@@ -617,10 +623,33 @@ def phase_6_travel_time_savings(runtimes):
     debug_enabled = bool(getattr(settings, "travel_time_debug_enabled", False))
     status_quo_scenarios = None
     development_scenarios = None
+    configured_debug_scenarios = settings.get_travel_time_debug_scenarios() if debug_enabled else None
+    configured_generated_scenarios = getattr(settings, "generated_selected_scenarios", None)
 
-    if debug_enabled:
-        configured_debug_scenarios = settings.get_travel_time_debug_scenarios()
+    if settings.scenario_type == "GENERATED":
+        if configured_generated_scenarios:
+            status_quo_scenarios = list(configured_generated_scenarios)
+            development_scenarios = list(configured_generated_scenarios)
+            print(
+                "  -> Selected generated scenarios: "
+                + ", ".join(str(s) for s in development_scenarios)
+            )
+        elif getattr(settings, "generated_select_representative_scenarios", False):
+            selected_generated = settings.get_representative_generated_scenarios(
+                n_scenarios=settings.amount_of_scenarios,
+                n_representatives=settings.generated_representative_scenarios_count,
+            )
+            print(
+                "  -> Representative generated scenarios: "
+                + ", ".join(str(s) for s in selected_generated)
+            )
+            status_quo_scenarios = selected_generated
+            development_scenarios = selected_generated
+        elif configured_debug_scenarios:
+            status_quo_scenarios = configured_debug_scenarios
+            development_scenarios = configured_debug_scenarios
 
+    elif debug_enabled:
         if settings.scenario_type == "STATIC":
             if method == "aggregate":
                 status_quo_scenarios = configured_debug_scenarios
@@ -631,18 +660,6 @@ def phase_6_travel_time_savings(runtimes):
             else:
                 status_quo_scenarios = configured_debug_scenarios
                 development_scenarios = configured_debug_scenarios
-
-        elif settings.scenario_type == "GENERATED":
-            if configured_debug_scenarios:
-                status_quo_scenarios = configured_debug_scenarios
-                development_scenarios = configured_debug_scenarios
-            else:
-                selected_generated = settings.get_representative_generated_scenarios(
-                    n_scenarios=settings.amount_of_scenarios,
-                    n_representatives=settings.generated_representative_scenarios_count,
-                )
-                status_quo_scenarios = selected_generated
-                development_scenarios = selected_generated
 
         else:
             raise ValueError(f"Unsupported scenario_type: {settings.scenario_type}")

@@ -973,14 +973,12 @@ def export_generated_population_rasters(
     del end_year, num_of_scenarios
     os.makedirs(output_dir, exist_ok=True)
 
-    base_candidates = [
-        os.path.join(output_dir, "pop20_corrected.tif"),
-        os.path.join(output_dir, "pop20.tif"),
-        os.path.join(integrated_paths.MAIN, "data", "independent_variable", "processed", "raw", "pop20.tif"),
-    ]
-    base_raster_path = next((p for p in base_candidates if os.path.exists(p)), None)
-    if base_raster_path is None:
-        raise FileNotFoundError("Cannot create generated population rasters: no base population raster found.")
+    base_raster_path = road_settings.POPULATION_OUTPUT_TIF
+    if not os.path.exists(base_raster_path):
+        raise FileNotFoundError(
+            "Cannot create generated population rasters: base population raster missing "
+            f"at {base_raster_path}."
+        )
 
     with rasterio.open(base_raster_path) as src:
         base_pop = src.read(1).astype(np.float32)
@@ -1441,8 +1439,7 @@ def apply_selected_scenarios_to_mode_settings(
 ) -> List[str]:
     selected = list(selected_scenarios)
 
-    road_settings.travel_time_debug_enabled = True
-    road_settings.travel_time_debug_scenarios = selected
+    road_settings.generated_selected_scenarios = selected
 
     return selected
 

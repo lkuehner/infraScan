@@ -5,11 +5,13 @@ if hasattr(gpd.options, "io_engine"):
     gpd.options.io_engine = "fiona"
 import math
 import pandas as pd
+import rasterio
 from shapely.geometry import LineString, MultiLineString, Point, MultiPoint, shape, box
 from shapely.ops import split, snap, linemerge, unary_union
 from rasterio import crs
 from rasterio.transform import from_origin
 from rasterio.features import shapes, rasterize
+from rasterio.windows import from_bounds
 from shapely.geometry import shape, Polygon
 from geopandas.tools import sjoin
 
@@ -65,30 +67,34 @@ def import_data(limits):
     # LU85_4  4 Hauptbereiche der Bodennutzung der Arealstatistik 1979/85
 
 
-    betriebzaehlung20 = pd.read_csv("data/independent_variable/statent/ag-b-00.03-22-STATENT2020/STATENT_2020.csv", sep=";")
-    # BXXS2: Arbeitsstätte Sektor 2, BxxVZAS2: Vollzeitäquivalent Sektor 2
-    betriebzaehlung20 = betriebzaehlung20[["B08VZAT", "E_KOORD", "N_KOORD"]].rename(
-        {'B08VZAT': 'empl20'}, axis=1)
-    empl20_ch = fill_raster_dataframe(betriebzaehlung20)
-    csv_to_tiff(empl20_ch, attribute="empl20", path="data/independent_variable/processed/raw/empl20_ch.tif")
+def import_population_and_employment_rasters(limits):
+    """Import the corridor rasters"""
+    e_min, n_min, e_max, n_max = limits
+    raster_jobs = [(
+            "data/Spatial_Data/Land_Use/Employment/employment_2023.tif",
+            "data/independent_variable/processed/empl23.tif",),
+        ( "data/Spatial_Data/Land_Use/Population/population_2023.tif",
+            "data/independent_variable/processed/pop23.tif", ),]
 
-    empl20 = empl20_ch[(empl20_ch["E_COORD"] >= limits[0]) & (empl20_ch["E_COORD"] <= limits[2] - 100) & (empl20_ch["N_COORD"] >= limits[1]) & (empl20_ch["N_COORD"] <= limits[3] - 100)]
-    print(empl20.head(10).to_string())
-    csv_to_tiff(empl20, attribute="empl20", path="data/independent_variable/processed/raw/empl20.tif")
+    for source_path, output_path in raster_jobs:
+        with rasterio.open(source_path) as src:
+            profile = src.profile.copy()
+            profile.update(count=1)
 
-    population20 = pd.read_csv("data/independent_variable/statpop/ag-b-00.03-vz2020statpop/STATPOP2020.csv", sep=";")
-    population20 = population20[["B20BTOT", "E_KOORD", "N_KOORD"]].rename({"B20BTOT": "pop20"}, axis=1)
-    pop20_ch = fill_raster_dataframe(population20)
-    csv_to_tiff(pop20_ch, attribute="pop20", path="data/independent_variable/processed/raw/pop20_ch.tif")
-    pop20 = pop20_ch[
-        (pop20_ch["E_COORD"] >= limits[0]) & (pop20_ch["E_COORD"] <= limits[2] - 100) & (pop20_ch["N_COORD"] >= limits[1]) & (
-                    pop20_ch["N_COORD"] <= limits[3] - 100)]
-    csv_to_tiff(pop20, attribute="pop20", path="data/independent_variable/processed/raw/pop20.tif")
+            window = from_bounds(e_min, n_min, e_max, n_max, src.transform)
+            window = window.round_offsets().round_lengths()
+            clipped_data = src.read(1, window=window)
+            clipped_transform = src.window_transform(window)
 
-    # Store the restructured dataset as csv file
-    #population20.to_csv(r"data/temp/pop_filtered.csv")
-    #betriebzaehlung20.to_csv(r"data/temp/empl_filtered.csv")
-    return
+            profile.update(
+                width=clipped_data.shape[1],
+                height=clipped_data.shape[0],
+                transform=clipped_transform,
+            )
+
+            with rasterio.open(output_path, "w", **profile) as dst:
+                dst.write(clipped_data, 1)
+    
 
 
 def fill_raster_dataframe(df, rastersize=100):
@@ -173,8 +179,10 @@ def import_locations():
 
 
 def get_lake_data():
-    gdf = gpd.read_file("data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp")
-    gdf = gdf[gdf["GEWAESSERN"].isin(["Zürichsee", "Greifensee", "Pfäffikersee"])]
+    #gdf = gpd.read_file("data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp")
+    #gdf = gdf[gdf["GEWAESSERN"].isin(["Zürichsee", "Greifensee", "Pfäffikersee"])]
+    gdf = gpd.read_file("data/Spatial_Data/Land_Use/Hydrography/swissTLMRegio_Lake.shp")
+    gdf = gdf[gdf["OBJECTID"].isin([655, 652, 654])]
     gdf.to_file('data/landuse_landcover/processed/lake_data_zh.gpkg', crs="epsg:2056")
     return
 

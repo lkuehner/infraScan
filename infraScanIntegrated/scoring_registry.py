@@ -1,13 +1,28 @@
+"""Build harmonized integrated score tables from road and rail model outputs.
+
+The module reads the exported standalone result files, derives the comparable
+integrated score components, and writes consolidated road-rail score tables for
+the integrated plotting workflow.
+
+Exports are written to:
+  - data/infraScanIntegrated/costs/score_results/
+"""
+
+
+import sqlite3
+import warnings
 from typing import Iterable, Optional
 from pathlib import Path
-
-import geopandas as gpd
+try:
+    import geopandas as gpd
+except Exception:  # pragma: no cover
+    gpd = None
 import numpy as np
 import pandas as pd
-import warnings
 from shapely.ops import unary_union
-
 from . import common_cost_parameters
+
+from . import paths as integrated_paths
 from ..infraScanRoad import cost_parameters as road_cost_parameters
 from ..infraScanRail import cost_parameters as rail_cost_parameters
 from ..infraScanRail import paths as rail_paths
@@ -22,43 +37,9 @@ RESULT_COLUMNS = [
 ]
 
 STANDALONE_ANNUAL_YEARS = common_cost_parameters.appraisal_years
-SETTLEMENT_LANDCOVER_SHP = (
-    Path(rail_paths.MAIN)
-    / "data"
-    / "landuse_landcover"
-    / "landcover"
-    / "Landcover"
-    / "swissTLMRegio_LandCover.shp"
-)
-NOISE_BUFFER_METERS = 50.0
+SETTLEMENT_LANDCOVER_SHP = ( Path(rail_paths.MAIN)/ "data"/ "landuse_landcover"/ "landcover"/ "Landcover"/ "swissTLMRegio_LandCover.shp")
+NOISE_BUFFER_METERS = 50.0 # SN VSS 41 828, assuming that noise impacts are relevant within a 50m buffer in residential areas
 
-def make_result_row(
-    development,
-    scenario,
-    score_id: str,
-    standalone_value,
-    integrated_value,
-) -> dict:
-    return {
-        "development": development,
-        "scenario": scenario,
-        "score_id": score_id,
-        "standalone_value": standalone_value,
-        "integrated_value": integrated_value,
-    }
-
-
-def filter_score_results(
-    result_df: pd.DataFrame,
-    score_id: Optional[str] = None,
-    scenario: Optional[str] = None,
-) -> pd.DataFrame:
-    filtered = result_df.copy()
-    if score_id is not None:
-        filtered = filtered[filtered["score_id"] == score_id]
-    if scenario is not None:
-        filtered = filtered[filtered["scenario"] == scenario]
-    return filtered.reset_index(drop=True)
 
 # --------------------------------------------------------------------
 # Helper functions for calculating integrated values
@@ -475,6 +456,133 @@ def build_road_externalities_result_df(
     return pd.DataFrame(rows, columns=RESULT_COLUMNS)
 
 
+def prepare_road_construction(construction_gpkg: Path) -> pd.DataFrame:
+    """Prepare the road construction input table for registry scoring."""
+    construction = read_gpkg_table(
+        construction_gpkg,
+        columns=["ID_new", "cost_path", "cost_bridge", "cost_tunnel", "cost_ramp", "building_costs"],
+    )
+
+    for col in ["cost_path", "cost_bridge", "cost_tunnel", "cost_ramp", "building_costs"]:
+        if col in construction.columns:
+            construction[col] = pd.to_numeric(construction[col], errors="coerce").abs()
+
+    construction["cost_open_highway"] = construction["cost_path"]
+    if "cost_ramp" not in construction.columns:
+        construction["cost_ramp"] = (
+            construction["building_costs"]
+            - construction["cost_path"]
+            - construction["cost_bridge"]
+            - construction["cost_tunnel"]
+        ).clip(lower=0.0)
+    return construction
+
+
+def build_road_results(
+    road_costs_dir: Path,
+    road_externalities_detail_path: Path | None,
+) -> pd.DataFrame:
+    """Build the long-format road score table from standalone road outputs."""
+    construction_gpkg = road_costs_dir / "total_costs_od.gpkg"
+    total_costs_csv = road_costs_dir / "total_costs_od.csv"
+    tts_csv = road_costs_dir / "traveltime_savings_od_yearly.csv"
+    if not tts_csv.exists():
+        tts_csv = road_costs_dir / "traveltime_savings_od.csv"
+    maintenance_gpkg = road_costs_dir / "maintenance.gpkg"
+
+    if not construction_gpkg.exists():
+        raise FileNotFoundError(f"Missing road construction gpkg: {construction_gpkg}")
+    if not total_costs_csv.exists():
+        raise FileNotFoundError(f"Missing road total costs csv: {total_costs_csv}")
+    if not tts_csv.exists():
+        raise FileNotFoundError(
+            "Missing road travel time savings csv. Expected one of:\n"
+            f"- {road_costs_dir / 'traveltime_savings_od_yearly.csv'}\n"
+            f"- {road_costs_dir / 'traveltime_savings_od.csv'}"
+        )
+
+    construction = prepare_road_construction(construction_gpkg)
+    road_tt_wide = pd.read_csv(tts_csv)
+    total_costs_df = pd.read_csv(total_costs_csv)
+    standalone_externality_cols = ["climate_cost", "land_realloc", "nature", "noise_s1"]
+    missing_standalone_cols = [
+        col for col in standalone_externality_cols if col not in total_costs_df.columns
+    ]
+    if missing_standalone_cols:
+        gpkg_cols = ["ID_new"] + missing_standalone_cols
+        total_costs_gpkg = read_gpkg_table(construction_gpkg, columns=gpkg_cols)
+        total_costs_df = total_costs_df.merge(total_costs_gpkg, on="ID_new", how="left")
+
+    if "ID_new" in road_tt_wide.columns and "development" not in road_tt_wide.columns:
+        road_tt_wide = road_tt_wide.rename(columns={"ID_new": "development"})
+
+    road_tt_scenarios = {
+        col.removeprefix("tt_") for col in road_tt_wide.columns if col.startswith("tt_")
+    }
+    road_total_scenarios = {
+        col.removeprefix("total_") for col in total_costs_df.columns if col.startswith("total_scenario_")
+    }
+    scenarios = sorted(
+        list(road_tt_scenarios & road_total_scenarios),
+        key=lambda scenario: int(str(scenario).split("_")[-1]) if str(scenario).split("_")[-1].isdigit() else -1,
+    )
+
+    result_frames = [
+        build_road_construction_result_df(construction, scenarios),
+        build_road_tts_result_df(road_tt_wide, scenarios),
+    ]
+
+    if maintenance_gpkg.exists():
+        try:
+            maintenance_df = read_gpkg_table(
+                maintenance_gpkg,
+                columns=["ID_new", "maintenance_annual"],
+            )
+            if "maintenance_annual" in maintenance_df.columns:
+                result_frames.append(build_road_maint_result_df(maintenance_df, scenarios))
+            else:
+                maintenance_df = read_gpkg_table(maintenance_gpkg, columns=["ID_new", "maintenance"])
+                if "maintenance" in maintenance_df.columns:
+                    maintenance_df["maintenance_annual"] = pd.to_numeric(
+                        maintenance_df["maintenance"],
+                        errors="coerce",
+                    )
+                    result_frames.append(
+                        build_road_maint_result_df(
+                            maintenance_df[["ID_new", "maintenance_annual"]],
+                            scenarios,
+                        )
+                    )
+                else:
+                    warnings.warn("Road maintenance.gpkg has neither 'maintenance_annual' nor 'maintenance'. Skipping road maintenance.")
+        except Exception as exc:
+            warnings.warn(f"Road maintenance.gpkg is not readable. Skipping road maintenance. ({exc})")
+    else:
+        warnings.warn("Road maintenance.gpkg not found. Skipping road maintenance.")
+
+    if road_externalities_detail_path is not None and road_externalities_detail_path.exists():
+        detail_df = pd.read_csv(road_externalities_detail_path)
+        result_frames.append(
+            build_road_externalities_result_df(
+                detail_df=detail_df,
+                total_costs_df=total_costs_df,
+            )
+        )
+    else:
+        warnings.warn("Road externalities detail file not found. Skipping integrated road externalities.")
+
+    road_result = pd.concat(result_frames, ignore_index=True)
+    road_result["mode"] = "Road"
+    road_result["development"] = (
+        road_result["development"]
+        .astype(str)
+        .str.replace("Development_", "", regex=False)
+        .str.replace(r"\.0$", "", regex=True)
+    )
+    road_result["scenario"] = road_result["scenario"].astype(str)
+    return road_result[["mode"] + RESULT_COLUMNS]
+
+
 
 
 # --------------------------------------------------------------------
@@ -739,8 +847,213 @@ def build_rail_externalities_result_df(
 
     return pd.DataFrame(rows, columns=RESULT_COLUMNS)
 
+
+def build_rail_results(
+    rail_costs_dir: Path,
+    rail_train_km_path: Path | None,
+) -> pd.DataFrame:
+    """Build the long-format rail score table from standalone rail outputs."""
+    construction_csv = rail_costs_dir / "construction_cost.csv"
+    tts_csv = rail_costs_dir / "traveltime_savings.csv"
+    discounted_tts_path = integrated_paths.RAIL_DISCOUNTED_TTS_CSV
+
+    if not construction_csv.exists():
+        raise FileNotFoundError(f"Missing rail construction csv: {construction_csv}")
+    if not tts_csv.exists():
+        raise FileNotFoundError(f"Missing rail travel time savings csv: {tts_csv}")
+
+    construction_raw = pd.read_csv(construction_csv)
+    tts_df = pd.read_csv(tts_csv)
+    discounted_tts_df = None
+    if discounted_tts_path is not None and discounted_tts_path.exists():
+        discounted_raw = pd.read_csv(discounted_tts_path, usecols=["development", "scenario", "benefit"])
+        discounted_tts_df = (
+            discounted_raw.groupby(["development", "scenario"], as_index=False)
+            .agg(standalone_value=("benefit", "sum"))
+        )
+        discounted_tts_df["standalone_value"] = (
+            discounted_tts_df["standalone_value"] / STANDALONE_ANNUAL_YEARS
+        )
+
+    construction_registry_input = construction_raw.rename(
+        columns={
+            "Development": "ID_new",
+            "TotalConstructionCost": "building_costs",
+        }
+    ).copy()
+    static_registry_input = construction_raw.rename(columns={"Development": "ID_new"}).copy()
+
+    scenarios = sorted(
+        tts_df["scenario"].astype(str).unique().tolist(),
+        key=lambda scenario: int(str(scenario).split("_")[-1]) if str(scenario).split("_")[-1].isdigit() else -1,
+    )
+
+    result_frames = [
+        build_rail_construction_result_df(construction_registry_input, scenarios),
+        build_rail_maint_result_df(static_registry_input, scenarios),
+        build_rail_operation_result_df(static_registry_input, scenarios),
+        build_rail_tts_result_df(
+            tts_df.copy(),
+            old_discounted_tts_df=discounted_tts_df,
+        ),
+    ]
+
+    if rail_train_km_path is not None and rail_train_km_path.exists():
+        train_km_df = pd.read_csv(rail_train_km_path)
+        result_frames.append(
+            build_rail_externalities_result_df(
+                train_km_df=train_km_df,
+                scenarios=scenarios,
+            )
+        )
+    else:
+        warnings.warn("Rail train_km.csv not found. Skipping rail externalities.")
+
+    rail_result = pd.concat(result_frames, ignore_index=True)
+    rail_result["mode"] = "Rail"
+    rail_result["development"] = (
+        rail_result["development"]
+        .astype(str)
+        .str.replace("Development_", "", regex=False)
+        .str.replace(r"\.0$", "", regex=True)
+    )
+    rail_result["scenario"] = rail_result["scenario"].astype(str)
+    return rail_result[["mode"] + RESULT_COLUMNS]
+
+
+
 # --------------------------------------------------------------------
-# Qualtitative scoring functions (accessibility)
+# Combine and export results
 # --------------------------------------------------------------------
 
-# TODO
+def assemble_score_results_long(
+    road_result: pd.DataFrame,
+    rail_result: pd.DataFrame,
+) -> pd.DataFrame:
+    """Combine road and rail score rows into one consistently ordered table.
+
+    Args:
+        road_result: Road score rows with columns ["mode"] + RESULT_COLUMNS.
+        rail_result: Rail score rows with columns ["mode"] + RESULT_COLUMNS.
+
+    Returns:
+        One long-format score table sorted by mode, development, scenario and score id.
+    """
+    score_long = pd.concat([road_result, rail_result], ignore_index=True)
+    score_long["scenario_sort"] = score_long["scenario"].astype(str).str.split("_").str[-1]
+    score_long["scenario_sort"] = pd.to_numeric(score_long["scenario_sort"], errors="coerce").fillna(-1)
+    score_long = score_long.sort_values(
+        ["mode", "development", "scenario_sort", "score_id"]
+    ).drop(columns=["scenario_sort"]).reset_index(drop=True)
+    return score_long
+
+
+def build_tidy_score_values(score_long: pd.DataFrame) -> pd.DataFrame:
+    """Reshape the long score table into a tidy value table.
+
+    Args:
+        score_long: Long-format score table with standalone and integrated values.
+
+    Returns:
+        Tidy table with one value per row and a value_mode column.
+    """
+    tidy = score_long.melt(
+        id_vars=["mode", "development", "scenario", "score_id"],
+        value_vars=["standalone_value", "integrated_value"],
+        var_name="value_mode",
+        value_name="value",
+    )
+    tidy["value_mode"] = tidy["value_mode"].replace(
+        {
+            "standalone_value": "standalone",
+            "integrated_value": "integrated",
+        }
+    )
+    scenario_sort = pd.to_numeric(
+        tidy["scenario"].astype(str).str.split("_").str[-1],
+        errors="coerce",
+    ).fillna(-1)
+    tidy = tidy.assign(scenario_sort=scenario_sort).sort_values(
+        ["mode", "development", "scenario_sort", "score_id", "value_mode"]
+    ).drop(columns=["scenario_sort"]).reset_index(drop=True)
+    return tidy
+
+
+def read_gpkg_table(path: Path, table: str | None = None, columns: list[str] | None = None) -> pd.DataFrame:
+    """Read one geopackage table and optionally keep only selected columns."""
+    if gpd is not None:
+        gdf = gpd.read_file(path)
+        df = pd.DataFrame(gdf.drop(columns="geometry", errors="ignore"))
+        if columns is None:
+            return df
+        keep_cols = [col for col in columns if col in df.columns]
+        return df[keep_cols].copy()
+
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        if table is None:
+            contents = pd.read_sql("SELECT table_name, data_type FROM gpkg_contents", con)
+            table = contents.loc[contents["data_type"].isin(["features", "attributes"]), "table_name"].iloc[0]
+        query = f"SELECT * FROM '{table}'" if columns is None else f"SELECT {', '.join(columns)} FROM '{table}'"
+        return pd.read_sql(query, con)
+    finally:
+        con.close()
+
+def export_score_results(output_dir: Path | None = None) -> dict:
+    """Build and export the integrated road-rail score tables.
+
+    Args:
+        output_dir: Optional custom export directory.
+            If None, uses the integrated default score-results directory.
+
+    Returns:
+        Dict with the exported DataFrames and their output paths.
+    """
+    if output_dir is None:
+        output_dir = integrated_paths.SCORE_RESULTS_DIR
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    road_result = build_road_results(
+        road_costs_dir=integrated_paths.ROAD_COSTS_DIR,
+        road_externalities_detail_path=(
+            integrated_paths.ROAD_EXTERNALITIES_DETAIL_CSV
+            if integrated_paths.ROAD_EXTERNALITIES_DETAIL_CSV.exists()
+            else None
+        ),
+    )
+    rail_result = build_rail_results(
+        rail_costs_dir=integrated_paths.RAIL_COSTS_DIR,
+        rail_train_km_path=(
+            integrated_paths.RAIL_TRAIN_KM_CSV
+            if integrated_paths.RAIL_TRAIN_KM_CSV.exists()
+            else None
+        ),
+    )
+
+    score_long = assemble_score_results_long(road_result, rail_result)
+    score_tidy = build_tidy_score_values(score_long)
+
+    score_long_path = (
+        integrated_paths.SCORE_RESULTS_LONG_PATH
+        if output_dir == integrated_paths.SCORE_RESULTS_DIR
+        else output_dir / "score_results_long.csv"
+    )
+    score_tidy_path = (
+        integrated_paths.SCORE_RESULTS_TIDY_PATH
+        if output_dir == integrated_paths.SCORE_RESULTS_DIR
+        else output_dir / "score_results_tidy.csv"
+    )
+
+    score_long.to_csv(score_long_path, index=False)
+    score_tidy.to_csv(score_tidy_path, index=False)
+
+    print(f"Wrote {score_long_path}")
+    print(f"Wrote {score_tidy_path}")
+
+    return {
+        "score_long": score_long,
+        "score_tidy": score_tidy,
+        "score_long_path": score_long_path,
+        "score_tidy_path": score_tidy_path,
+    }

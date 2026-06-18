@@ -1331,8 +1331,8 @@ def GetCatchmentOD(use_cache = False):
     pop_combined_file = "data/independent_variable/processed/scenario/pop_combined.tif"
     empl_combined_file = "data/independent_variable/processed/scenario/empl_combined.tif"
 
-    output_pop_path = "data/independent_variable/processed/scenario/pop20_corrected.tif"
-    output_empl_path = "data/independent_variable/processed/scenario/empl20_corrected.tif"
+    output_pop_path = "data/independent_variable/processed/scenario/pop23_corrected.tif"
+    output_empl_path = "data/independent_variable/processed/scenario/empl23_corrected.tif"
 
     # Correct rasters using the catchment raster as reference
     correct_rasters_to_extent(
@@ -1377,11 +1377,11 @@ def GetCatchmentOD(use_cache = False):
             empl_raster_data[scenario] = src.read(idx)  # Read each band
 
     # Paths to input and output files
-    empl_raster_path = "data/independent_variable/processed/raw/empl20.tif"
-    pop_raster_path = "data/independent_variable/processed/raw/pop20.tif"
+    empl_raster_path = "data/independent_variable/processed/raw/empl23.tif"
+    pop_raster_path = "data/independent_variable/processed/raw/pop23.tif"
 
-    output_empl_path = "data/independent_variable/processed/raw/empl20_corrected.tif"
-    output_pop_path = "data/independent_variable/processed/raw/pop20_corrected.tif"
+    output_empl_path = "data/independent_variable/processed/raw/empl23_corrected.tif"
+    output_pop_path = "data/independent_variable/processed/raw/pop23_corrected.tif"
 
     # Correct rasters using the catchment raster as reference
     correct_rasters_to_extent(

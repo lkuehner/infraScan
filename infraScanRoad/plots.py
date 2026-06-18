@@ -671,7 +671,10 @@ def plot_benefit_distribution_bar_single(df_costs, column):
 
     # Calculate the actual bin boundaries for the shaded region
     min_shaded_region = next((i for i, val in enumerate(bin_edges) if val >= 0), None)
-    plt.axvspan(min_shaded_region-0.5, custom_ticks.max()+0.5, color='lightgray', alpha=0.5)
+    if min_shaded_region is None:
+        plt.axvspan(custom_ticks.min() - 0.5, custom_ticks.max() + 0.5, color='lightgray', alpha=0.5)
+    else:
+        plt.axvspan(min_shaded_region - 0.5, custom_ticks.max() + 0.5, color='lightgray', alpha=0.5)
 
     # Set x-axis limits
     plt.xlim(custom_ticks.min()-0.5, custom_ticks.max()+0.5)

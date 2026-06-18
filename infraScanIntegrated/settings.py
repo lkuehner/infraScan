@@ -1,10 +1,59 @@
-from . import config as integrated_config
+"""
+infraScanIntegrated settings
+
+Defaults for the integrated orchestrator. These values may be overridden
+interactively in main_integrated.py for the current run only.
+"""
+
+# --------------------------------------------------------------
+# INTEGRATED RUN CONTROL
+# --------------------------------------------------------------
+
+RUN_MODE = "integrated"  # "legacy_rail", "legacy_road", "integrated"
+INCLUDE_STANDALONE = True
+
+RUN_RAIL = True
+RUN_ROAD = True
+PLOT_LEGACY_RAIL = True
+PLOT_LEGACY_ROAD = True
+PLOT_INTEGRATED = True
+
+# Control the use of cached intermediate outputs from the rail and road models
+# in infraScanRail.settings the detailed cache settings can be defined
+# in infraScanRoad the cache is controlled by checkpoints files under data/infraScanRoad/cache
+use_cache_rail = True # False: full rerun of the rail model
+use_cache_road_checkpoints = True # False: full rerun of the road model
 
 
+# --------------------------------------------------------------
+# PHASE 0: INTEGRATED APPRAISALCONFIGURATION 
+# --------------------------------------------------------------	
+
+# Shared valuation defaults for integrated scoring and comparable standalone
+# outputs produced within the integrated run.
+appraisal_years = 40
+rail_VTTS = 25.24 # CHF/h NIBA adjusted 2023
+road_VTTS = 26.85 # CHF/h EBeN adjusted 2023
+
+# SN-641821
+discount_rate = 0.02
+
+#SN 641 822a (NISTRA)
+real_wage_growth = 0.0069 
 
 # --------------------------------------------------------------
 # PHASE IV: Settings for Scenario Generation
 # --------------------------------------------------------------	
+
+# Shared scenario and valuation defaults for integrated runs.
+scenario_type = "GENERATED"
+amount_of_scenarios = 100
+representative_scenarios_count = 10
+start_year_scenario = 2018
+end_year_scenario = 2100
+start_valuation_year = 2050
+
+
 
 # Shared literature assumptions for modal behaviour
 # Verkehrsperspektiven 2050 start shares
@@ -35,20 +84,20 @@ def annualized_growth_rate(start_value: float, target_value: float, start_year: 
 rail_modal_split_avg_growth_rate = annualized_growth_rate(
 	rail_modal_split_start,
 	rail_modal_split_target,
-	integrated_config.start_year_scenario,
-	integrated_config.start_valuation_year,
+	start_year_scenario,
+	start_valuation_year,
 )
 road_modal_split_avg_growth_rate = annualized_growth_rate(
 	road_modal_split_start,
 	road_modal_split_target,
-	integrated_config.start_year_scenario,
-	integrated_config.start_valuation_year,
+	start_year_scenario,
+	start_valuation_year,
 )
 other_modal_split_avg_growth_rate = annualized_growth_rate(
 	other_modal_split_start,
 	other_modal_split_target,
-	integrated_config.start_year_scenario,
-	integrated_config.start_valuation_year,
+	start_year_scenario,
+	start_valuation_year,
 )
 
 # In the logistic-normal setup these per-mode volatility inputs are combined into 

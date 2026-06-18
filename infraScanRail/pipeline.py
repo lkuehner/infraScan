@@ -7,6 +7,11 @@ from .catchment_pt import *
 from .display_results import *
 from .generate_infrastructure import *
 from .paths import get_rail_services_path
+from .data_import import (
+    get_population_and_employment_data,
+    get_lake_data,
+    import_cities,
+)
 from .scenarios import *
 from .scoring import *
 from .scoring import create_cost_and_benefit_df
@@ -81,6 +86,9 @@ def phase_2_data_import(runtimes: dict) -> None:
 
     # Import the file containing the locations to be plotted
     import_cities()
+
+    # Import population and employment data for the corridor
+    get_population_and_employment_data()
 
 
     # Define area that is protected for constructing railway links

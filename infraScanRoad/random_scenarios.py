@@ -821,16 +821,11 @@ def export_generated_population_rasters(
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    base_candidates = [
-        os.path.join(output_dir, "pop20_corrected.tif"),
-        os.path.join(output_dir, "pop20.tif"),
-        "data/independent_variable/processed/raw/pop20.tif",
-    ]
-    base_raster_path = next((p for p in base_candidates if os.path.exists(p)), None)
-    if base_raster_path is None:
+    base_raster_path = "data/independent_variable/processed/pop23.tif"
+    if not os.path.exists(base_raster_path):
         raise FileNotFoundError(
-            "Cannot create generated population rasters: no base population raster found "
-            "(expected pop20_corrected.tif/pop20.tif/raw pop20.tif)."
+            "Cannot create generated population rasters: base population raster missing "
+            f"at {base_raster_path}."
         )
 
     with rasterio.open(base_raster_path) as src:

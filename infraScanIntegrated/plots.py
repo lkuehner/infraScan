@@ -11,11 +11,13 @@ import matplotlib.patches as mpatches
 import geopandas as gpd
 import rasterio
 
+from infraScan.infraScanIntegrated import paths as integrated_paths
 from infraScan.infraScanRail import paths as rail_paths
-from infraScan.infraScanRail.TT_Delay import analyze_travel_times
 from infraScan.infraScanRoad.externalities_comp import compute_settlement_buffer_share
 from infraScan.infraScanIntegrated.scoring_registry import load_settlement_footprint
 
+
+#TO DO: make automatic based on generated_selected_scenarios
 SCENARIOS = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
 #("scenario_76", "scenario_45", "scenario_67")
 
@@ -34,35 +36,23 @@ COST_COLORS = {
     "tts": "#91B58D",
 }
 
-# Centralized paths (adjust these at top to configure where data and outputs live)
-DATA_ROOT = Path(rail_paths.MAIN)
-ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
-INTEGRATED_COSTS_DIR = DATA_ROOT / "data Kopie" / "infraScanIntegrated" / "costs"
-INTEGRATED_PLOTS_DIR = DATA_ROOT / "plots" / "Integrated"
+# Centralized paths (adjust these in paths.py)
+RAIL_TOTAL_COSTS_CSV = integrated_paths.RAIL_COSTS_DIR / "total_costs.csv"
+RAIL_TT_SAVINGS_CSV = integrated_paths.RAIL_COSTS_DIR / "traveltime_savings.csv"
+ROAD_TOTAL_COSTS_CSV = integrated_paths.ROAD_COSTS_DIR / "total_costs_od.csv"
+ROAD_TT_OD_CSV = integrated_paths.ROAD_COSTS_DIR / "traveltime_savings_od.csv"
+ROAD_TT_DETAILED_CSV = integrated_paths.ROAD_DATA_ROOT / "traffic_flow" / "od" / "od_tt_savings_detailed.csv"
+ROAD_OD_TT_UNWEIGHTED_CSV = integrated_paths.ROAD_DATA_ROOT / "traffic_flow" / "od" / "developments_od_tt.csv"
+ROAD_OD_TT_STATUS_QUO_CSV = integrated_paths.ROAD_DATA_ROOT / "traffic_flow" / "od" / "status_quo_od_tt.csv"
 
-RAIL_COSTS_PATH = DATA_ROOT / "_archive" / "infraScanRail" /"data" / "costs"
-ROAD_COSTS_PATH = ROAD_DATA_ROOT / "costs"
-RAIL_NETWORK_PATH = DATA_ROOT / "data" / "infraScanRail" / "Network"
-ROAD_NETWORK_PATH = ROAD_DATA_ROOT / "Network"
-
-RAIL_TOTAL_COSTS_CSV = RAIL_COSTS_PATH / "total_costs.csv"
-RAIL_TT_SAVINGS_CSV = RAIL_COSTS_PATH / "traveltime_savings.csv"
-ROAD_TOTAL_COSTS_CSV = ROAD_COSTS_PATH / "total_costs_od.csv"
-ROAD_TT_OD_CSV = ROAD_COSTS_PATH / "traveltime_savings_od.csv"
-ROAD_TT_DETAILED_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "od_tt_savings_detailed.csv"
-ROAD_OD_TT_UNWEIGHTED_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "developments_od_tt.csv"
-ROAD_OD_TT_STATUS_QUO_CSV = ROAD_DATA_ROOT / "traffic_flow" / "od" / "status_quo_od_tt.csv"
-
-RAIL_TRAVELTIME_CACHE = RAIL_NETWORK_PATH / "travel_time" / "cache" / "od_times.pkl"
-RAIL_TRAVELTIME_SAVINGS_DIR = RAIL_NETWORK_PATH / "travel_time" / "TravelTime_Savings"
-ROAD_TRAVELTIME_RASTER = ROAD_NETWORK_PATH / "travel_time" / "travel_time_raster.tif"
-DEV_DIR = DATA_ROOT / rail_paths.DEVELOPMENT_DIRECTORY
-ANALYSIS_DIR = INTEGRATED_COSTS_DIR / "score_analysis"
-SCORE_RESULTS_DIR = INTEGRATED_COSTS_DIR / "score_results"
-GENERATED_PLOTS_DIR = INTEGRATED_PLOTS_DIR / "generated"
-ROAD_EXTERNALITY_DETAIL_CSV = Path(
-    ROAD_DATA_ROOT / "traffic_flow" / "link_flow_externalities" / "link_flow_externalities_long.csv"
-)
+RAIL_TRAVELTIME_CACHE = integrated_paths.RAIL_NETWORK_PATH / "travel_time" / "cache" / "od_times.pkl"
+RAIL_TRAVELTIME_SAVINGS_DIR = integrated_paths.RAIL_NETWORK_PATH / "travel_time" / "TravelTime_Savings"
+ROAD_TRAVELTIME_RASTER = integrated_paths.ROAD_NETWORK_PATH / "travel_time" / "travel_time_raster.tif"
+DEV_DIR = integrated_paths.DATA_ROOT / rail_paths.DEVELOPMENT_DIRECTORY
+ANALYSIS_DIR = integrated_paths.INTEGRATED_COSTS_DIR / "score_analysis"
+SCORE_RESULTS_DIR = integrated_paths.SCORE_RESULTS_DIR
+GENERATED_PLOTS_DIR = integrated_paths.GENERATED_PLOTS_DIR
+ROAD_EXTERNALITY_DETAIL_CSV = integrated_paths.ROAD_EXTERNALITIES_DETAIL_CSV
 
 MODE_CONFIG = {
     "Rail": {"base_vtt": 25.24},
@@ -125,10 +115,10 @@ def load_rail_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> 
 def load_road_final_costs_from_sources(scenarios: Iterable[str] = SCENARIOS) -> pd.DataFrame:
     totals_path = pd.read_csv(ROAD_TOTAL_COSTS_CSV)
     tt_path = pd.read_csv(ROAD_TT_OD_CSV)
-    construction = gpd.read_file(ROAD_COSTS_PATH / "construction.gpkg")[["ID_new", "building_costs"]]
-    maintenance = gpd.read_file(ROAD_COSTS_PATH / "maintenance.gpkg")[["ID_new", "maintenance"]]
-    externalities = gpd.read_file(ROAD_COSTS_PATH / "externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
-    noise = gpd.read_file(ROAD_COSTS_PATH / "noise.gpkg")[["ID_new", "noise_s1"]]
+    construction = gpd.read_file(integrated_paths.ROAD_COSTS_DIR / "construction.gpkg")[["ID_new", "building_costs"]]
+    maintenance = gpd.read_file(integrated_paths.ROAD_COSTS_DIR / "maintenance.gpkg")[["ID_new", "maintenance"]]
+    externalities = gpd.read_file(integrated_paths.ROAD_COSTS_DIR / "externalities.gpkg")[["ID_new", "climate_cost", "land_realloc", "nature"]]
+    noise = gpd.read_file(integrated_paths.ROAD_COSTS_DIR / "noise.gpkg")[["ID_new", "noise_s1"]]
 
     totals_df = (
         construction.merge(maintenance, on="ID_new", how="left")
@@ -295,7 +285,7 @@ def _load_component_overview(mode: str) -> pd.DataFrame:
 
 def _rail_label_lookup() -> dict[str, str]:
     df = pd.read_csv(
-        DATA_ROOT / "data" / "infraScanRail" / "costs" / "total_costs.csv",
+        integrated_paths.DATA_ROOT / "data" / "infraScanRail" / "costs" / "total_costs.csv",
         usecols=["development", "Sline"],
     ).drop_duplicates()
     dev = df["development"].astype(str).str.removeprefix("Development_").str.replace(r"\.0$", "", regex=True)

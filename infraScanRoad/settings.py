@@ -12,12 +12,17 @@ MAIN = "/Volumes/WD_Windows/MSc_Thesis"
 # True downloads fresh OSM data; False only reads the raw OSM cache.
 online_access = False
 OSM_CACHE_DIR = os.path.join(MAIN, "infraScan", "infraScanRoad", "cache")
+CHECKPOINT_DIR = os.path.join(MAIN, "data", "infraScanRoad", "checkpoints")
 
 ##################################################################################
 # Define settings 
-TRAVEL_TIME_METHODS = {"aggregate": "Aggregate travel time savings on network level",
+TRAVEL_TIME_METHODS = {"aggregate": "   Aggregate travel time savings on network level"
+"                                       including local_accessibility effects"
+"                                   !!! tts use non-equivalent network extents"
+"                                       local accessibility uses a fixed trip-generation factor (1.14) and is not OD-demand consistent.",
                         "od": "OD demand-weighted travel timae savings"}
-travel_time_savings_method = "od" # TODO: od or aggregate
+
+travel_time_savings_method = "od" # TODO: od or aggregate (only with STATIC scenarios)
 
 
 ##################################################################################
@@ -32,19 +37,24 @@ n_min, n_max = 1237000, 1254000     # 1238000, 1252000 - 1237000, 1252000
 
 #
 SCENARIO_TYPE = {"GENERATED": "Generated scenarios based on random sampling of the input parameters",
-                 "STATIC": "Existing scenarios based on the Swiss population scenario of the BFS"}
+                 "STATIC": "Existing scenarios based on the Swiss population scenario of the BFS"
+                            "TRAVEL_TIME_METHODS = aggregate only for STATIC scenarios"}
 scenario_type = "GENERATED"  # TODO: GENERATED or STATIC
 
+if travel_time_savings_method == "aggregate":
+    scenario_type = "STATIC"  # aggregate travel time savings only for STATIC scenarios
 
 # Optional local cap for GENERATED runs (set to None to disable cap)
 amount_of_scenarios = 100
 generated_representative_scenarios_count = 3
+generated_select_representative_scenarios = True
+generated_selected_scenarios = None # choose representative scenarios manually (e.g. ["scenario_1", "scenario_50")
 start_year_scenario = 2018
 end_year_scenario = 2100
 start_valuation_year = 2050
 
 # Spatial allocation of generated commune OD demand to road Voronoi catchments.
-# Population is scenario-specific; employment uses the current empl20 raster
+# Population is scenario-specific; employment uses the current empl23 raster
 # because no generated employment scenarios are available.
 road_od_blend_pop_rate = 1.0
 road_od_blend_empl_rate = 1.0
@@ -58,10 +68,6 @@ travel_time_suppress_known_warnings = True
 # Optional debug throttles for Phase 6 travel-time computation
 # When enabled, these limits are applied in both aggregate and OD modes.
 travel_time_debug_enabled = True  # True or False
-travel_time_debug_scenarios = ('scenario_26', 'scenario_70', 'scenario_89', 'scenario_100', 'scenario_75', 'scenario_96', 'scenario_44', 'scenario_19', 'scenario_64', 'scenario_78')
-#("scenario_26", "scenario_44", "scenario_64", "scenario_19", "scenario_78")
-#('scenario_23', 'scenario_47', 'scenario_26', 'scenario_85', 'scenario_100', 'scenario_39', 'scenario_81', 'scenario_11', 'scenario_55', 'scenario_31', 'scenario_96', 'scenario_38', 'scenario_41', 'scenario_84', 'scenario_36', 'scenario_35', 'scenario_63', 'scenario_98', 'scenario_97', 'scenario_10') # None -> auto by scenario_type (STATIC: low/medium/high, GENERATED: scenario_1..N)
-#("scenario_29", "scenario_30", "scenario_19", "scenario_81", "scenario_11")
 aggregate_debug_max_developments = None # e.g. 1
 aggregate_debug_developments_ids = None # [2, 103, 469, 895, 249, 662, 201, 689, 775, 28, 750, 789, 27, 25, 334]  # Explicit ID_new list for aggregate debug runs; overrides aggregate_debug_max_developments when set
 od_max_developments = None  # e.g. 1
@@ -71,10 +77,10 @@ def get_travel_time_debug_scenarios():
     if not travel_time_debug_enabled:
         return None
 
-    if travel_time_debug_scenarios is not None:
-        if isinstance(travel_time_debug_scenarios, str):
-            return [travel_time_debug_scenarios]
-        return list(travel_time_debug_scenarios)
+    if generated_selected_scenarios is not None:
+        if isinstance(generated_selected_scenarios, str):
+            return [generated_selected_scenarios]
+        return list(generated_selected_scenarios)
 
     if scenario_type == "STATIC":
         return ["low", "medium", "high"]

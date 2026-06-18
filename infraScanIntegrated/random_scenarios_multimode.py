@@ -11,7 +11,6 @@ from scipy.stats import norm, qmc
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-from infraScan.infraScanRoad import settings as road_settings
 from infraScan.infraScanRoad.scoring import GetCommuneShapes
 from . import paths as integrated_paths
 from . import settings as integrated_settings
@@ -29,6 +28,7 @@ ROAD_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRoad
 ROAD_POPULATION_BY_COMMUNE_PATH = os.path.join(integrated_paths.MAIN, "data", "Scenario", "population_by_gemeinde_2018.csv")
 ROAD_SCENARIO_CACHE_DIR = os.path.join(integrated_paths.MAIN, "data", "Scenario", "cache", "road", "random")
 ROAD_POPULATION_RASTER_OUTPUT_DIR = os.path.join(integrated_paths.MAIN, "data", "independent_variable", "processed", "scenario")
+ROAD_POPULATION_OUTPUT_TIF = "data/independent_variable/processed/pop23.tif"
 RAIL_OD_MATRIX_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "traffic_flow", "od", "rail", "ktzh", "od_matrix_stations_ktzh_20.csv")
 RAIL_COMMUNE_TO_STATION_PATH = os.path.join(integrated_paths.MAIN, "data", "infraScanRail", "Network", "processed", "Communes_to_railway_stations_ZH.xlsx")
 RAIL_SCENARIO_CACHE_DIR = os.path.join(integrated_paths.MAIN, "data", "Scenario", "cache", "rail")
@@ -1085,14 +1085,12 @@ def export_generated_population_rasters(
         output_dir = ROAD_POPULATION_RASTER_OUTPUT_DIR
     os.makedirs(output_dir, exist_ok=True)
 
-    base_candidates = [
-        os.path.join(output_dir, "pop20_corrected.tif"),
-        os.path.join(output_dir, "pop20.tif"),
-        os.path.join(integrated_paths.MAIN, "data", "independent_variable", "processed", "raw", "pop20.tif"),
-    ]
-    base_raster_path = next((p for p in base_candidates if os.path.exists(p)), None)
-    if base_raster_path is None:
-        raise FileNotFoundError("Cannot create generated population rasters: no base population raster found.")
+    base_raster_path = ROAD_POPULATION_OUTPUT_TIF
+    if not os.path.exists(base_raster_path):
+        raise FileNotFoundError(
+            "Cannot create generated population rasters: base population raster missing "
+            f"at {base_raster_path}."
+        )
 
     with rasterio.open(base_raster_path) as src:
         base_pop = src.read(1).astype(np.float32)

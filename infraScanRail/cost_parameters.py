@@ -1,6 +1,6 @@
 import numpy as np
 
-VTTS = 25.24 # CHF/h NIBA adjusted 2023
+VTTS = 15.19 # CHF/h Schmid, 2021 adjusted to 2023
 # Construction costs
 yearly_maintenance_to_construction_cost_factor = 0.03
 track_cost_per_meter = 32900  # for 2023 (CHF per meter: SBB Kostentool "22200" / Old approach "33250" 2025)
@@ -19,14 +19,14 @@ operating_cost_s_bahn_per_meter = 879   #Estimation from S14 HB - Hinwil 2024 fr
 detour_factor_tracks = 1.1  # Factor to account for detours in track length in comparison to a straight line between stations
 general_KDG = 0.623
 
-duration = 40  # 40 years
-tts_valuation_period = (2050,2090)
+duration = 50  # years
+tts_valuation_period = (2050, 2100)
 construction_start_year = 2050
 
 empty_train_weight_tonnes = 297 #Bt (train RABe 511)
 
 tau = 0.13
-discount_rate = 0.02  # 2% discount rate
+discount_rate = 0.03  # 3% legacy discount rate
 
 average_train_change_time = 7.1 # Axhausen, 2014
 change_time_comfort_factor = 1.7

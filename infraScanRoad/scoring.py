@@ -904,18 +904,23 @@ def map_coordinates_to_developments():
 def aggregate_costs():
     from . import settings
 
+    method = settings.travel_time_savings_method
+    aggregate = method == "aggregate"
+
     # Construction costs
     c_construction = gpd.read_file(r"data/infraScanRoad/costs/construction.gpkg")
     # Maintenance costs
     c_maintenance = gpd.read_file(r"data/infraScanRoad/costs/maintenance.gpkg")
-    # local accessibility block only include if assessment is
-    # c_acces_time = pd.read_csv(r"data/infraScanRoad/costs/local_accessibility.csv")
-    # local_columns = [col for col in c_acces_time.columns if col.startswith("local_")]
-    # if not local_columns:
-    #     raise ValueError("No local accessibility columns found in local_accessibility.csv")
-    # c_acces_time = c_acces_time[["ID_develop"] + local_columns]
+    if aggregate and settings.scenario_type == "STATIC":
+        c_access_time = pd.read_csv(r"data/infraScanRoad/costs/local_accessibility.csv")
+        local_columns = [col for col in c_access_time.columns if col.startswith("local_")]
+        if not local_columns:
+            raise ValueError("No local accessibility columns found in local_accessibility.csv")
+        c_access_time = c_access_time.rename(columns={"ID_develop": "ID_new"})
+        c_access_time = c_access_time[["ID_new"] + local_columns]
+    else:
+        local_columns = []
     # Import travel time costs (strictly method-specific)
-    method = settings.travel_time_savings_method
     tt_method_path = fr"data/infraScanRoad/costs/traveltime_savings_{method}.csv"
     c_tt = pd.read_csv(tt_method_path)
     print(f"Using travel time savings input: {tt_method_path}")
@@ -948,6 +953,8 @@ def aggregate_costs():
     # geom_id_map = c_maintenance.drop("maintenance",axis=1)
     total_costs = c_construction.drop("geometry", axis=1).merge(c_maintenance.drop(["geometry"], axis=1), how='inner',
                                                                 on='ID_new')
+    if aggregate and settings.scenario_type == "STATIC":
+        total_costs = total_costs.merge(c_access_time, how='inner', on='ID_new')
     # Add travel time
     total_costs = total_costs.merge(c_tt, how='inner', on='ID_new')
     # Add externalities costs
@@ -957,9 +964,7 @@ def aggregate_costs():
 
     tt_columns = [col for col in total_costs.columns if col.startswith("tt_")]
 
-    #base_columns = ['ID_new', 'cost_path', 'cost_bridge', 'cost_tunnel', 'building_costs'] + local_columns + [
-                    #'climate_cost', 'land_realloc', 'nature', 'noise_s1', 'noise_s2', 'noise_s3', "maintenance"]
-    base_columns = ['ID_new', 'cost_path', 'cost_bridge', 'cost_tunnel', 'cost_ramp', 'building_costs'] + [
+    base_columns = ['ID_new', 'cost_path', 'cost_bridge', 'cost_tunnel', 'cost_ramp', 'building_costs'] + local_columns + [
                     'climate_cost', 'land_realloc', 'nature', 'noise_s1', 'noise_s2', 'noise_s3', "maintenance"]
     total_costs = total_costs[base_columns + tt_columns]
     cost_columns = ['cost_path', 'cost_bridge', 'cost_tunnel', 'cost_ramp', 'building_costs', 'climate_cost', 'land_realloc',
@@ -981,21 +986,32 @@ def aggregate_costs():
     # Sum externality costs
     # total_costs["externalities"] = total_costs['climate_cost'] + total_costs['land_realloc'] + total_costs['nature']
     print(total_costs.head(10).to_string())
-    # Compute net benefit for each development
-    # Local accessibility is intentionally excluded from the active totals below.
+    # Compute net benefit for each development.
+    # Local accessibility is only added back in the legacy aggregate STATIC path.
     if settings.scenario_type == "STATIC" and {"tt_low", "tt_medium", "tt_high"}.issubset(set(tt_columns)):
-        # total_costs["total_low"] = total_costs[["construction_maintenance", local_low_col, "tt_low", "externalities_s2"]].sum(axis=1)
-        # total_costs["total_medium"] = total_costs[["construction_maintenance", local_medium_col, "tt_medium", "externalities_s1"]].sum(axis=1)
-        # total_costs["total_high"] = total_costs[["construction_maintenance", local_high_col, "tt_high", "externalities_s3"]].sum(axis=1)
-        total_costs["total_low"] = total_costs[
-            ["construction_maintenance", "tt_low", "externalities_s2"]
-        ].sum(axis=1)
-        total_costs["total_medium"] = total_costs[
-            ["construction_maintenance", "tt_medium", "externalities_s1"]
-        ].sum(axis=1)
-        total_costs["total_high"] = total_costs[
-            ["construction_maintenance", "tt_high", "externalities_s3"]
-        ].sum(axis=1)
+        if aggregate:
+            local_low_col = "local_s2_pop" if "local_s2_pop" in total_costs.columns else "local_s2"
+            local_medium_col = "local_s1_pop" if "local_s1_pop" in total_costs.columns else "local_s1"
+            local_high_col = "local_s3_pop" if "local_s3_pop" in total_costs.columns else "local_s3"
+            total_costs["total_low"] = total_costs[
+                ["construction_maintenance", local_low_col, "tt_low", "externalities_s2"]
+            ].sum(axis=1)
+            total_costs["total_medium"] = total_costs[
+                ["construction_maintenance", local_medium_col, "tt_medium", "externalities_s1"]
+            ].sum(axis=1)
+            total_costs["total_high"] = total_costs[
+                ["construction_maintenance", local_high_col, "tt_high", "externalities_s3"]
+            ].sum(axis=1)
+        else:
+            total_costs["total_low"] = total_costs[
+                ["construction_maintenance", "tt_low", "externalities_s2"]
+            ].sum(axis=1)
+            total_costs["total_medium"] = total_costs[
+                ["construction_maintenance", "tt_medium", "externalities_s1"]
+            ].sum(axis=1)
+            total_costs["total_high"] = total_costs[
+                ["construction_maintenance", "tt_high", "externalities_s3"]
+            ].sum(axis=1)
         total_output_cols = ["ID_new", "total_low", "total_medium", "total_high"]
     else:
         # GENERATED path: compute one total column per stochastic scenario.
@@ -1154,8 +1170,8 @@ def GetVoronoiOD():
     voronoi_tif_path = r"data/infraScanRoad/Network/travel_time/source_id_raster.tif"
     voronoidf = gpd.read_file(r"data/infraScanRoad/Network/travel_time/Voronoi_statusquo.gpkg")
 
-    scen_empl_path = r"data/independent_variable/processed/scenario/scen_empl.tif"
-    scen_pop_path = r"data/independent_variable/processed/scenario/scen_pop.tif"
+    scen_empl_path = "data/independent_variable/processed/scenario/scen_empl.tif"
+    scen_pop_path = "data/independent_variable/processed/scenario/scen_pop.tif"
 
     # define dev (=ID of the polygons of a development)
     dev = 0
@@ -1198,10 +1214,10 @@ def GetVoronoiOD():
         scen_empl_high_tif = src.read(3)
 
     # Open status quo
-    with rasterio.open(r"data/independent_variable/processed/raw/empl20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/empl23.tif") as src:
         scen_empl_20_tif = src.read(1)
 
-    with rasterio.open(r"data/independent_variable/processed/raw/pop20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/pop23.tif") as src:
         scen_pop_20_tif = src.read(1)
 
     # Open voronoi raster data
@@ -1426,8 +1442,8 @@ def GetVoronoiOD():
 
 def GetVoronoiOD_multi(selected_developments=None):
     voronoi_tif_path = r"data/infraScanRoad/Network/travel_time/source_id_raster.tif"
-    scen_empl_path = r"data/independent_variable/processed/scenario/scen_empl.tif"
-    scen_pop_path = r"data/independent_variable/processed/scenario/scen_pop.tif"
+    scen_empl_path = "data/independent_variable/processed/scenario/scen_empl.tif"
+    scen_pop_path = "data/independent_variable/processed/scenario/scen_pop.tif"
 
     popvec = GetCommunePopulation(y0="2021")
     jobvec = GetCommuneEmployment(y0=2021)
@@ -2135,9 +2151,7 @@ def GetVoronoiOD_generated_status_quo(year=None, output_dir=None):
     with rasterio.open(base_raster_path) as src:
         voronoi_tif = src.read(1)
 
-    employment_raster_path = os.path.join(
-        "data", "independent_variable", "processed", "raw", "empl20.tif"
-    )
+    employment_raster_path = "data/independent_variable/processed/empl23.tif"
     with rasterio.open(employment_raster_path) as src:
         employment_tif = src.read(1).astype(float)
     if employment_tif.shape != voronoi_tif.shape:
@@ -2498,9 +2512,7 @@ def GetVoronoiOD_multi_generated(
     commune_raster, _ = GetCommuneShapes(raster_path=base_raster_path)
 
     # Load generated population and current employment rasters for the Voronoi split.
-    employment_raster_path = os.path.join(
-        "data", "independent_variable", "processed", "raw", "empl20.tif"
-    )
+    employment_raster_path = "data/independent_variable/processed/empl23.tif"
     with rasterio.open(employment_raster_path) as src:
         employment_tif = src.read(1).astype(float)
     if employment_tif.shape != commune_raster.shape:
@@ -4177,9 +4189,7 @@ def _monetize_tts_network_generated(VTTS, duration):
         with rasterio.open(pop_raster_path) as src:
             population_mass = src.read(1).astype(float)
 
-        employment_raster_path = os.path.join(
-            "data", "independent_variable", "processed", "raw", "empl20.tif"
-        )
+        employment_raster_path = "data/independent_variable/processed/empl23.tif"
         with rasterio.open(employment_raster_path) as src:
             employment_mass = src.read(1).astype(float)
 

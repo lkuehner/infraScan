@@ -159,10 +159,10 @@ def scenario_to_raster_pop(frame=False):
 
     
     #growth_rate_columns_pop = ["s1_pop", "s2_pop", "s3_pop"]
-    path_pop = "data/independent_variable/processed/raw/pop20.tif"
+    path_pop = "data/independent_variable/processed/raw/pop23.tif"
 
     #growth_rate_columns_empl = ["s1_empl", "s2_empl", "s3_empl"]
-    #path_empl = "data/independent_variable/processed/raw/empl20.tif"
+    #path_empl = "data/independent_variable/processed/raw/empl23.tif"
 
     growth_to_tif(scenario_polygon, path=path_pop, columns=settings.pop_scenarios)
     #growth_to_tif(scenario_polygon, path=path_empl, columns=growth_rate_columns_empl)
@@ -333,7 +333,7 @@ def scenario_to_raster_emp(frame=False):
         scenario_polygon = gpd.GeoDataFrame(pd.concat([pd.DataFrame(scenario_polygon), pd.DataFrame(pd.Series(new_row)).T], ignore_index=True))
     
     #growth_rate_columns_empl = ["s1_empl", "s2_empl", "s3_empl"]
-    path_empl = "data/independent_variable/processed/raw/empl20.tif"
+    path_empl = "data/independent_variable/processed/raw/empl23.tif"
 
     growth_to_tif(scenario_polygon, path=path_empl, columns=settings.empl_scenarios)
     #growth_to_tif(scenario_polygon, path=path_empl, columns=growth_rate_columns_empl)
@@ -490,7 +490,7 @@ def scenario_inward_development():
     gdf = gdf[["geometry", "pop_potential", "EINF"]]
 
     # Load current pop tif file
-    with rasterio.open("data/independent_variable/processed/raw/pop20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/raw/pop23.tif") as src:
         pop_raster = src.read(1)
         pop_meta = src.meta
 
@@ -602,7 +602,7 @@ def scenario_inward_development():
 
 
     # Load current pop tif file
-    with rasterio.open("data/independent_variable/processed/raw/pop20.tif") as src:
+    with rasterio.open("data/independent_variable/processed/raw/pop23.tif") as src:
         pop_raster = src.read(1)
         pop_meta = src.meta
 

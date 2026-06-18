@@ -6,6 +6,8 @@ from . import paths
 from .plots import *
 import ast
 from tqdm import tqdm
+import rasterio
+from rasterio.windows import from_bounds
 
 
 def import_cities():
@@ -33,6 +35,45 @@ def get_lake_data():
     gdf = gdf[gdf["GEWAESSERN"].isin(["Zürichsee", "Greifensee", "Pfäffikersee"])].to_crs("epsg:2056")
     gdf.to_file(output_path)
     return
+
+
+def get_population_and_employment_data():
+    with rasterio.open("data/infraScanRail/catchment_pt/catchement.tif") as ref:
+        bounds = ref.bounds
+
+    raster_jobs = [
+        (
+            "data/Spatial_Data/Land_Use/Employment/employment_2023.tif",
+            "data/independent_variable/processed/raw/empl23.tif",
+        ),
+        (
+            "data/Spatial_Data/Land_Use/Population/population_2023.tif",
+            "data/independent_variable/processed/raw/pop23.tif",
+        ),
+    ]
+
+    for source_path, output_path in raster_jobs:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        with rasterio.open(source_path) as src:
+            profile = src.profile.copy()
+            profile.update(count=1)
+
+            window = from_bounds(
+                bounds.left, bounds.bottom, bounds.right, bounds.top, src.transform
+            )
+            window = window.round_offsets().round_lengths()
+            clipped_data = src.read(1, window=window)
+            clipped_transform = src.window_transform(window)
+
+            profile.update(
+                width=clipped_data.shape[1],
+                height=clipped_data.shape[0],
+                transform=clipped_transform,
+            )
+
+            with rasterio.open(output_path, "w", **profile) as dst:
+                dst.write(clipped_data, 1)
 
 
 def polygon_from_points(bounds=None, e_min=None, e_max=None, n_min=None, n_max=None, margin=0):

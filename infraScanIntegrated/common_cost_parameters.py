@@ -1,14 +1,12 @@
+
+# Default valuation year if not specified
 prognosis_year = 2050
 
 # SN-641821
 discount_rate = 0.02
 
-#SN 641 822a (NISTRA)
-real_wage_growth = 0.0069 
-
 # According to NISTRA / NIBA
 appraisal_years = 40
-
 
 # Road maintenance NISTRA
 road_maintenance_operating_cost_growth = 0.01

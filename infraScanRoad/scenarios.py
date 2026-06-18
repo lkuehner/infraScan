@@ -10,7 +10,6 @@ from rasterio.session import AWSSession
 
 
 
-
 def future_scenario_zuerich_2022(df_input):
     """
     This function represents the changes in population and employment based on data from the canton of Zürich.
@@ -139,10 +138,10 @@ def scenario_to_raster(frame=False):
         scenario_polygon = gpd.GeoDataFrame(pd.concat([pd.DataFrame(scenario_polygon), pd.DataFrame(pd.Series(new_row)).T], ignore_index=True))
 
     growth_rate_columns_pop = ["s1_pop", "s2_pop", "s3_pop"]
-    path_pop = "data/independent_variable/processed/raw/pop20.tif"
+    path_pop = "data/independent_variable/processed/pop23.tif"
 
     growth_rate_columns_empl = ["s1_empl", "s2_empl", "s3_empl"]
-    path_empl = "data/independent_variable/processed/raw/empl20.tif"
+    path_empl = "data/independent_variable/processed/empl23.tif"
 
     growth_to_tif(scenario_polygon, path=path_pop, columns=growth_rate_columns_pop)
     growth_to_tif(scenario_polygon, path=path_empl, columns=growth_rate_columns_empl)

@@ -23,8 +23,8 @@ OD_STATIONS_KT_ZH_PATH = 'data/infraScanRail/traffic_flow/od/rail/ktzh/od_matrix
 COMMUNE_TO_STATION_PATH = "data/infraScanRail/Network/processed/Communes_to_railway_stations_ZH.xlsx"
 GRAPH_POS_PATH = "data/infraScanRail/Network/processed/graph_data.pkl"
 
-POPULATION_RASTER = "data/independent_variable/processed/pop20_corrected.tif"
-EMPLOYMENT_RASTER = "data/independent_variable/processed/empl20_corrected.tif"
+POPULATION_RASTER = "data/independent_variable/processed/raw/pop23_corrected.tif"
+EMPLOYMENT_RASTER = "data/independent_variable/processed/raw/empl23_corrected.tif"
 POPULATION_SCENARIO_CANTON_ZH_2050 = "data/Scenario/KTZH_00000705_00001741.csv"
 POPULATION_SCENARIO_CH_BFS_2055 = "data/Scenario/pop_scenario_switzerland_2055.csv"
 POPULATION_SCENARIO_CH_EUROSTAT_2100 = "data/Scenario/Eurostat_population_CH_2100.xlsx"
