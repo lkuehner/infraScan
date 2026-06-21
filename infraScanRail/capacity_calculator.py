@@ -2569,7 +2569,8 @@ def _summarise_section(
                     util_display = "n/a" if util_value is None or math.isnan(util_value) else f"{util_value:.3f}"
                     print(f"  {idx}) {label} (capacity={cap_display}, utilization={util_display})")
                 while True:
-                    response = input("Select the strategy number to apply (press Enter to skip): ").strip()
+                    prompt = f"Select the strategy number to apply (1-{len(strategy_metrics)}) or press Enter to skip: "
+                    response = settings.PIPELINE_CONFIG.get_grouping_choice(prompt).strip()
                     if response == "":
                         print("No strategy selected; leaving Capacity/Utilization empty for this section.")
                         break
@@ -2743,7 +2744,15 @@ def export_capacity_workbook(
         print(f"  4. Return here and confirm completion")
         print("="*80)
 
-        response = input("\nHave you filled the missing data and saved as *_prep.xlsx (y/n)? ").strip().lower()
+        if settings.use_existing_capacity_prep:
+            if not prep_path.exists():
+                print(f"\n[ERROR] Prep workbook not found at: {prep_path}")
+                print("Skipping section calculation. Re-run after creating the prep workbook.")
+                return output_path
+            response = "yes"
+            print(f"\n[INFO] Using existing enriched prep workbook: {prep_path}")
+        else:
+            response = input("\nHave you filled the missing data and saved as *_prep.xlsx (y/n)? ").strip().lower()
         if response not in {"y", "yes"}:
             print("Skipping section calculation. Re-run after updating the workbook.")
             return output_path

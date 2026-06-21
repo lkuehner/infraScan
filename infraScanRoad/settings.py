@@ -6,13 +6,14 @@ import time
 import pandas as pd
 
 # Set the active project root manually for Euler or local execution.
-#MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
-MAIN = "/Volumes/WD_Windows/MSc_Thesis"
+MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
+#MAIN = "/Volumes/WD_Windows/MSc_Thesis"
 
 # True downloads fresh OSM data; False only reads the raw OSM cache.
 online_access = False
 OSM_CACHE_DIR = os.path.join(MAIN, "infraScan", "infraScanRoad", "cache")
 CHECKPOINT_DIR = os.path.join(MAIN, "data", "infraScanRoad", "checkpoints")
+PLOT_DIRECTORY = os.path.join(MAIN, "plots", "road_standalone")
 
 ##################################################################################
 # Define settings 

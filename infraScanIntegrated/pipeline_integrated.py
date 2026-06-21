@@ -1,12 +1,11 @@
 import os
 
 from infraScan.infraScanIntegrated import common_cost_parameters
-from infraScan.infraScanIntegrated import config as integrated_config
 from infraScan.infraScanIntegrated import paths as integrated_paths
 from infraScan.infraScanIntegrated import plots as integrated_plots
 from infraScan.infraScanIntegrated import scoring_registry
 from infraScan.infraScanIntegrated import settings as integrated_settings
-from infraScan.infraScanIntegrated.Ideas import random_scenarios as integrated_random_scenarios
+from infraScan.infraScanIntegrated import random_scenarios_multimode as integrated_random_scenarios
 
 from infraScan.infraScanRail import cost_parameters as rail_cost_parameters
 from infraScan.infraScanRail import paths as rail_paths
@@ -19,7 +18,7 @@ from infraScan.infraScanRoad import settings as road_settings
 
 
 # ================================================================================
-# PHASE 0: INTEGRATED CONFIGURATION
+# MODULE 0: 1. INTEGRATED CONFIGURATION
 # ================================================================================
 
 def prefix_new_runtime_keys(runtimes, existing_keys, prefix):
@@ -28,14 +27,29 @@ def prefix_new_runtime_keys(runtimes, existing_keys, prefix):
     for key in new_keys:
         runtimes[f"{prefix}: {key}"] = runtimes.pop(key)
 
+
+def print_integrated_module(module_number, title):
+    """Print a compact integrated module header around legacy rail/road phase logs."""
+    print("\n" + "#" * 80)
+    print(f"INTEGRATED MODULE {module_number}")
+    print(title)
+    print("#" * 80 + "\n")
+
+
 def sync_integrated_shared_settings():
     """Push shared integrated scenario settings into the legacy module configs."""
-    integrated_config.scenario_type = integrated_settings.scenario_type
-    integrated_config.amount_of_scenarios = integrated_settings.amount_of_scenarios
-    integrated_config.representative_scenarios_count = integrated_settings.representative_scenarios_count
-    integrated_config.start_year_scenario = integrated_settings.start_year_scenario
-    integrated_config.end_year_scenario = integrated_settings.end_year_scenario
-    integrated_config.start_valuation_year = integrated_settings.start_valuation_year
+    rail_pipeline.PHASE_LOG_PREFIX = "RAIL"
+    rail_paths.MAIN = integrated_paths.MAIN
+    rail_paths.PLOT_DIRECTORY = str(integrated_paths.RAIL_STANDALONE_PLOTS_DIR)
+    rail_paths.PLOT_SCENARIOS = os.path.join(rail_paths.PLOT_DIRECTORY, "scenarios")
+
+    road_pipeline.PHASE_LOG_PREFIX = "ROAD"
+    road_settings.MAIN = integrated_paths.MAIN
+    road_settings.PLOT_DIRECTORY = str(integrated_paths.ROAD_STANDALONE_PLOTS_DIR)
+    road_settings.OSM_CACHE_DIR = os.path.join(
+        road_settings.MAIN, "infraScan","infraScanRoad", "cache",)
+    road_settings.CHECKPOINT_DIR = os.path.join(
+        road_settings.MAIN, "data", "infraScanRoad", "checkpoints",)
 
 
 def apply_integrated_overrides_to_rail():
@@ -57,7 +71,12 @@ def apply_integrated_overrides_to_rail():
         rail_settings.use_cache_scenarios = False
         rail_settings.use_cache_tts_calc = False
 
-    integrated_config.configure_rail()
+    rail_settings.PIPELINE_CONFIG.visualization_mode = integrated_settings.rail_visualization_mode
+    rail_settings.PIPELINE_CONFIG.grouping_strategy = integrated_settings.rail_grouping_strategy
+    rail_settings.capacity_threshold = integrated_settings.rail_capacity_threshold
+    rail_settings.max_enhancement_iterations = integrated_settings.rail_max_enhancement_iterations
+    rail_settings.use_existing_capacity_prep = integrated_settings.rail_use_existing_capacity_prep
+    rail_settings.intervention_costs_reviewed = integrated_settings.rail_intervention_costs_reviewed
 
 
 def apply_integrated_overrides_to_road():
@@ -98,10 +117,9 @@ def apply_integrated_cost_overrides():
 
 
 # ================================================================================
-# PHASES 1: SHARED SETUP, NETWORK PREPARATION AND INFRASTRUCTURE DEVELOPMENTS
+# MODULE 0: 2. SHARED SETUP, NETWORK PREPARATION 
 # ================================================================================
-
-def setup_integrated_run(runtimes):
+def setup_integrated_inputs(runtimes):
     """Apply integrated overrides and run the shared preprocessing steps."""
     sync_integrated_shared_settings()
     apply_integrated_overrides_to_rail()
@@ -113,9 +131,34 @@ def setup_integrated_run(runtimes):
     existing_keys = set(runtimes.keys())
     limits_corridor, boundary_plot, innerboundary, outerboundary = road_pipeline.phase_1_initialization(runtimes)
     road_pipeline.phase_2_data_import(limits_corridor, runtimes)
+    prefix_new_runtime_keys(runtimes, existing_keys, "road")
 
+    existing_keys = set(runtimes.keys())
+    rail_innerboundary, rail_outerboundary = rail_pipeline.phase_1_initialization(runtimes)
+    rail_pipeline.phase_2_data_import(runtimes)
+    prefix_new_runtime_keys(runtimes, existing_keys, "rail")
+
+    return {
+        "limits_corridor": limits_corridor,
+        "boundary_plot": boundary_plot,
+        "innerboundary": innerboundary,
+        "outerboundary": outerboundary
+    }
+
+# ================================================================================
+# MODULE 1: INFRASTRUCTURE DEVELOPMENTS
+# ================================================================================
+
+
+def generate_infrastructure_developments(setup_results, runtimes):
+    """Generate infrastructure developments."""
+    existing_keys = set(runtimes.keys())
     network, limits_variables, generated_points, current_points, current_access_points = (
-        road_pipeline.phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes)
+        road_pipeline.phase_3_infrastructure_developments(
+            setup_results["innerboundary"],
+            setup_results["outerboundary"],
+            runtimes,
+        )
     )
     prefix_new_runtime_keys(runtimes, existing_keys, "road")
 
@@ -123,29 +166,19 @@ def setup_integrated_run(runtimes):
     points, baseline_prep_path, baseline_sections_path, enhanced_network_label = (
         rail_pipeline.phase_3_baseline_capacity_analysis(runtimes)
     )
-    dev_id_lookup, capacity_analysis_results = rail_pipeline.phase_4_infrastructure_developments(points, runtimes)
-
-    rail_pipeline.phase_5_demand_analysis(points, runtimes)
-    od_times_dev, od_times_status_quo, G_status_quo, G_development = rail_pipeline.phase_6_travel_time_computation(
-        dev_id_lookup, runtimes
+    dev_id_lookup, capacity_analysis_results = (
+        rail_pipeline.phase_4_infrastructure_developments(points, runtimes)
     )
     prefix_new_runtime_keys(runtimes, existing_keys, "rail")
 
     return {
-        "limits_corridor": limits_corridor,
-        "boundary_plot": boundary_plot,
-        "innerboundary": innerboundary,
-        "outerboundary": outerboundary,
+        **setup_results,
         "points": points,
         "baseline_prep_path": baseline_prep_path,
         "baseline_sections_path": baseline_sections_path,
         "enhanced_network_label": enhanced_network_label,
         "dev_id_lookup": dev_id_lookup,
         "capacity_analysis_results": capacity_analysis_results,
-        "od_times_dev": od_times_dev,
-        "od_times_status_quo": od_times_status_quo,
-        "G_status_quo": G_status_quo,
-        "G_development": G_development,
         "network": network,
         "limits_variables": limits_variables,
         "generated_points": generated_points,
@@ -153,24 +186,32 @@ def setup_integrated_run(runtimes):
         "current_access_points": current_access_points,
     }
 
-
 # ================================================================================
-# PHASE 2: SHARED SCENARIO GENERATION
+# MODULE 2: SHARED SCENARIO GENERATION
 # ================================================================================
 
-def run_shared_scenario_generation(runtimes):
+def run_shared_scenario_generation(runtimes, limits_variables):
     """Run the integrated shared-scenario generation when required."""
     if integrated_settings.scenario_type == "GENERATED":
         existing_keys = set(runtimes.keys())
-        return integrated_random_scenarios.generate_and_apply_shared_scenarios(
+        print(
+            "Generating shared scenarios: "
+            f"{integrated_settings.amount_of_scenarios} total, "
+            f"{integrated_settings.representative_scenarios_count} selected"
+        )
+        result = integrated_random_scenarios.generate_and_apply_shared_scenarios(
             start_year=integrated_settings.start_year_scenario,
             end_year=integrated_settings.end_year_scenario,
             num_of_scenarios=integrated_settings.amount_of_scenarios,
             representative_scenarios_count=integrated_settings.representative_scenarios_count,
             run_road=True,
             run_rail=True,
+            road_limits_variables=limits_variables,
             do_plot=False,
         )
+        print("Selected scenarios: " + ", ".join(result["selected_scenarios"]))
+        prefix_new_runtime_keys(runtimes, existing_keys, "scenario")
+        return result
 
     if rail_settings.OD_type == "canton_ZH":
         existing_keys = set(runtimes.keys())
@@ -181,15 +222,17 @@ def run_shared_scenario_generation(runtimes):
 
 
 # ================================================================================
-# PHASES 3: ASSESSMENT
-
-# ================================================================================
-# PHASES 3.1: RAIL SCENARIO EVALUATION
+# MODULE 3: ASSESSMENT
+#        3.1: RAIL SCENARIO EVALUATION
 # ================================================================================
 
-def run_rail_evaluation(dev_id_lookup, od_times_dev, od_times_status_quo, runtimes):
+def run_rail_evaluation(points, dev_id_lookup, runtimes):
     """Run the rail scenario evaluation and return the integrated rail result bundle."""
     existing_keys = set(runtimes.keys())
+    rail_pipeline.phase_5_demand_analysis(points, runtimes)
+    od_times_dev, od_times_status_quo, G_status_quo, G_development = rail_pipeline.phase_6_travel_time_computation(
+        dev_id_lookup, runtimes
+    )
     dev_list, monetized_tt, scenario_list = rail_pipeline.phase_9_travel_time_savings(
         dev_id_lookup, od_times_dev, od_times_status_quo, runtimes
     )
@@ -202,11 +245,15 @@ def run_rail_evaluation(dev_id_lookup, od_times_dev, od_times_status_quo, runtim
         "dev_list": dev_list,
         "monetized_tt": monetized_tt,
         "scenario_list": scenario_list,
+        "od_times_dev": od_times_dev,
+        "od_times_status_quo": od_times_status_quo,
+        "G_status_quo": G_status_quo,
+        "G_development": G_development,
     }
 
 
 # ================================================================================
-# PHASES 3.2: ROAD SCENARIO EVALUATION
+# MODULE 3.2: ROAD SCENARIO EVALUATION
 # ================================================================================
 
 def run_road_evaluation(limits_variables, runtimes):
@@ -224,7 +271,7 @@ def run_road_evaluation(limits_variables, runtimes):
 
 
 # ================================================================================
-# PHASES 3.3: OUTPUTS, EXPORTS, AND PLOTS
+# MODULE 3.3: OUTPUTS, EXPORTS, AND PLOTS
 # ================================================================================
 
 def build_integrated_comparison_df(rail_results, road_results):
@@ -238,6 +285,7 @@ def build_integrated_comparison_df(rail_results, road_results):
 def run_integrated_plots():
     """Generate the integrated plot bundle from the exported score tables."""
     integrated_plots.main()
+    print("Integrated plots created.")
 
 
 def write_integrated_run_report(runtimes, shared_scenarios_result):
@@ -335,56 +383,70 @@ def run_integrated_pipeline():
     """Run the integrated rail-road workflow from setup to final exports."""
     runtimes = {}
 
-    # PHASES 1: shared setup, preprocessing, and network preparation
-    setup_results = setup_integrated_run(runtimes)
+    # MODULE 0: shared setup, preprocessing, and network preparation
+    print_integrated_module(0, "Configuration, setup, and network preparation")
+    setup_results = setup_integrated_inputs(runtimes)
 
-    # PHASE 2: shared scenario generation
-    shared_scenarios_result = run_shared_scenario_generation(runtimes)
+    # MODULE 1: infrastructure developments
+    print_integrated_module(1, "Infrastructure developments")
+    development_results = generate_infrastructure_developments(
+        setup_results,
+        runtimes,
+    )
 
-    # PHASE 3.1: rail scenario evaluation
+    # MODULE 2: shared scenario generation
+    print_integrated_module(2, "Shared scenario generation")
+    shared_scenarios_result = run_shared_scenario_generation(
+        runtimes,
+        development_results["limits_variables"],
+    )
+
+    # MODULE 3.1: rail scenario evaluation
+    print_integrated_module("3.1", "Rail scenario evaluation")
     rail_results = run_rail_evaluation(
-        dev_id_lookup=setup_results["dev_id_lookup"],
-        od_times_dev=setup_results["od_times_dev"],
-        od_times_status_quo=setup_results["od_times_status_quo"],
+        points=development_results["points"],
+        dev_id_lookup=development_results["dev_id_lookup"],
         runtimes=runtimes,
     )
 
-    # PHASE 3.2: road scenario evaluation
+    # MODULE 3.2: road scenario evaluation
+    print_integrated_module("3.2", "Road scenario evaluation")
     road_outputs = run_road_evaluation(
-        limits_variables=setup_results["limits_variables"],
+        limits_variables=development_results["limits_variables"],
         runtimes=runtimes,
     )
     road_results = {
         "gdf_costs": road_outputs["gdf_costs"],
     }
 
-    # PHASES 3.3: optional legacy outputs plus integrated exports and plots
+    # MODULE 3.3: optional legacy outputs plus integrated exports and plots
+    print_integrated_module("3.3", "Outputs, exports, and plots")
     score_exports, comparison_df, report_path = finalize_integrated_outputs(
         runtimes=runtimes,
         rail_results=rail_results,
         road_results=road_results,
         shared_scenarios_result=shared_scenarios_result,
-        G_development=setup_results["G_development"],
-        G_status_quo=setup_results["G_status_quo"],
-        dev_id_lookup=setup_results["dev_id_lookup"],
+        G_development=rail_results["G_development"],
+        G_status_quo=rail_results["G_status_quo"],
+        dev_id_lookup=development_results["dev_id_lookup"],
         voronoi_tt=road_outputs["voronoi_tt"],
-        innerboundary=setup_results["innerboundary"],
-        network=setup_results["network"],
-        boundary_plot=setup_results["boundary_plot"],
-        current_access_points=setup_results["current_access_points"],
+        innerboundary=development_results["innerboundary"],
+        network=development_results["network"],
+        boundary_plot=development_results["boundary_plot"],
+        current_access_points=development_results["current_access_points"],
         gdf_costs=road_outputs["gdf_costs"],
     )
 
     return {
         "runtimes": runtimes,
-        "innerboundary": setup_results["innerboundary"],
-        "outerboundary": setup_results["outerboundary"],
-        "points": setup_results["points"],
-        "baseline_prep_path": setup_results["baseline_prep_path"],
-        "baseline_sections_path": setup_results["baseline_sections_path"],
-        "enhanced_network_label": setup_results["enhanced_network_label"],
-        "dev_id_lookup": setup_results["dev_id_lookup"],
-        "capacity_analysis_results": setup_results["capacity_analysis_results"],
+        "innerboundary": development_results["innerboundary"],
+        "outerboundary": development_results["outerboundary"],
+        "points": development_results["points"],
+        "baseline_prep_path": development_results["baseline_prep_path"],
+        "baseline_sections_path": development_results["baseline_sections_path"],
+        "enhanced_network_label": development_results["enhanced_network_label"],
+        "dev_id_lookup": development_results["dev_id_lookup"],
+        "capacity_analysis_results": development_results["capacity_analysis_results"],
         "shared_scenarios_result": shared_scenarios_result,
         "comparison_df": comparison_df,
         "score_long": score_exports["score_long"],

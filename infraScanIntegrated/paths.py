@@ -1,37 +1,27 @@
 import os
 from pathlib import Path
 
-from infraScan.infraScanRoad import settings as road_settings
+# Central project root for integrated runs. Road and rail keep their standalone
+# defaults, but the integrated orchestrator pushes this root into both modules.
+MAIN = "/cluster/home/lkuehner/MSc_Thesis/"
+# MAIN = "/Volumes/WD_Windows/MSc_Thesis"
 
-
-def _resolve_main() -> str:
-    candidates = [
-        getattr(road_settings, "MAIN", None),
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        normalized = os.path.abspath(str(candidate))
-        if os.path.isdir(os.path.join(normalized, "data")):
-            return normalized
-
-    cwd = os.getcwd()
-    if os.path.isdir(os.path.join(cwd, "data")):
-        return cwd
-
-    return os.path.abspath(cwd)
-
-
-MAIN = _resolve_main()
 
 DATA_ROOT = Path(MAIN)
-ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
-INTEGRATED_COSTS_DIR = DATA_ROOT / "data Kopie" / "infraScanIntegrated" / "costs"
-INTEGRATED_PLOTS_DIR = DATA_ROOT / "plots" / "Integrated"
+PACKAGE_ROOT = Path(__file__).resolve().parent
+#ROAD_DATA_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
+ROAD_DATA_ROOT = DATA_ROOT / "data" / "infraScanRoad"
+INTEGRATED_COSTS_DIR = DATA_ROOT / "data" / "infraScanIntegrated" / "costs"
+PLOTS_ROOT = DATA_ROOT / "plots"
+INTEGRATED_PLOTS_DIR = PLOTS_ROOT / "integrated"
+ROAD_STANDALONE_PLOTS_DIR = PLOTS_ROOT / "road_standalone"
+RAIL_STANDALONE_PLOTS_DIR = PLOTS_ROOT / "rail_standalone"
 SCORE_RESULTS_DIR = INTEGRATED_COSTS_DIR / "score_results"
 SCORE_RESULTS_LONG_PATH = SCORE_RESULTS_DIR / "score_results_long.csv"
 SCORE_RESULTS_TIDY_PATH = SCORE_RESULTS_DIR / "score_results_tidy.csv"
-INTEGRATED_RUN_REPORT_PATH = SCORE_RESULTS_DIR / "integrated_run_report.txt"
+INTEGRATED_RUN_REPORT_PATH = PACKAGE_ROOT / "integrated_run_report.txt"
+RAIL_STANDALONE_RUN_REPORT_PATH = PACKAGE_ROOT / "rail_standalone_run_report.txt"
+ROAD_STANDALONE_RUN_REPORT_PATH = PACKAGE_ROOT / "road_standalone_run_report.txt"
 GENERATED_PLOTS_DIR = INTEGRATED_PLOTS_DIR / "generated"
 
 ROAD_COSTS_DIR = ROAD_DATA_ROOT / "costs"
@@ -45,12 +35,8 @@ ROAD_NETWORK_PROCESSED_DIR = ROAD_NETWORK_PATH / "processed"
 ROAD_EDGES_GPKG = ROAD_NETWORK_PROCESSED_DIR / "edges_with_attribute.gpkg"
 ROAD_NEW_LINKS_GPKG = ROAD_NETWORK_PROCESSED_DIR / "new_links.gpkg"
 ROAD_HIGHWAY_NETWORK_GPKG = ROAD_DATA_ROOT / "temp" / "network_highway.gpkg"
-SWISS_MUNICIPALITY_BOUNDARIES_PATH = Path(
-    "/Volumes/WD_Windows/MSc_Thesis/data/Spatial_Data/Boundaries/SwissBoundaries_Municipalities_2026_CH.gpkg"
-)
-SWISS_LAKES_PATH = Path(
-    "/Volumes/WD_Windows/MSc_Thesis/data/Spatial_Data/Land_Use/Hydrography/swissTLMRegio_Lake.shp"
-)
+SWISS_MUNICIPALITY_BOUNDARIES_PATH = DATA_ROOT / "data" / "Spatial_Data" / "Boundaries" / "SwissBoundaries_Municipalities_2026_CH.gpkg"
+SWISS_LAKES_PATH = DATA_ROOT / "data" / "Spatial_Data" / "Land_Use" / "Hydrography" / "swissTLMRegio_Lake.shp"
 RAIL_ACTIVE_SERVICE_NETWORK_GPKG = DATA_ROOT / "data" / "infraScanRail" / "Network" / "processed" / "combined_network_with_all_modifications.gpkg"
 
 SCENARIO_CACHE_SHARED_DIR = os.path.join(MAIN, "data", "Scenario", "cache", "shared")

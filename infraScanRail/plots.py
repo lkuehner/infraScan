@@ -1424,7 +1424,8 @@ def plot_scenarios():
     pop_file = "data/infraScanRail/temp/data_scenario_pop.shp"
     empl_file = "data/infraScanRail/temp/data_scenario_empl.shp"
     cities_file = "data/manually_gathered_data/cities.shp"
-    output_path = "plots/scenarios.png"
+    output_path = os.path.join(paths.PLOT_DIRECTORY, "scenarios.png")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Load data
     pop_data = gpd.read_file(pop_file)
@@ -1501,7 +1502,8 @@ def create_plot_catchement():
     location_path = "data/manually_gathered_data/Cities.shp"
     points_path = "data/infraScanRail/Network/processed/points.gpkg"
     s_bahn_lines_path = "data/infraScanRail/Network/processed/split_s_bahn_lines.gpkg"
-    output_path = "plots/catchement.png"
+    output_path = os.path.join(paths.PLOT_DIRECTORY, "catchement.png")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Load data
     lakes = gpd.read_file(water_bodies_path)
@@ -1639,7 +1641,8 @@ def create_catchement_plot_time():
     lakes_path = "data/landuse_landcover/landcover/lake/WB_STEHGEWAESSER_F.shp"
     points_path = "data/infraScanRail/Network/processed/points.gpkg"
     boundary_path = "data/_basic_data/innerboundary.shp"
-    output_path = "plots/Catchement_Time.png"
+    output_path = os.path.join(paths.PLOT_DIRECTORY, "Catchement_Time.png")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Load the boundary shapefile
     boundary = gpd.read_file(boundary_path)
@@ -1794,7 +1797,8 @@ def plot_developments_expand_by_one_station():
     developments_path = "data/infraScanRail/costs/total_costs_with_geometry.gpkg"
     endnodes_path = "data/infraScanRail/Network/processed/endnodes.gpkg"
     boundary_path = "data/_basic_data/outerboundary.shp"
-    output_path = "plots/developments.png"
+    output_path = os.path.join(paths.PLOT_DIRECTORY, "developments.png")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Load data
     trainstations = gpd.read_file(trainstations_path)
@@ -1950,14 +1954,15 @@ def plot_selected_lines(selected_lines, color_dict = None):
 
     # Netzgrafik erzeugen
     filename = f"railway_lines_very_special_plot.png"
-    output_file_name = os.path.join("plots", filename)
+    output_file_name = os.path.join(paths.PLOT_DIRECTORY, filename)
+    os.makedirs(os.path.dirname(output_file_name), exist_ok=True)
 
     # Die Funktion plot_railway_lines_only muss angepasst werden, um die Farben zu berücksichtigen
     plot_railway_lines_only(
         G, pos, filtered_lines_dict, output_file_name, color_dict=color_dict, selected_stations=pp.selected_stations
     )
 
-def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_preferences=None):
+def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferences=None):
     """
     Create and save benefit plots for infrastructure developments.
     
@@ -1971,6 +1976,9 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
             - 'ranked_groups': bool
             - 'combined_with_maps': bool
     """
+    if plot_directory is None:
+        plot_directory = paths.PLOT_DIRECTORY
+
     # Default preferences: generate all plots if not specified
     if plot_preferences is None:
         plot_preferences = {
@@ -2345,7 +2353,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
 
                 # Generate network map
                 map_filename = f"railway_lines_{ranked_filename_prefix}.png"
-                map_output_path = os.path.join("plots", map_filename)
+                map_output_path = os.path.join(paths.PLOT_DIRECTORY, map_filename)
+                os.makedirs(os.path.dirname(map_output_path), exist_ok=True)
 
                 plot_railway_lines_only(
                     G, pos, filtered_lines_dict, map_output_path,
@@ -2362,7 +2371,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
                     "cumulative_cost_distribution"
                 ]:
                     chart_path = os.path.join(benefits_ranked_dir, f"{ranked_filename_prefix}_{suffix}.png")
-                    map_path = os.path.join("plots", f"railway_lines_{ranked_filename_prefix}.png")
+                    map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{ranked_filename_prefix}.png")
+                    os.makedirs(os.path.dirname(map_path), exist_ok=True)
                     combined_path = os.path.join(benefits_ranked_combined_dir, f"{ranked_filename_prefix}_{suffix}_combined.png")
 
                     try:
@@ -2444,7 +2454,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
 
                     # Network map saved to plots/ (root level, as per Q4)
                     filename = f"railway_lines_{filename_prefix}.png"
-                    output_file_name = os.path.join("plots", filename)
+                    output_file_name = os.path.join(paths.PLOT_DIRECTORY, filename)
+                    os.makedirs(os.path.dirname(output_file_name), exist_ok=True)
 
                     plot_railway_lines_only(
                         G, pos, filtered_lines_dict, output_file_name, 
@@ -2461,7 +2472,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
                         "cumulative_cost_distribution"
                     ]:
                         chart_path = os.path.join(benefits_dir, f"{filename_prefix}_{suffix}.png")
-                        map_path = os.path.join("plots", f"railway_lines_{filename_prefix}.png")
+                        map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{filename_prefix}.png")
+                        os.makedirs(os.path.dirname(map_path), exist_ok=True)
                         combined_path = os.path.join(benefits_combined_dir, f"{filename_prefix}_{suffix}_combined.png")
 
                         try:
@@ -2538,7 +2550,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
 
                 # Network map saved to plots/ (root level)
                 global_filename = f"railway_lines_{global_filename_prefix}.png"
-                global_output_file_name = os.path.join("plots", global_filename)
+                global_output_file_name = os.path.join(paths.PLOT_DIRECTORY, global_filename)
+                os.makedirs(os.path.dirname(global_output_file_name), exist_ok=True)
 
                 plot_railway_lines_only(
                     G, pos, global_filtered_lines_dict, global_output_file_name,
@@ -2555,7 +2568,8 @@ def create_and_save_plots(df, railway_lines, plot_directory="plots", plot_prefer
                     "cumulative_cost_distribution"
                 ]:
                     chart_path = os.path.join(benefits_ranked_dir, f"{global_filename_prefix}_{suffix}.png")
-                    map_path = os.path.join("plots", f"railway_lines_{global_filename_prefix}.png")
+                    map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{global_filename_prefix}.png")
+                    os.makedirs(os.path.dirname(map_path), exist_ok=True)
                     combined_path = os.path.join(benefits_ranked_combined_dir, f"{global_filename_prefix}_{suffix}_combined.png")
 
                     try:
@@ -2598,8 +2612,11 @@ def plot_catchment_and_distributions(
     population_raster_path,
     employment_raster_path,
     extent_path,
-    output_dir="plots/"
+    output_dir=None
 ):
+    if output_dir is None:
+        output_dir = paths.PLOT_DIRECTORY
+
     extent = gpd.read_file(extent_path)
     extent["geometry"] = extent["geometry"].apply(make_valid)
     extent_bounds = extent.total_bounds  # Get the bounding box as [xmin, ymin, xmax, ymax]
@@ -2690,13 +2707,14 @@ def plot_catchment_and_distributions(
 
     # Save the figure
     plt.tight_layout()
-    output_path = f"{output_dir}catchment_and_distributions_larger_titles.png"
+    output_path = os.path.join(output_dir, "catchment_and_distributions_larger_titles.png")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Plots saved to {output_path}")
 
 
-def plot_costs_benefits(cost_benefit_df, line=None, output_dir="plots"):
+def plot_costs_benefits(cost_benefit_df, line=None, output_dir=None):
     """
     Erstellt ein wissenschaftlich aussehendes Balkendiagramm von Kosten und Nutzen über die Jahre
     für die Entwicklung mit dem höchsten Nutzen im Jahr 1.
@@ -2704,6 +2722,9 @@ def plot_costs_benefits(cost_benefit_df, line=None, output_dir="plots"):
     Args:
         cost_benefit_df: DataFrame mit diskontierten Kosten und Nutzen
     """
+    if output_dir is None:
+        output_dir = paths.PLOT_DIRECTORY
+
     # Finde das niedrigste Jahr im DataFrame
     min_year = cost_benefit_df.index.get_level_values('year').min()
     if line:
@@ -3894,6 +3915,7 @@ def plot_flow_graph(flow_graph, output_path=None, title="Passenger flows on the 
     plt.tight_layout()
 
     if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         print(f"Grafik wurde gespeichert unter: {output_path}")
     else:
@@ -4058,7 +4080,7 @@ def plot_line_flows(line_flow_graph, s_bahn_geopackage_path, output_path):
 # ================================================================================
 
 def create_ranked_pipeline_comparison_plots(
-    plot_directory="plots",
+    plot_directory=None,
     top_n_list=[5, 10]
 ):
     """
@@ -4075,6 +4097,9 @@ def create_ranked_pipeline_comparison_plots(
         - ranked_topN_boxplot_net_benefit_comparison.png
         - ranked_topN_cost_savings_comparison.png
     """
+    if plot_directory is None:
+        plot_directory = paths.PLOT_DIRECTORY
+
     print("\n" + "="*80)
     print("GENERATING PIPELINE COMPARISON PLOTS (OLD vs NEW)")
     print("="*80 + "\n")
@@ -4792,7 +4817,7 @@ def _plot_cost_savings_comparison(df_combined, color_map, dev_order, N, output_d
 # ALL DEVELOPMENTS PIPELINE COMPARISON (OLD vs NEW)
 # ================================================================================
 
-def create_all_developments_pipeline_comparison_plots(plot_directory="plots"):
+def create_all_developments_pipeline_comparison_plots(plot_directory=None):
     """
     Create comparison plots for ALL developments comparing old vs new pipelines.
 
@@ -4811,6 +4836,9 @@ def create_all_developments_pipeline_comparison_plots(plot_directory="plots"):
         - all_developments_scenario_viability_comparison.png
         - all_developments_pipeline_comparison_summary.csv
     """
+    if plot_directory is None:
+        plot_directory = paths.PLOT_DIRECTORY
+
     print("\n" + "="*80)
     print("GENERATING ALL DEVELOPMENTS PIPELINE COMPARISON (OLD vs NEW)")
     print("="*80 + "\n")

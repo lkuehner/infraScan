@@ -1,8 +1,10 @@
-"""
-TODO:
-EXPLAIN IDEA
+"""Accessibility maps for road and rail developments.
 
-
+The workflow intentionally stays in one file, but it is organized in a small
+number of blocks:
+1. generic plotting and aggregation helpers,
+2. road-specific preparation and scoring,
+3. rail-specific preparation and scoring.
 """
 
 
@@ -21,6 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.features import geometry_mask
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 from rasterio.plot import plotting_extent
 from rasterio.warp import Resampling, reproject
@@ -39,8 +42,11 @@ ROAD_SQ_TT = ROAD_ROOT / "traffic_flow" / "od" / "status_quo_od_tt.csv"
 ROAD_DEV_TT = ROAD_ROOT / "traffic_flow" / "od" / "developments_od_tt.csv"
 ROAD_TRAVELTIME_DIR = ROAD_ROOT / "Network" / "travel_time"
 ROAD_DEV_RASTER_DIR = ROAD_TRAVELTIME_DIR / "developments"
+ROAD_VORONOI_GPKG = ROAD_TRAVELTIME_DIR / "Voronoi_statusquo.gpkg"
 ROAD_LINKS_GPKG = integrated_paths.ROAD_NEW_LINKS_GPKG
-ROAD_NETWORK_GPKG = integrated_paths.ROAD_HIGHWAY_NETWORK_GPKG
+ROAD_NETWORK_GPKG = integrated_paths.ROAD_EDGES_GPKG
+ROAD_POINTS_GPKG = ROAD_ROOT / "Network" / "processed" / "points_with_attribute.gpkg"
+ROAD_GENERATED_POINTS_GPKG = ROAD_ROOT / "Network" / "processed" / "generated_nodes.gpkg"
 
 RAIL_ROOT = integrated_paths.RAIL_NETWORK_PATH.parent
 RAIL_POINTS_GPKG = RAIL_ROOT / "Network" / "processed" / "points.gpkg"
@@ -50,21 +56,17 @@ RAIL_DEV_DIR = RAIL_ROOT / "Network" / "processed" / "developments"
 RAIL_LINKS_GPKG = RAIL_ROOT / "Network" / "processed" / "updated_new_links.gpkg"
 RAIL_ACTIVE_SERVICE_NETWORK_GPKG = integrated_paths.RAIL_ACTIVE_SERVICE_NETWORK_GPKG
 RAIL_COMMUNE_TO_STATION = RAIL_ROOT / "Network" / "processed" / "Communes_to_railway_stations_ZH.xlsx"
-RAIL_STATION_CATCHMENT_SUMMARY = Path(
-    "/Volumes/WD_Windows/draft/data/infraScanRail/Catchement_area/Municipal/station_catchment_summary.csv"
-)
 COMMUNE_SHP = integrated_paths.SWISS_MUNICIPALITY_BOUNDARIES_PATH
-LAKES_SHP = integrated_paths.SWISS_LAKES_PATH
+PROCESSED_LAKES_GPKG = DATA_ROOT / "data" / "landuse_landcover" / "processed" / "lake_data_zh.gpkg"
 
 POPULATION_RASTER = DATA_ROOT / "data" / "Spatial_Data" / "Land_Use" / "Population" / "population_2023.tif"
 EMPLOYMENT_RASTER = DATA_ROOT / "data" / "Spatial_Data" / "Land_Use" / "Employment" / "employment_2023.tif"
 
 ROAD_BETA_PER_HOUR = 3.0
 DEVELOPMENT_BLUE = "#0E5FAB"
-LAKE_FILL = "#97C6E1"
+LAKE_FILL = "#BDE0FF"
 NETWORK_COLOR = "#303030"
 BOUNDARY_COLOR = "#303030"
-ZERO_COLOR = "#ECECEC"
 ACTIVE_LINE_COLOR = "#5E88B8"
 STATION_COLOR = "#2B2B2B"
 ABSOLUTE_ACCESS_CMAP = LinearSegmentedColormap.from_list(
@@ -78,7 +80,7 @@ DELTA_ACCESS_CMAP = LinearSegmentedColormap.from_list(
         (0.18, "#A53D3D"),
         (0.34, "#B64B4B"),
         (0.45, "#D07A7A"),
-        (0.50, "#FFFFFF"),
+        (0.50, "#F0F0F0"),
         (0.60, "#DCE8D8"),
         (0.76, "#91B58D"),
         (0.88, "#6E946A"),
@@ -86,22 +88,9 @@ DELTA_ACCESS_CMAP = LinearSegmentedColormap.from_list(
     ],
 )
 IMPORTANT_CANTON_NR = 1
-ROAD_ASSESSMENT_AREA_CSV = Path("/Volumes/WD_Windows/draft/data/infraScanRoad/Catchement_Area/road_assessment_area.csv")
 RAIL_NAME_NORMALIZATION = {
     "Niederglatt": "Niederglatt ZH",
     "Oberglatt": "Oberglatt ZH",
-}
-RAIL_CATCHMENT_NAME_OVERRIDES = {
-    "Glanzenberg": "Glanzenbach",
-    "Kilchberg ZH": "Kilchberg",
-    "Niederglatt ZH": "Niederglatt",
-    "Oberglatt ZH": "Oberglatt",
-    "Otelfingen Golfpark": "Otelfingen Rietholz",
-    "Pfungen": "Pfungen-Neftenbach",
-    "Winterthur Wülflingen": "Einterthur Wülflingen",
-    "Zürich Friesenberg": "Friesenberg",
-    "Zürich Schweighof": "Schweighof",
-    "Zürich Triemli": "Triemli",
 }
 
 
@@ -143,6 +132,7 @@ def add_reference_layers(
     commune_boundaries: gpd.GeoDataFrame | None = None,
     active_line: gpd.GeoDataFrame | None = None,
     stations: gpd.GeoDataFrame | None = None,
+    access_points: gpd.GeoDataFrame | None = None,
 ) -> None:
     lakes_clip = clip_gdf_to_bounds(lakes, bounds, pad=2_000.0)
     if lakes_clip is not None and not lakes_clip.empty:
@@ -150,9 +140,11 @@ def add_reference_layers(
 
     network_clip = clip_gdf_to_bounds(network, bounds, pad=2_000.0)
     if network_clip is not None and not network_clip.empty:
-        if "Link NR" in network_clip.columns:
-            dashed = network_clip[pd.to_numeric(network_clip["Link NR"], errors="coerce") == 178].copy()
-            base = network_clip[pd.to_numeric(network_clip["Link NR"], errors="coerce") != 178].copy()
+        edge_col = next((col for col in ("ID_EDGE", "ID_edge", "Link NR") if col in network_clip.columns), None)
+        if edge_col is not None:
+            edge_ids = pd.to_numeric(network_clip[edge_col], errors="coerce")
+            dashed = network_clip[edge_ids == 178].copy()
+            base = network_clip[edge_ids != 178].copy()
             if not base.empty:
                 base.plot(ax=ax, color="black", linewidth=0.9, alpha=0.9, zorder=4)
             if not dashed.empty:
@@ -178,6 +170,15 @@ def add_reference_layers(
             zorder=7,
         )
 
+    access_points_clip = clip_gdf_to_bounds(access_points, bounds, pad=2_000.0)
+    if access_points_clip is not None and not access_points_clip.empty:
+        access_points_clip.plot(
+            ax=ax,
+            color="black",
+            markersize=14,
+            zorder=8,
+        )
+
 
 # Render a raster-based accessibility map and optionally overlay the development geometry.
 def save_raster_plot(
@@ -192,6 +193,8 @@ def save_raster_plot(
     commune_boundaries: gpd.GeoDataFrame | None = None,
     active_line: gpd.GeoDataFrame | None = None,
     stations: gpd.GeoDataFrame | None = None,
+    access_points: gpd.GeoDataFrame | None = None,
+    new_access_point: gpd.GeoDataFrame | None = None,
     bounds_override: tuple[float, float, float, float] | None = None,
     value_range: tuple[float, float] | None = None,
 ) -> None:
@@ -242,10 +245,14 @@ def save_raster_plot(
             commune_boundaries=commune_boundaries,
             active_line=active_line,
             stations=stations,
+            access_points=access_points,
         )
 
     if overlay_gdf is not None and not overlay_gdf.empty:
-        overlay_gdf.plot(ax=ax, color=DEVELOPMENT_BLUE, linewidth=2.2, zorder=8)
+        overlay_gdf.plot(ax=ax, color=DEVELOPMENT_BLUE, linewidth=2.2, zorder=9)
+
+    if new_access_point is not None and not new_access_point.empty:
+        new_access_point.plot(ax=ax, color=DEVELOPMENT_BLUE, markersize=22, zorder=10)
 
     if bounds_override is not None:
         xmin, ymin, xmax, ymax = bounds_override
@@ -296,12 +303,67 @@ def values_to_source_raster(source_arr: np.ndarray, values: pd.DataFrame, key_co
     mapping[key_col] = pd.to_numeric(mapping[key_col], errors="coerce").astype("Int64")
     value_map = mapping.dropna(subset=[key_col]).set_index(key_col)[value_col].to_dict()
 
-    valid = source_arr > 0
+    valid = source_arr >= 0
     out[valid] = pd.Series(source_arr[valid].astype(int)).map(value_map).to_numpy()
     return out
 
 
-# Read and clean the road OD tables used for accessibility averaging.
+def apply_cell_mask(array: np.ndarray, valid_cells: np.ndarray) -> np.ndarray:
+    masked = np.asarray(array, dtype=float).copy()
+    masked[~valid_cells] = np.nan
+    return masked
+
+
+def aggregate_cell_values_to_catchments(
+    catchment_arr: np.ndarray,
+    value_arr: np.ndarray,
+    valid_cells: np.ndarray | None = None,
+) -> pd.DataFrame:
+    valid = (catchment_arr >= 0) & np.isfinite(catchment_arr) & np.isfinite(value_arr)
+    if valid_cells is not None:
+        valid &= valid_cells
+    if not np.any(valid):
+        return pd.DataFrame(columns=["ID_point", "accessibility"])
+    frame = pd.DataFrame(
+        {
+            "ID_point": catchment_arr[valid].astype(int),
+            "accessibility": value_arr[valid].astype(float),
+        }
+    )
+    return frame.groupby("ID_point", as_index=False)["accessibility"].mean()
+
+
+# Read the shared base layers once and pass them explicitly through the workflow.
+def load_common_map_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    lakes = gpd.read_file(PROCESSED_LAKES_GPKG).to_crs("EPSG:2056")[["geometry"]]
+
+    communes = gpd.read_file(COMMUNE_SHP).to_crs("EPSG:2056")
+    bfs_col = "bfs_nummer" if "bfs_nummer" in communes.columns else "BFS"
+    name_col = "name" if "name" in communes.columns else "GEMEINDENA"
+    communes["BFS"] = pd.to_numeric(communes[bfs_col], errors="coerce")
+    communes = communes.dropna(subset=["BFS"]).copy()
+    communes["BFS"] = communes["BFS"].astype(int)
+    communes["name"] = communes[name_col].astype(str)
+    communes = communes[communes["BFS"] > 0].copy()
+    if "kantonsnummer" in communes.columns:
+        communes["kantonsnummer"] = pd.to_numeric(communes["kantonsnummer"], errors="coerce")
+
+    important_communes = communes.copy()
+    if "kantonsnummer" in important_communes.columns:
+        important_communes = important_communes[important_communes["kantonsnummer"] == IMPORTANT_CANTON_NR].copy()
+    important_communes = important_communes[
+        [col for col in ["BFS", "name", "kantonsnummer", "geometry"] if col in important_communes.columns]
+    ]
+
+    canton_boundary = gpd.GeoDataFrame(
+        important_communes.dissolve()[["geometry"]],
+        geometry="geometry",
+        crs=important_communes.crs,
+    ).reset_index(drop=True)
+    return lakes, important_communes, canton_boundary
+
+
+
 def load_road_inputs() -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     sq_tt = pd.read_csv(ROAD_SQ_TT)
     dev_tt = pd.read_csv(ROAD_DEV_TT)
@@ -332,7 +394,7 @@ def road_catchment_stats(
     empl_arr: np.ndarray,
 ) -> pd.DataFrame:
     valid = (
-        (source_arr > 0)
+        (source_arr >= 0)
         & np.isfinite(source_arr)
         & np.isfinite(access_hr_arr)
         & np.isfinite(pop_arr)
@@ -387,85 +449,74 @@ def road_accessibility_by_origin(
     dest_pj_stats: pd.DataFrame,
 ) -> pd.DataFrame:
     work = road_add_generalized_tt(tt_df, origin_stats, dest_access_stats, dest_pj_stats)
+    # Accessibility is computed as the sum of exp(-beta * travel_time) * Pj over all destinations.
     work["accessibility"] = np.exp(-ROAD_BETA_PER_HOUR * work["gen_tt_hr"]) * work["Pj"]
     return work.groupby("origin", as_index=False)["accessibility"].sum()
 
 
-# Load the road development geometries that are drawn on the maps.
-def load_road_links() -> gpd.GeoDataFrame:
+
+def load_voronoi(path: Path) -> gpd.GeoDataFrame:
+    voronoi = gpd.read_file(path).to_crs("EPSG:2056")
+    id_col = next((col for col in ("ID_point", "ID", "id") if col in voronoi.columns), None)
+    if id_col is None:
+        raise KeyError(f"No catchment id column found in {path}")
+    voronoi["ID_point"] = pd.to_numeric(voronoi[id_col], errors="coerce").astype("Int64")
+    voronoi = voronoi.dropna(subset=["ID_point"]).copy()
+    voronoi["ID_point"] = voronoi["ID_point"].astype(int)
+    return voronoi[["ID_point", "geometry"]]
+
+
+def load_road_map_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]:
     links = gpd.read_file(ROAD_LINKS_GPKG)
     links["ID_new"] = pd.to_numeric(links["ID_new"], errors="coerce")
     links = links.dropna(subset=["ID_new"]).copy()
     links["ID_new"] = links["ID_new"].astype(int)
-    return links[["ID_new", "geometry"]]
 
-
-def load_road_network() -> gpd.GeoDataFrame:
     network = gpd.read_file(ROAD_NETWORK_GPKG).to_crs("EPSG:2056")
-    edge_col = "Link NR" if "Link NR" in network.columns else None
-    keep_cols = ["geometry"] + ([edge_col] if edge_col else [])
-    return network[keep_cols]
+    edge_col = next((col for col in ("ID_EDGE", "ID_edge", "Link NR") if col in network.columns), None)
+    network = network[["geometry"] + ([edge_col] if edge_col else [])]
+
+    access_points = gpd.read_file(ROAD_POINTS_GPKG).to_crs("EPSG:2056")
+    if "intersection" in access_points.columns:
+        access_points["intersection"] = pd.to_numeric(access_points["intersection"], errors="coerce")
+        access_points = access_points[access_points["intersection"] == 0].copy()
+    if "ID_point" in access_points.columns:
+        access_points["ID_point"] = pd.to_numeric(access_points["ID_point"], errors="coerce").astype("Int64")
+        access_points = access_points.dropna(subset=["ID_point"]).copy()
+        access_points["ID_point"] = access_points["ID_point"].astype(int)
+    access_points = access_points[[col for col in ["ID_point", "geometry"] if col in access_points.columns]]
+
+    generated_points = gpd.read_file(ROAD_GENERATED_POINTS_GPKG).to_crs("EPSG:2056")
+    generated_points["ID_new"] = pd.to_numeric(generated_points["ID_new"], errors="coerce").astype("Int64")
+    generated_points = generated_points.dropna(subset=["ID_new"]).copy()
+    generated_points["ID_new"] = generated_points["ID_new"].astype(int)
+    generated_points = generated_points[["ID_new", "geometry"]]
+    return links, network, access_points, generated_points
 
 
-def load_lakes() -> gpd.GeoDataFrame:
-    return gpd.read_file(LAKES_SHP).to_crs("EPSG:2056")[["geometry"]]
-
-
-def load_commune_boundaries() -> gpd.GeoDataFrame:
-    communes = gpd.read_file(COMMUNE_SHP).to_crs("EPSG:2056")
-    bfs_col = "bfs_nummer" if "bfs_nummer" in communes.columns else "BFS"
-    name_col = "name" if "name" in communes.columns else "GEMEINDENA"
-    communes["BFS"] = pd.to_numeric(communes[bfs_col], errors="coerce")
-    communes = communes.dropna(subset=["BFS"]).copy()
-    communes["BFS"] = communes["BFS"].astype(int)
-    communes["name"] = communes[name_col].astype(str)
-    communes = communes[communes["BFS"] > 0].copy()
-    if "kantonsnummer" in communes.columns:
-        communes["kantonsnummer"] = pd.to_numeric(communes["kantonsnummer"], errors="coerce")
-    return communes[[col for col in ["BFS", "name", "kantonsnummer", "geometry"] if col in communes.columns]]
-
-
-def load_important_communes() -> gpd.GeoDataFrame:
-    communes = load_commune_boundaries()
-    if "kantonsnummer" in communes.columns:
-        communes = communes[communes["kantonsnummer"] == IMPORTANT_CANTON_NR].copy()
-    return communes
-
-
-def load_canton_boundary() -> gpd.GeoDataFrame:
-    communes = load_important_communes()
-    dissolved = communes.dissolve()
-    return gpd.GeoDataFrame(dissolved[["geometry"]], geometry="geometry", crs=communes.crs).reset_index(drop=True)
-
-
-def load_road_plot_bounds() -> tuple[float, float, float, float]:
-    area = pd.read_csv(ROAD_ASSESSMENT_AREA_CSV, sep=";")
-    geometry = gpd.GeoSeries.from_wkt(area["wtk"], crs="EPSG:2056")
-    bounds = geometry.total_bounds
-    return tuple(float(v) for v in bounds)
-
-
-def load_rail_network() -> gpd.GeoDataFrame:
+def load_rail_map_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]:
     network_path = Path(rail_settings.infra_generation_rail_network)
     if not network_path.is_absolute():
         network_path = DATA_ROOT / network_path
     network = gpd.read_file(network_path).to_crs("EPSG:2056")
-    return network[["Service", "geometry"]] if "Service" in network.columns else network[["geometry"]]
+    network = network[["Service", "geometry"]] if "Service" in network.columns else network[["geometry"]]
 
+    active_network = gpd.read_file(RAIL_ACTIVE_SERVICE_NETWORK_GPKG).to_crs("EPSG:2056")
+    active_network["dev_id"] = pd.to_numeric(active_network["dev_id"], errors="coerce")
+    active_network["Service"] = active_network["Service"].astype(str)
+    active_network["Sline"] = active_network["Sline"].astype(str)
+    active_network = active_network[["Service", "Sline", "dev_id", "new_dev", "geometry"]]
 
-def load_rail_active_service_network() -> gpd.GeoDataFrame:
-    network = gpd.read_file(RAIL_ACTIVE_SERVICE_NETWORK_GPKG).to_crs("EPSG:2056")
-    network["dev_id"] = pd.to_numeric(network["dev_id"], errors="coerce")
-    network["Service"] = network["Service"].astype(str)
-    network["Sline"] = network["Sline"].astype(str)
-    return network[["Service", "Sline", "dev_id", "new_dev", "geometry"]]
-
-
-def load_rail_stations() -> gpd.GeoDataFrame:
     stations = gpd.read_file(RAIL_POINTS_GPKG).to_crs("EPSG:2056")
     stations["HST"] = pd.to_numeric(stations["HST"], errors="coerce")
-    stations = stations[stations["HST"] == 1].copy()
-    return stations[["NAME", "geometry"]]
+    stations = stations[stations["HST"] == 1].copy()[["NAME", "geometry"]]
+
+    links = gpd.read_file(RAIL_LINKS_GPKG)
+    links["dev_id"] = pd.to_numeric(links["dev_id"], errors="coerce")
+    links = links.dropna(subset=["dev_id"]).copy()
+    links["dev_id"] = links["dev_id"].astype(int).astype(str)
+    links = links[["dev_id", "geometry"]]
+    return network, active_network, stations, links
 
 
 def filter_stations_to_displayed_network(
@@ -528,15 +579,14 @@ def compute_global_delta_range(arrays: list[np.ndarray | pd.Series]) -> tuple[fl
 def create_road_maps() -> None:
     road_output = OUTPUT_ROOT / "road"
     road_output.mkdir(parents=True, exist_ok=True)
-    road_plot_bounds = load_road_plot_bounds()
 
     _, road_top10 = load_top10_by_mode()
     road_top10_set = set(road_top10)
     sq_tt, dev_tt, scenarios = load_road_inputs()
-    road_links = load_road_links()
-    road_network = load_road_network()
-    lakes = load_lakes()
+    lakes, _, _ = load_common_map_layers()
 
+    # Status quo rasters define the common road analysis grid. Population and jobs
+    # are reprojected onto exactly this grid so all later averages stay comparable.
     with rasterio.open(ROAD_TRAVELTIME_DIR / "source_id_raster.tif") as src:
         sq_source = src.read(1)
         road_shape = (src.height, src.width)
@@ -544,76 +594,87 @@ def create_road_maps() -> None:
         road_crs = src.crs
     with rasterio.open(ROAD_TRAVELTIME_DIR / "travel_time_raster.tif") as src:
         sq_access_hr = src.read(1).astype(float) / 3600.0
-        sq_transform = src.transform
+
+    valid_sq_cells = (sq_source >= 0) & np.isfinite(sq_source)
+    valid_access_point_ids = set(np.unique(sq_source[valid_sq_cells]).astype(int).tolist())
+    sq_voronoi = load_voronoi(ROAD_VORONOI_GPKG)
+    sq_index = pd.Index(sorted(sq_voronoi["ID_point"].unique()), name="ID_point")
+    road_links, road_network, road_access_points_all, road_generated_points = load_road_map_layers()
+    road_access_points = road_access_points_all[road_access_points_all["ID_point"].isin(valid_access_point_ids)][["geometry"]].copy()
 
     pop_arr, empl_arr = load_road_potential_rasters(road_shape, road_transform, road_crs)
     sq_stats = road_catchment_stats(sq_source, sq_access_hr, pop_arr, empl_arr)
     developments = sorted(dev_tt["development"].drop_duplicates().astype(int).tolist())
-    sq_sum = np.zeros(sq_source.shape, dtype=float)
+    sq_sum = pd.Series(0.0, index=sq_index)
+    sq_obs = pd.Series(0, index=sq_index, dtype=int)
     sq_count = 0
 
     for scenario in scenarios:
+        # Accessibility is computed per OD scenario and averaged afterwards, which
+        # keeps the link to the original scenario sampling explicit.
         sq_values = road_accessibility_by_origin(
             sq_tt[sq_tt["scenario"] == scenario].copy(),
             sq_stats,
             sq_stats,
             sq_stats,
         )
-        sq_sum += np.nan_to_num(
-            values_to_source_raster(sq_source, sq_values, "origin", "accessibility"),
-            nan=0.0,
-        )
+        sq_series = sq_values.set_index("origin")["accessibility"].reindex(sq_index)
+        sq_sum += sq_series.fillna(0.0)
+        sq_obs += sq_series.notna().astype(int)
         sq_count += 1
 
-    sq_raster_mean = sq_sum / max(sq_count, 1)
-    road_dev_results: list[tuple[int, np.ndarray, np.ndarray, gpd.GeoDataFrame]] = []
+    sq_mean = (sq_sum / sq_obs.replace(0, np.nan)).rename("accessibility")
+    sq_voronoi_mean = sq_voronoi.merge(sq_mean.reset_index(), on="ID_point", how="left")
+    sq_raster_mean = apply_cell_mask(
+        values_to_source_raster(
+            sq_source,
+            sq_mean.reset_index().rename(columns={"ID_point": "origin"}),
+            "origin",
+            "accessibility",
+        ),
+        valid_sq_cells,
+    )
+    road_dev_results: list[tuple[int, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]] = []
 
     for development in developments:
         source_path = ROAD_DEV_RASTER_DIR / f"dev{development}_source_id_raster.tif"
         tt_path = ROAD_DEV_RASTER_DIR / f"dev{development}_travel_time_raster.tif"
+        voronoi_path = ROAD_DEV_RASTER_DIR / f"dev{development}_Voronoi.gpkg"
         if not source_path.exists() or not tt_path.exists():
+            continue
+        if not voronoi_path.exists():
             continue
 
         with rasterio.open(source_path) as src:
             dev_source = src.read(1)
         with rasterio.open(tt_path) as src:
             dev_access_hr = src.read(1).astype(float) / 3600.0
-            dev_transform = src.transform
 
+        valid_dev_cells = (dev_source >= 0) & np.isfinite(dev_source)
+        valid_dev_access_point_ids = set(np.unique(dev_source[valid_dev_cells]).astype(int).tolist())
+        dev_voronoi = load_voronoi(voronoi_path)
+        dev_index = pd.Index(sorted(dev_voronoi["ID_point"].unique()), name="ID_point")
         dev_stats = road_catchment_stats(dev_source, dev_access_hr, pop_arr, empl_arr)
         dev_link = road_links[road_links["ID_new"] == development]
-        dev_sum = np.zeros(sq_source.shape, dtype=float)
-        sq_common_sum = np.zeros(sq_source.shape, dtype=float)
+        dev_access_points = road_access_points_all[
+            road_access_points_all["ID_point"].isin(valid_dev_access_point_ids)
+        ][["geometry"]].copy()
+        dev_generated_point = road_generated_points[road_generated_points["ID_new"] == development].copy()
+        dev_sum = pd.Series(0.0, index=dev_index)
+        dev_obs = pd.Series(0, index=dev_index, dtype=int)
         dev_count = 0
 
         for scenario in scenarios:
-            sq_scenario_tt = sq_tt[sq_tt["scenario"] == scenario][["origin", "destination", "travel_time"]].copy()
+            # For the delta map, both status quo and development are expressed on
+            # the development catchments before taking the difference.
             dev_scenario_tt = dev_tt[
                 (dev_tt["scenario"] == scenario)
                 & (dev_tt["development"] == development)
             ][["origin", "destination", "travel_time"]].copy()
-            if sq_scenario_tt.empty or dev_scenario_tt.empty:
+            if dev_scenario_tt.empty:
                 continue
-
-            common_pairs = sq_scenario_tt[["origin", "destination"]].merge(
-                dev_scenario_tt[["origin", "destination"]],
-                on=["origin", "destination"],
-                how="inner",
-            ).drop_duplicates()
-            if common_pairs.empty:
-                continue
-
-            sq_common_tt = sq_scenario_tt.merge(common_pairs, on=["origin", "destination"], how="inner")
-            dev_common_tt = dev_scenario_tt.merge(common_pairs, on=["origin", "destination"], how="inner")
-
-            sq_values = road_accessibility_by_origin(
-                sq_common_tt,
-                sq_stats,
-                sq_stats,
-                sq_stats,
-            )
             dev_values = road_accessibility_by_origin(
-                dev_common_tt,
+                dev_scenario_tt,
                 dev_stats,
                 dev_stats,
                 sq_stats,
@@ -621,65 +682,102 @@ def create_road_maps() -> None:
             if dev_values.empty:
                 continue
 
-            sq_common_sum += np.nan_to_num(
-                values_to_source_raster(sq_source, sq_values, "origin", "accessibility"),
-                nan=0.0,
-            )
-            dev_sum += np.nan_to_num(
-                values_to_source_raster(sq_source, dev_values, "origin", "accessibility"),
-                nan=0.0,
-            )
+            dev_series = dev_values.set_index("origin")["accessibility"].reindex(dev_index)
+            dev_sum += dev_series.fillna(0.0)
+            dev_obs += dev_series.notna().astype(int)
+
             dev_count += 1
 
         if dev_count == 0:
             continue
 
-        sq_common_mean = sq_common_sum / dev_count
-        dev_raster_mean = dev_sum / dev_count
-        delta_raster_mean = dev_raster_mean - sq_common_mean
-        road_dev_results.append((development, dev_raster_mean, delta_raster_mean, dev_link))
+        dev_mean = (dev_sum / dev_obs.replace(0, np.nan)).rename("accessibility")
+        dev_voronoi_mean = dev_voronoi.merge(dev_mean.reset_index(), on="ID_point", how="left")
+        dev_raster_mean = apply_cell_mask(
+            values_to_source_raster(
+                dev_source,
+                dev_mean.reset_index().rename(columns={"ID_point": "origin"}),
+                "origin",
+                "accessibility",
+            ),
+            valid_dev_cells,
+        )
+        sq_on_dev_mean = aggregate_cell_values_to_catchments(
+            dev_source,
+            sq_raster_mean,
+            valid_cells=valid_dev_cells,
+        ).rename(columns={"accessibility": "sq_accessibility"})
+        dev_on_dev_mean = aggregate_cell_values_to_catchments(
+            dev_source,
+            dev_raster_mean,
+            valid_cells=valid_dev_cells,
+        ).rename(columns={"accessibility": "dev_accessibility"})
+        delta_mean = dev_voronoi[["ID_point", "geometry"]].merge(
+            sq_on_dev_mean,
+            on="ID_point",
+            how="left",
+        ).merge(
+            dev_on_dev_mean,
+            on="ID_point",
+            how="left",
+        )
+        delta_mean["delta_accessibility"] = delta_mean["dev_accessibility"] - delta_mean["sq_accessibility"]
+        delta_mean = gpd.GeoDataFrame(delta_mean, geometry="geometry", crs=dev_voronoi.crs)
+        road_dev_results.append(
+            (development, dev_voronoi_mean, delta_mean, dev_link, dev_access_points, dev_generated_point)
+        )
 
-    road_absolute_range = compute_global_absolute_range([sq_raster_mean] + [item[1] for item in road_dev_results])
-    road_delta_range = compute_global_delta_range([item[2] for item in road_dev_results])
+    road_absolute_range = compute_global_absolute_range(
+        [sq_voronoi_mean["accessibility"]] + [item[1]["accessibility"] for item in road_dev_results]
+    )
+    road_delta_range = compute_global_delta_range([item[2]["delta_accessibility"] for item in road_dev_results])
 
-    save_raster_plot(
-        sq_raster_mean,
+    save_gdf_plot(
+        sq_voronoi_mean,
+        "accessibility",
         road_output / "road_statusquo_mean.png",
         "Road status quo accessibility mean",
         delta=False,
-        transform=sq_transform,
         lakes=lakes,
         network=road_network,
-        bounds_override=road_plot_bounds,
+        access_points=road_access_points,
+        boundary_overlay=sq_voronoi,
         value_range=road_absolute_range,
+        drop_missing=True,
     )
 
-    for development, dev_raster_mean, delta_raster_mean, dev_link in road_dev_results:
+    for development, dev_voronoi_mean, delta_mean, dev_link, dev_access_points, dev_generated_point in road_dev_results:
         if str(development) in road_top10_set:
-            save_raster_plot(
-                dev_raster_mean,
+            save_gdf_plot(
+                dev_voronoi_mean,
+                "accessibility",
                 road_output / f"road_development_dev_{development}_mean.png",
                 f"Road development accessibility mean, dev {development}",
                 delta=False,
-                transform=sq_transform,
                 overlay_gdf=dev_link,
                 lakes=lakes,
                 network=road_network,
-                bounds_override=road_plot_bounds,
+                access_points=dev_access_points,
+                new_access_point=dev_generated_point,
+                boundary_overlay=sq_voronoi,
                 value_range=road_absolute_range,
+                drop_missing=True,
             )
 
-        save_raster_plot(
-            delta_raster_mean,
+        save_gdf_plot(
+            delta_mean,
+            "delta_accessibility",
             road_output / f"road_delta_dev_{development}_mean.png",
             f"Road accessibility delta mean, dev {development}",
             delta=True,
-            transform=sq_transform,
             overlay_gdf=dev_link,
             lakes=lakes,
             network=road_network,
-            bounds_override=road_plot_bounds,
+            access_points=dev_access_points,
+            new_access_point=dev_generated_point,
+            boundary_overlay=dev_voronoi_mean[["geometry"]].copy(),
             value_range=road_delta_range,
+            drop_missing=True,
         )
 
 
@@ -726,11 +824,6 @@ def normalize_rail_od_matrix(od: pd.DataFrame) -> pd.DataFrame:
     return work
 
 
-# Load the municipality polygons used for the final rail choropleths.
-def load_rail_communes() -> gpd.GeoDataFrame:
-    return load_important_communes()
-
-
 # Load the municipality-to-station assignment used for the final rail mapping step.
 def load_rail_commune_mapping() -> pd.DataFrame:
     mapping = pd.read_excel(RAIL_COMMUNE_TO_STATION)
@@ -744,12 +837,6 @@ def load_rail_commune_mapping() -> pd.DataFrame:
     return mapping[mapping["BFS"] > 0].drop_duplicates(subset=["BFS"])
 
 
-# Load the cached status-quo and development OD travel times for rail.
-def load_rail_cache():
-    with RAIL_OD_TIMES_CACHE.open("rb") as handle:
-        return pickle.load(handle)
-
-
 # Build the rail development ordering used by the cached OD-time list.
 def build_rail_dev_position_lookup() -> dict[str, int]:
     dev_ids = sorted(
@@ -760,35 +847,58 @@ def build_rail_dev_position_lookup() -> dict[str, int]:
     return {dev_id: idx for idx, dev_id in enumerate(dev_ids)}
 
 
-# Load the rail development geometries that are drawn on the maps.
-def load_rail_links() -> gpd.GeoDataFrame:
-    links = gpd.read_file(RAIL_LINKS_GPKG)
-    links["dev_id"] = pd.to_numeric(links["dev_id"], errors="coerce")
-    links = links.dropna(subset=["dev_id"]).copy()
-    links["dev_id"] = links["dev_id"].astype(int).astype(str)
-    return links[["dev_id", "geometry"]]
+# Aggregate raster mass to municipality polygons so the rail accessibility uses the same
+# Gemeinde -> Bahnhof aggregation logic as the canton_ZH OD preparation.
+def summarize_raster_by_commune(
+    raster_path: Path,
+    communes: gpd.GeoDataFrame,
+    value_name: str,
+) -> pd.DataFrame:
+    with rasterio.open(raster_path) as src:
+        raster = src.read(1).astype(float)
+        nodata = src.nodata
+        if nodata is not None:
+            raster[raster == nodata] = np.nan
+        raster = np.nan_to_num(raster, nan=0.0, posinf=0.0, neginf=0.0)
+
+        commune_geoms = communes.to_crs(src.crs) if communes.crs != src.crs else communes
+        records: list[dict[str, float | int]] = []
+        for row in commune_geoms[["BFS", "geometry"]].itertuples(index=False):
+            mask = geometry_mask(
+                [row.geometry],
+                transform=src.transform,
+                invert=True,
+                out_shape=raster.shape,
+            )
+            value = float(raster[mask].sum()) if np.any(mask) else 0.0
+            records.append({"BFS": int(row.BFS), value_name: max(value, 0.0)})
+
+    return pd.DataFrame(records)
 
 
-# Aggregate the exogenous rail station potential from the station-catchment summary.
-def load_rail_station_potential() -> pd.DataFrame:
-    station_lookup = load_rail_station_lookup().copy()
-    station_lookup["station_name_norm"] = station_lookup["station_name"].astype(str).str.strip()
-    summary = pd.read_csv(RAIL_STATION_CATCHMENT_SUMMARY)
-    summary["Station_Name"] = summary["Station_Name"].astype(str).str.strip()
-    summary["mapped_station_name"] = summary["Station_Name"].replace(RAIL_CATCHMENT_NAME_OVERRIDES)
-    summary["Pop"] = pd.to_numeric(summary["Pop"], errors="coerce").fillna(0.0)
-    summary["Empl"] = pd.to_numeric(summary["Empl"], errors="coerce").fillna(0.0)
-    summary["Pj"] = summary["Pop"] + 0.5 * summary["Empl"]
+# Aggregate the exogenous rail station potential with the same Gemeinde -> Bahnhof mapping as the OD.
+def load_rail_station_potential(commune_mapping: pd.DataFrame, communes: gpd.GeoDataFrame) -> pd.DataFrame:
+    mapped_bfs = set(commune_mapping["BFS"].astype(int))
+    communes = communes[communes["BFS"].isin(mapped_bfs)].copy()
 
-    merged = summary.merge(
-        station_lookup[["ID_point", "station_name_norm"]],
-        left_on="mapped_station_name",
-        right_on="station_name_norm",
+    pop_by_commune = summarize_raster_by_commune(POPULATION_RASTER, communes, "Pop")
+    empl_by_commune = summarize_raster_by_commune(EMPLOYMENT_RASTER, communes, "Empl")
+    commune_potential = pop_by_commune.merge(empl_by_commune, on="BFS", how="outer").fillna(0.0)
+    commune_potential["Pj"] = commune_potential["Pop"] + 0.5 * commune_potential["Empl"]
+
+    station_potential = commune_mapping.merge(
+        commune_potential,
+        on="BFS",
         how="left",
     )
-    merged = merged.dropna(subset=["ID_point"]).copy()
-    merged["ID_point"] = merged["ID_point"].astype(int)
-    grouped = merged.groupby("ID_point", as_index=False)["Pj"].sum()
+    station_potential[["Pop", "Empl", "Pj"]] = (
+        station_potential[["Pop", "Empl", "Pj"]].fillna(0.0)
+    )
+    grouped = (
+        station_potential.groupby("ID_point", as_index=False)[["Pop", "Empl", "Pj"]]
+        .sum()
+    )
+    grouped["ID_point"] = grouped["ID_point"].astype(int)
     return grouped
 
 
@@ -823,13 +933,25 @@ def rail_station_accessibility(tt_df: pd.DataFrame, station_pj: pd.DataFrame) ->
     return work.groupby("origin", as_index=False)["accessibility"].sum().rename(columns={"origin": "ID_point"})
 
 
-# Push station accessibility values back to municipalities for the final rail map.
-def rail_station_to_municipality(station_values: pd.DataFrame, commune_mapping: pd.DataFrame, communes: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    municipality_values = commune_mapping.merge(station_values, on="ID_point", how="left")
-    return communes.merge(municipality_values, on="BFS", how="left")
+def build_rail_catchments(
+    commune_mapping: pd.DataFrame,
+    communes: gpd.GeoDataFrame,
+    station_lookup: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    catchments = communes.merge(commune_mapping[["BFS", "ID_point"]], on="BFS", how="inner")
+    catchments = catchments[["ID_point", "geometry"]].copy()
+    catchments = catchments.dissolve(by="ID_point", as_index=False)
+    catchments["ID_point"] = pd.to_numeric(catchments["ID_point"], errors="coerce").astype(int)
+    if station_lookup is not None:
+        catchments = catchments.merge(
+            station_lookup[["ID_point", "station_name"]].drop_duplicates(),
+            on="ID_point",
+            how="left",
+        )
+    return gpd.GeoDataFrame(catchments, geometry="geometry", crs=communes.crs)
 
 
-# Render a municipality-based rail accessibility map and optionally overlay the development geometry.
+# Render a catchment-based rail accessibility map and optionally overlay the development geometry.
 def save_gdf_plot(
     gdf: gpd.GeoDataFrame,
     column: str,
@@ -841,11 +963,21 @@ def save_gdf_plot(
     network: gpd.GeoDataFrame | None = None,
     active_line: gpd.GeoDataFrame | None = None,
     stations: gpd.GeoDataFrame | None = None,
+    access_points: gpd.GeoDataFrame | None = None,
+    new_access_point: gpd.GeoDataFrame | None = None,
+    boundary_overlay: gpd.GeoDataFrame | None = None,
     bounds_override: tuple[float, float, float, float] | None = None,
     value_range: tuple[float, float] | None = None,
+    drop_missing: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(9, 8), dpi=220)
     plot_gdf = gdf.copy()
+    if drop_missing:
+        plot_gdf[column] = pd.to_numeric(plot_gdf[column], errors="coerce")
+        plot_gdf = plot_gdf[plot_gdf[column].notna()].copy()
+        if plot_gdf.empty:
+            plt.close(fig)
+            return
     if delta:
         if value_range is not None:
             vmin, vmax = value_range
@@ -885,9 +1017,14 @@ def save_gdf_plot(
         commune_boundaries=plot_gdf,
         active_line=active_line,
         stations=stations,
+        access_points=access_points,
     )
+    if boundary_overlay is not None and not boundary_overlay.empty:
+        boundary_overlay.boundary.plot(ax=ax, color="#6A6A6A", linewidth=0.35, alpha=0.7, zorder=7)
     if overlay_gdf is not None and not overlay_gdf.empty:
         overlay_gdf.plot(ax=ax, color=DEVELOPMENT_BLUE, linewidth=2.4, zorder=8)
+    if new_access_point is not None and not new_access_point.empty:
+        new_access_point.plot(ax=ax, color=DEVELOPMENT_BLUE, markersize=22, zorder=9)
     if bounds_override is not None:
         xmin, ymin, xmax, ymax = bounds_override
         ax.set_xlim(xmin, xmax)
@@ -907,6 +1044,7 @@ def create_rail_maps() -> None:
     rail_top10, _ = load_top10_by_mode()
     rail_top10_set = set(rail_top10)
     valuation_year = int(rail_settings.start_valuation_year)
+    lakes, communes, canton_boundary = load_common_map_layers()
     scenario_files = sorted(
         RAIL_SCENARIO_CACHE_DIR.glob("scenario_*.pkl"),
         key=lambda path: int(path.stem.split("_")[-1]),
@@ -916,26 +1054,24 @@ def create_rail_maps() -> None:
 
     station_lookup_all = load_rail_station_lookup()
     commune_mapping = load_rail_commune_mapping()
-    communes = load_rail_communes()
-    rail_links = load_rail_links()
-    lakes = load_lakes()
-    rail_network = load_rail_network()
-    rail_active_network = load_rail_active_service_network()
-    canton_boundary = load_canton_boundary()
+    rail_network, rail_active_network, rail_station_points, rail_links = load_rail_map_layers()
     rail_bounds = tuple(canton_boundary.total_bounds)
-    rail_stations = filter_stations_to_displayed_network(load_rail_stations(), rail_network, rail_bounds)
-    station_potential = load_rail_station_potential()
-    cache = load_rail_cache()
+    rail_stations = filter_stations_to_displayed_network(rail_station_points, rail_network, rail_bounds)
+    station_potential = load_rail_station_potential(commune_mapping, communes)
+    with RAIL_OD_TIMES_CACHE.open("rb") as handle:
+        cache = pickle.load(handle)
     base_od_times = cache["od_times_status_quo"][0]
     dev_od_times = cache["od_times_dev"]
     dev_position_lookup = build_rail_dev_position_lookup()
     all_developments = list(dev_position_lookup.keys())
-    bfs_index = communes[["BFS", "geometry"]].copy()
-    base_sum = pd.Series(0.0, index=bfs_index["BFS"])
+    rail_catchments = build_rail_catchments(commune_mapping, communes, station_lookup_all)
+    catchment_index = rail_catchments[["ID_point", "geometry"]].copy()
+    base_sum = pd.Series(0.0, index=catchment_index["ID_point"])
     base_count = 0
     scenario_contexts = []
 
     for scenario_file in scenario_files:
+        # Each scenario defines the active station universe for one valuation year.
         with scenario_file.open("rb") as handle:
             scenario_od_by_year = pickle.load(handle)
         if valuation_year not in scenario_od_by_year:
@@ -957,9 +1093,8 @@ def create_rail_maps() -> None:
 
         scenario_contexts.append((station_lookup, valid_station_ids, station_pj))
         base_station_values = rail_station_accessibility(base_tt, station_pj)
-        base_municipality = rail_station_to_municipality(base_station_values, commune_mapping, communes)
-        base_municipality["accessibility"] = pd.to_numeric(base_municipality["accessibility"], errors="coerce")
-        base_series = base_municipality.set_index("BFS")["accessibility"].reindex(base_sum.index).fillna(0.0)
+        base_station_values["accessibility"] = pd.to_numeric(base_station_values["accessibility"], errors="coerce")
+        base_series = base_station_values.set_index("ID_point")["accessibility"].reindex(base_sum.index).fillna(0.0)
         base_sum += base_series
         base_count += 1
 
@@ -968,10 +1103,10 @@ def create_rail_maps() -> None:
 
     base_mean = (base_sum / base_count).rename("accessibility")
     rail_dev_results: list[tuple[str, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]] = []
-    base_municipality_mean = gpd.GeoDataFrame(
-        bfs_index.merge(base_mean.reset_index(), on="BFS", how="left"),
+    base_catchment_mean = gpd.GeoDataFrame(
+        catchment_index.merge(base_mean.reset_index(), on="ID_point", how="left"),
         geometry="geometry",
-        crs=communes.crs,
+        crs=rail_catchments.crs,
     )
 
     for development in all_developments:
@@ -979,20 +1114,21 @@ def create_rail_maps() -> None:
         if pos is None or pos >= len(dev_od_times):
             continue
 
-        dev_sum = pd.Series(0.0, index=bfs_index["BFS"])
+        dev_sum = pd.Series(0.0, index=catchment_index["ID_point"])
         dev_count = 0
         dev_link = rail_links[rail_links["dev_id"] == development]
         active_line = get_rail_active_line(rail_active_network, development)
 
         for station_lookup, valid_station_ids, station_pj in scenario_contexts:
+            # Development OD times are evaluated on the same scenario-specific station
+            # subset as the corresponding base case.
             dev_tt = rail_od_times_to_long(dev_od_times[pos], station_lookup, valid_station_ids)
             if dev_tt.empty:
                 continue
 
             dev_station_values = rail_station_accessibility(dev_tt, station_pj)
-            dev_municipality = rail_station_to_municipality(dev_station_values, commune_mapping, communes)
-            dev_municipality["accessibility"] = pd.to_numeric(dev_municipality["accessibility"], errors="coerce")
-            dev_series = dev_municipality.set_index("BFS")["accessibility"].reindex(dev_sum.index).fillna(0.0)
+            dev_station_values["accessibility"] = pd.to_numeric(dev_station_values["accessibility"], errors="coerce")
+            dev_series = dev_station_values.set_index("ID_point")["accessibility"].reindex(dev_sum.index).fillna(0.0)
             dev_sum += dev_series
             dev_count += 1
 
@@ -1000,49 +1136,51 @@ def create_rail_maps() -> None:
             continue
 
         dev_mean = (dev_sum / dev_count).rename("development_accessibility")
-        dev_municipality_mean = gpd.GeoDataFrame(
-            bfs_index.merge(dev_mean.reset_index(), on="BFS", how="left"),
+        dev_catchment_mean = gpd.GeoDataFrame(
+            catchment_index.merge(dev_mean.reset_index(), on="ID_point", how="left"),
             geometry="geometry",
-            crs=communes.crs,
+            crs=rail_catchments.crs,
         )
-        delta_mean = dev_municipality_mean[["BFS", "geometry", "development_accessibility"]].merge(
+        delta_mean = dev_catchment_mean[["ID_point", "geometry", "development_accessibility"]].merge(
             base_mean.reset_index(),
-            on="BFS",
+            on="ID_point",
             how="left",
         )
         delta_mean["delta_accessibility"] = delta_mean["development_accessibility"] - delta_mean["accessibility"]
-        delta_mean = gpd.GeoDataFrame(delta_mean, geometry="geometry", crs=communes.crs)
-        rail_dev_results.append((development, dev_municipality_mean, delta_mean, dev_link, active_line))
+        delta_mean = gpd.GeoDataFrame(delta_mean, geometry="geometry", crs=rail_catchments.crs)
+        rail_dev_results.append((development, dev_catchment_mean, delta_mean, dev_link, active_line))
 
     rail_absolute_range = compute_global_absolute_range([base_mean] + [item[1]["development_accessibility"] for item in rail_dev_results])
     rail_delta_range = compute_global_delta_range([item[2]["delta_accessibility"] for item in rail_dev_results])
 
     save_gdf_plot(
-        base_municipality_mean,
+        base_catchment_mean,
         "accessibility",
         rail_output / "rail_statusquo_mean.png",
-        "Rail status quo accessibility mean",
+        "Rail status quo accessibility mean by station catchment",
         delta=False,
         lakes=lakes,
         network=rail_network,
         stations=rail_stations,
+        boundary_overlay=communes,
         bounds_override=rail_bounds,
         value_range=rail_absolute_range,
     )
 
-    for development, dev_municipality_mean, delta_mean, dev_link, active_line in rail_dev_results:
+    for development, dev_catchment_mean, delta_mean, dev_link, active_line in rail_dev_results:
         if development in rail_top10_set:
             save_gdf_plot(
-                dev_municipality_mean.rename(columns={"development_accessibility": "accessibility"}),
+                dev_catchment_mean.rename(columns={"development_accessibility": "accessibility"}),
                 "accessibility",
                 rail_output / f"rail_development_dev_{development}_mean.png",
-                f"Rail development accessibility mean, dev {development}",
+                f"Rail development accessibility mean by station catchment, dev {development}",
                 delta=False,
                 overlay_gdf=dev_link,
                 lakes=lakes,
                 network=rail_network,
                 active_line=active_line,
                 stations=rail_stations,
+                boundary_overlay=communes,
                 bounds_override=rail_bounds,
                 value_range=rail_absolute_range,
             )
@@ -1051,13 +1189,14 @@ def create_rail_maps() -> None:
             delta_mean,
             "delta_accessibility",
             rail_output / f"rail_delta_dev_{development}_mean.png",
-            f"Rail accessibility delta mean, dev {development}",
+            f"Rail accessibility delta mean by station catchment, dev {development}",
             delta=True,
             overlay_gdf=dev_link,
             lakes=lakes,
             network=rail_network,
             active_line=active_line,
             stations=rail_stations,
+            boundary_overlay=communes,
             bounds_override=rail_bounds,
             value_range=rail_delta_range,
         )

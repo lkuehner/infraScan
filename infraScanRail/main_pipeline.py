@@ -56,72 +56,72 @@ def infrascanrail_cap():
     # ============================================================================
     print("PIPELINE CONFIGURATION")
     print("-" * 80)
-    
-    # A. Visualization Strategy
-    print("\nA. VISUALIZATION STRATEGY")
-    print("   How should the pipeline handle optional plot generation?")
-    print("   1) Manual  - Prompt for each visualization decision (default)")
-    print("   2) None    - Skip all optional visualizations")
-    print("   3) All     - Generate all optional visualizations")
-    
-    while True:
-        viz_choice = input("\n   Select visualization mode (1-3) [1]: ").strip() or "1"
 
-        if viz_choice in ['1', '2', '3']:
-            break
-        print("   Invalid selection. Please enter 1, 2, or 3.")
-    
-    viz_modes = {'1': 'manual', '2': 'none', '3': 'all'}
-    settings.PIPELINE_CONFIG.visualization_mode = viz_modes[viz_choice]
-    print(f"   → Visualization mode: {settings.PIPELINE_CONFIG.visualization_mode.upper()}")
-    
-    # B. Grouping Strategy
-    print("\nB. CAPACITY GROUPING STRATEGY")
-    print("   How should capacity grouping decisions be made?")
-    print("   1) Manual       - Prompt for each grouping decision (default)")
-    print("   2) Conservative - Always choose lowest capacity option")
-    print("   3) Baseline     - Always choose middle option (2)")
-    print("   4) Optimal      - Always choose highest capacity option")
-    
-    while True:
-        group_choice = input("\n   Select grouping strategy (1-4) [1]: ").strip() or "1"
-        if group_choice in ['1', '2', '3', '4']:
-            break
-        print("   Invalid selection. Please enter 1, 2, 3, or 4.")
-    
-    group_modes = {'1': 'manual', '2': 'conservative', '3': 'baseline', '4': 'optimal'}
-    settings.PIPELINE_CONFIG.grouping_strategy = group_modes[group_choice]
-    print(f"   → Grouping strategy: {settings.PIPELINE_CONFIG.grouping_strategy.upper()}")
-    
-    # C. Capacity Enhancement Parameters
-    print(f"\nC. Configure capacity enhancement parameters:")
-    print(f"  Default threshold: {settings.capacity_threshold} tphpd")
-    print(f"  Default max iterations: {settings.max_enhancement_iterations}")
-
-    # Get threshold from user
-    threshold_input = input(f"\n  Enter capacity threshold (tphpd) or press Enter for default [{settings.capacity_threshold}]: ").strip()
-    if threshold_input:
-        try:
-            settings.capacity_threshold = float(threshold_input)
-            print(f"  → Using threshold: {settings.capacity_threshold} tphpd")
-        except ValueError:
-            print(f"  ⚠ Invalid input. Using default: {settings.capacity_threshold} tphpd")
+    if settings.PIPELINE_CONFIG.visualization_mode and settings.PIPELINE_CONFIG.grouping_strategy:
+        print(f"   → Visualization mode: {settings.PIPELINE_CONFIG.visualization_mode.upper()}")
+        print(f"   → Grouping strategy: {settings.PIPELINE_CONFIG.grouping_strategy.upper()}")
+        print(f"   → Capacity threshold: {settings.capacity_threshold} tphpd")
+        print(f"   → Max iterations: {settings.max_enhancement_iterations}")
     else:
-        settings.capacity_threshold = settings.capacity_threshold
-        print(f"  → Using default threshold: {settings.capacity_threshold} tphpd")
+        # A. Visualization Strategy
+        print("\nA. VISUALIZATION STRATEGY")
+        print("   How should the pipeline handle optional plot generation?")
+        print("   1) Manual  - Prompt for each visualization decision (default)")
+        print("   2) None    - Skip all optional visualizations")
+        print("   3) All     - Generate all optional visualizations")
 
-    # Get max iterations from user
-    iterations_input = input(f"  Enter max iterations or press Enter for default [{settings.max_enhancement_iterations}]: ").strip()
-    if iterations_input:
-        try:
-            settings.max_enhancement_iterations = int(iterations_input)
-            print(f"  → Using max iterations: {settings.max_enhancement_iterations}")
-        except ValueError:
-            print(f"  ⚠ Invalid input. Using default: {settings.max_enhancement_iterations}")
-            settings.max_enhancement_iterations = settings.max_enhancement_iterations
-    else:
-        settings.max_enhancement_iterations = settings.max_enhancement_iterations
-        print(f"  → Using default max iterations: {settings.max_enhancement_iterations}")
+        while True:
+            viz_choice = input("\n   Select visualization mode (1-3) [1]: ").strip() or "1"
+            if viz_choice in ['1', '2', '3']:
+                break
+            print("   Invalid selection. Please enter 1, 2, or 3.")
+
+        viz_modes = {'1': 'manual', '2': 'none', '3': 'all'}
+        settings.PIPELINE_CONFIG.visualization_mode = viz_modes[viz_choice]
+        print(f"   → Visualization mode: {settings.PIPELINE_CONFIG.visualization_mode.upper()}")
+
+        # B. Grouping Strategy
+        print("\nB. CAPACITY GROUPING STRATEGY")
+        print("   How should capacity grouping decisions be made?")
+        print("   1) Manual       - Prompt for each grouping decision (default)")
+        print("   2) Conservative - Always choose lowest capacity option")
+        print("   3) Baseline     - Always choose middle option (2)")
+        print("   4) Optimal      - Always choose highest capacity option")
+
+        while True:
+            group_choice = input("\n   Select grouping strategy (1-4) [1]: ").strip() or "1"
+            if group_choice in ['1', '2', '3', '4']:
+                break
+            print("   Invalid selection. Please enter 1, 2, 3, or 4.")
+
+        group_modes = {'1': 'manual', '2': 'conservative', '3': 'baseline', '4': 'optimal'}
+        settings.PIPELINE_CONFIG.grouping_strategy = group_modes[group_choice]
+        print(f"   → Grouping strategy: {settings.PIPELINE_CONFIG.grouping_strategy.upper()}")
+
+        # C. Capacity Enhancement Parameters
+        print(f"\nC. Configure capacity enhancement parameters:")
+        print(f"  Default threshold: {settings.capacity_threshold} tphpd")
+        print(f"  Default max iterations: {settings.max_enhancement_iterations}")
+
+        threshold_input = input(f"\n  Enter capacity threshold (tphpd) or press Enter for default [{settings.capacity_threshold}]: ").strip()
+        if threshold_input:
+            try:
+                settings.capacity_threshold = float(threshold_input)
+                print(f"  → Using threshold: {settings.capacity_threshold} tphpd")
+            except ValueError:
+                print(f"  ⚠ Invalid input. Using default: {settings.capacity_threshold} tphpd")
+        else:
+            print(f"  → Using default threshold: {settings.capacity_threshold} tphpd")
+
+        iterations_input = input(f"  Enter max iterations or press Enter for default [{settings.max_enhancement_iterations}]: ").strip()
+        if iterations_input:
+            try:
+                settings.max_enhancement_iterations = int(iterations_input)
+                print(f"  → Using max iterations: {settings.max_enhancement_iterations}")
+            except ValueError:
+                print(f"  ⚠ Invalid input. Using default: {settings.max_enhancement_iterations}")
+        else:
+            print(f"  → Using default max iterations: {settings.max_enhancement_iterations}")
 
 
     print("-" * 80)

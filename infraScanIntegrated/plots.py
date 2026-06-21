@@ -180,69 +180,73 @@ def create_rail_dev_id_lookup_table() -> pd.DataFrame:
     return pd.DataFrame({"dev_id": dev_ids}, index=range(1, len(dev_ids) + 1))
 
 
-def load_rail_od_savings_top(rail_top: list[str]) -> pd.DataFrame:
-    """Load rail OD-level travel time savings using analyze_travel_times."""
-    savings_dir = RAIL_TRAVELTIME_SAVINGS_DIR
-    frames: list[pd.DataFrame] = []
-    available_rail_top = [dev_id for dev_id in rail_top if (savings_dir / f"TravelTime_Savings_Dev_{dev_id}.csv").exists()]
-    if not available_rail_top:
-        return pd.DataFrame(columns=["mode", "development", "scenario", "origin", "destination", "tts_minutes"])
+def load_rail_weighted_tts(rail_top: list[str] | None = None) -> pd.DataFrame:
+    """Load rail demand-weighted annual travel-time savings before monetization."""
+    if not RAIL_TT_SAVINGS_CSV.exists():
+        return pd.DataFrame(columns=["mode", "development", "scenario", "weighted_tts_person_h_per_year"])
 
-    for dev_id in available_rail_top:
-        csv_path = savings_dir / f"TravelTime_Savings_Dev_{dev_id}.csv"
-        df = pd.read_csv(csv_path)
-        df["development"] = str(dev_id)
-        df["mode"] = "Rail"
-        df["scenario"] = "all_selected_scenarios"
-        # In analyze_travel_times, savings are status quo minus development time.
-        df["tts_minutes"] = pd.to_numeric(df["status_quo_time"], errors="coerce") - pd.to_numeric(
-            df["new_time"], errors="coerce"
-        )
-        # For the final comparison plot, keep only affected OD relations.
-        df = df[np.isfinite(df["tts_minutes"]) & (np.abs(df["tts_minutes"]) > 1e-9)].copy()
-        frames.append(df[["mode", "development", "scenario", "origin", "destination", "tts_minutes"]])
-
-    return pd.concat(frames, ignore_index=True)
-
-
-def load_road_od_savings_top(road_top: list[str]) -> pd.DataFrame:
-    """Load road OD-level unweighted travel time savings."""
-    dev_od = pd.read_csv(ROAD_OD_TT_UNWEIGHTED_CSV)
-    sq_od = pd.read_csv(ROAD_OD_TT_STATUS_QUO_CSV)
-
-    dev_od["development"] = dev_od["development"].astype(str).str.replace(r"\.0$", "", regex=True)
-    dev_od["scenario"] = dev_od["scenario"].astype(str)
-    sq_od["scenario"] = sq_od["scenario"].astype(str)
-
-    dev_od = dev_od[
-        dev_od["development"].isin([str(dev) for dev in road_top])
-        & dev_od["scenario"].isin(SCENARIOS)
+    selected_scenarios = _selected_scenarios("Rail")
+    df = pd.read_csv(RAIL_TT_SAVINGS_CSV)
+    df["development"] = df["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+    df["scenario"] = df["scenario"].astype(str)
+    df = df[
+        df["scenario"].isin(selected_scenarios)
+        & (pd.to_numeric(df["year"], errors="coerce") == RAIL_COMPARISON_YEAR)
     ].copy()
-    sq_od = sq_od[sq_od["scenario"].isin(SCENARIOS)].copy()
-
-    merged = dev_od.merge(
-        sq_od[["origin", "destination", "scenario", "travel_time"]],
-        on=["origin", "destination", "scenario"],
-        how="left",
-        suffixes=("_dev", "_sq"),
-    )
-    merged["tts_minutes"] = (
-        pd.to_numeric(merged["travel_time_sq"], errors="coerce")
-        - pd.to_numeric(merged["travel_time_dev"], errors="coerce")
-    ) * 60.0
-    merged = merged[np.isfinite(merged["tts_minutes"]) & (np.abs(merged["tts_minutes"]) > 1e-9)].copy()
-    merged["mode"] = "Road"
-    return merged[["mode", "development", "scenario", "origin", "destination", "tts_minutes"]]
+    if rail_top is not None:
+        df = df[df["development"].isin([str(dev) for dev in rail_top])].copy()
+    df["weighted_tts_person_h_per_year"] = pd.to_numeric(df["tt_savings_daily"], errors="coerce") * 365.0
+    df = df[np.isfinite(df["weighted_tts_person_h_per_year"])].copy()
+    df["mode"] = "Rail"
+    return df[["mode", "development", "scenario", "weighted_tts_person_h_per_year"]]
 
 
-def load_od_level_tts_top(rail_top: list[str], road_top: list[str]) -> pd.DataFrame:
-    """Combine rail OD savings and road OD savings for final boxplot comparison."""
-    rail = load_rail_od_savings_top(rail_top)
-    road = load_road_od_savings_top(road_top)
+def load_road_weighted_tts(road_top: list[str] | None = None) -> pd.DataFrame:
+    """Load road demand-weighted annual travel-time savings before monetization."""
+    df = pd.read_csv(ROAD_TT_DETAILED_CSV)
+    selected_scenarios = _selected_scenarios("Road")
+
+    df["development"] = df["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+    df["scenario"] = df["scenario"].astype(str)
+    df = df[df["scenario"].isin(selected_scenarios)].copy()
+    if road_top is not None:
+        df = df[df["development"].isin([str(dev) for dev in road_top])].copy()
+    df["weighted_tts_person_h_per_year"] = pd.to_numeric(df["tt_savings_peak"], errors="coerce") / 60.0 * 2.5 * 250.0
+    df = df[np.isfinite(df["weighted_tts_person_h_per_year"])].copy()
+    df["mode"] = "Road"
+    return df[["mode", "development", "scenario", "weighted_tts_person_h_per_year"]]
+
+
+def build_weighted_tts_by_scenario(
+    rail_top: list[str] | None = None,
+    road_top: list[str] | None = None,
+) -> pd.DataFrame:
+    """Build the common demand-weighted TTS table used by TTS plots."""
+    rail = load_rail_weighted_tts(rail_top)
+    road = load_road_weighted_tts(road_top)
     frames = [frame for frame in [rail, road] if not frame.empty]
     if not frames:
-        return pd.DataFrame(columns=["mode", "development", "scenario", "tts_minutes"])
-    return pd.concat(frames, ignore_index=True, sort=False)
+        return pd.DataFrame(columns=["mode", "development", "scenario", "weighted_tts_person_h_per_year"])
+    tts = pd.concat(frames, ignore_index=True, sort=False)
+    if ROAD_EXTERNALITY_DETAIL_CSV.exists():
+        link_flows = pd.read_csv(
+            ROAD_EXTERNALITY_DETAIL_CSV,
+            usecols=["development", "link_role", "vkm_development"],
+        )
+        link_flows["development"] = link_flows["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+        link_flows["vkm_development"] = pd.to_numeric(link_flows["vkm_development"], errors="coerce").fillna(0.0)
+        valid_road_developments = set(
+            link_flows.loc[
+                (link_flows["link_role"] == "new_link")
+                & (link_flows["vkm_development"] > 0),
+                "development",
+            ]
+        )
+        tts = tts[
+            tts["mode"].ne("Road")
+            | tts["development"].astype(str).isin(valid_road_developments)
+        ].copy()
+    return tts
 
 
 
@@ -250,14 +254,14 @@ def combined_order(data: pd.DataFrame) -> list[str]:
     """Order developments by mean TTS, rail first then road."""
     rail_order = (
         data[data["mode"] == "Rail"]
-        .groupby("development")["tts_minutes"]
+        .groupby("development")["weighted_tts_person_h_per_year"]
         .mean()
         .sort_values(ascending=False)
         .index.tolist()
     )
     road_order = (
         data[data["mode"] == "Road"]
-        .groupby("development")["tts_minutes"]
+        .groupby("development")["weighted_tts_person_h_per_year"]
         .mean()
         .sort_values(ascending=False)
         .index.tolist()
@@ -274,13 +278,106 @@ def _style_axes(ax):
 
 
 def _load_component_overview(mode: str) -> pd.DataFrame:
-    path = ANALYSIS_DIR / f"{mode.lower()}_component_overview_integrated_vs_standalone.csv"
-    df = pd.read_csv(path)
-    df["development"] = df["development"].astype(str)
-    df["development_label"] = df["development_label"].astype(str)
-    if "plot_order" in df.columns:
-        df["plot_order"] = pd.to_numeric(df["plot_order"], errors="coerce")
+    score_df = pd.read_csv(SCORE_RESULTS_DIR / "score_results_long.csv")
+    score_df = score_df[score_df["mode"] == mode].copy()
+    score_df["development"] = score_df["development"].astype(str)
+
+    integrated = score_df[["development", "score_id", "integrated_value"]].rename(
+        columns={"integrated_value": "value_chf"}
+    )
+    integrated["value_mode"] = "integrated"
+
+    standalone = score_df[["development", "score_id", "standalone_value"]].rename(
+        columns={"standalone_value": "value_chf"}
+    )
+    standalone["value_mode"] = "standalone_annual_proxy"
+
+    df = pd.concat([integrated, standalone], ignore_index=True)
+    df["value_chf"] = pd.to_numeric(df["value_chf"], errors="coerce")
+    df = df.dropna(subset=["value_chf"])
+    df["value_mio_chf"] = df["value_chf"] / 1_000_000.0
+    df = (
+        df.groupby(["development", "score_id", "value_mode"], as_index=False)
+        .agg(value_mio_chf=("value_mio_chf", "mean"))
+    )
+
+    if mode == "Rail":
+        rail_labels = _rail_label_lookup()
+        df["development_label"] = df["development"].map(rail_labels).fillna(df["development"])
+    else:
+        df["development_label"] = df["development"]
+
+    tts_score = "rail_tts_cost" if mode == "Rail" else "road_tts_cost"
+    order = (
+        df[(df["value_mode"] == "integrated") & (df["score_id"] == tts_score)]
+        .sort_values("value_mio_chf", ascending=False)["development"]
+        .drop_duplicates()
+        .tolist()
+    )
+    df["plot_order"] = df["development"].map({dev: idx for idx, dev in enumerate(order)})
     return df
+
+
+def _selected_scenarios(mode: str | None = None) -> list[str]:
+    score_df = pd.read_csv(SCORE_RESULTS_DIR / "score_results_long.csv", usecols=["mode", "scenario"])
+    if mode is not None:
+        score_df = score_df[score_df["mode"] == mode].copy()
+    scenarios = score_df["scenario"].astype(str).drop_duplicates().tolist()
+    return sorted(scenarios, key=lambda value: int(value.split("_")[-1]))
+
+
+def _build_integrated_bcr_top10_by_mode_plot_data(top_n_per_mode: int = 10) -> pd.DataFrame:
+    rows = []
+    for mode in ["Rail", "Road"]:
+        component_df = _load_component_overview(mode)
+        integrated = component_df[component_df["value_mode"] == "integrated"].copy()
+        tts_score = "rail_tts_cost" if mode == "Rail" else "road_tts_cost"
+        integrated["is_tts"] = integrated["score_id"].eq(tts_score)
+        bcr = (
+            integrated.assign(
+                cost_mio=np.where(integrated["is_tts"], 0.0, integrated["value_mio_chf"].abs()),
+                tts_mio=np.where(integrated["is_tts"], integrated["value_mio_chf"], 0.0),
+            )
+            .groupby(["development", "development_label"], as_index=False)
+            .agg(cost_mio=("cost_mio", "sum"), tts_mio=("tts_mio", "sum"))
+        )
+        bcr = bcr[bcr["cost_mio"] > 0].copy()
+        bcr["bcr_mean"] = bcr["tts_mio"] / bcr["cost_mio"]
+        selected = bcr.sort_values("bcr_mean", ascending=False).head(top_n_per_mode).copy()
+        selected["mode"] = mode
+        selected["ranking_label_short"] = selected["development_label"]
+        selected["plot_order"] = np.arange(len(selected))
+
+        plot_df = integrated.drop(columns=["plot_order"], errors="ignore").merge(
+            selected[["mode", "development", "ranking_label_short", "bcr_mean", "plot_order"]],
+            on="development",
+            how="inner",
+        )
+        plot_df["mode"] = mode
+        plot_df["value_mio_chf"] = np.where(
+            plot_df["is_tts"],
+            plot_df["value_mio_chf"],
+            -plot_df["value_mio_chf"].abs(),
+        )
+        rows.append(
+            plot_df[["mode", "development", "ranking_label_short", "bcr_mean", "plot_order", "score_id", "value_mio_chf"]]
+        )
+
+    plot_df = pd.concat(rows, ignore_index=True)
+    mode_offset = plot_df["mode"].map({"Rail": 0, "Road": top_n_per_mode}).fillna(0)
+    plot_df["plot_order"] = plot_df["plot_order"] + mode_offset
+    return plot_df
+
+
+def _build_tts_summary_by_development() -> pd.DataFrame:
+    tts = build_weighted_tts_by_scenario()
+    return (
+        tts.groupby(["mode", "development"], as_index=False)
+        .agg(
+            mean_tts_person_h_per_year=("weighted_tts_person_h_per_year", "mean"),
+            std_tts_person_h_per_year=("weighted_tts_person_h_per_year", "std"),
+        )
+    )
 
 
 def _rail_label_lookup() -> dict[str, str]:
@@ -495,10 +592,10 @@ def plot_mode_standalone_vs_integrated(mode: str, output_path: Path, max_develop
 
 def plot_integrated_bcr_top10_by_mode(
     output_path: Path,
-    top_n_per_mode: int = 10,
+    top_n_per_mode: int = 5,
     font_size: int = 9,
 ) -> None:
-    plot_df = pd.read_csv(ANALYSIS_DIR / "integrated_bcr_top10_by_mode_plot_data.csv")
+    plot_df = _build_integrated_bcr_top10_by_mode_plot_data(top_n_per_mode)
     plot_df["development"] = plot_df["development"].astype(str)
     rail_labels = _rail_label_lookup()
     plot_df["ranking_label_short"] = np.where(
@@ -514,9 +611,7 @@ def plot_integrated_bcr_top10_by_mode(
         .head(top_n_per_mode)
         .copy()
     )
-    mode_order = {"Rail": 0, "Road": 1}
-    ordered_selection["mode_sort"] = ordered_selection["mode"].map(mode_order).fillna(len(mode_order))
-    ordered_selection = ordered_selection.sort_values(["mode_sort", "bcr_mean", "plot_order"], ascending=[True, False, True])
+    ordered_selection = ordered_selection.sort_values(["bcr_mean", "plot_order"], ascending=[False, True])
     ordered_selection["plot_order"] = np.arange(len(ordered_selection))
     plot_df = (
         plot_df.merge(
@@ -595,33 +690,27 @@ def plot_integrated_bcr_top10_by_mode(
 
 
 def plot_weighted_tts_mean_std(output_path: Path) -> None:
-    df = pd.read_csv(ANALYSIS_DIR / "tts_summary_by_development.csv")
+    df = _build_tts_summary_by_development()
     rail_labels = _rail_label_lookup()
     fig, axes = plt.subplots(1, 2, figsize=(20, 18), sharex=False)
 
     road_all = df[df["mode"] == "Road"].copy()
     rail_all = df[df["mode"] == "Rail"].copy()
-    road_all["mean_hours"] = road_all["mean_tts_minutes"] / 60.0
-    road_all["std_hours"] = road_all["std_tts_minutes"] / 60.0
-    rail_all["mean_hours"] = rail_all["mean_tts_minutes"] / 60.0
-    rail_all["std_hours"] = rail_all["std_tts_minutes"] / 60.0
     shared_positive_xmax = max(
-        float((road_all["mean_hours"] + road_all["std_hours"].fillna(0.0)).max()) if not road_all.empty else 0.0,
-        float((rail_all["mean_hours"] + rail_all["std_hours"].fillna(0.0)).max()) if not rail_all.empty else 0.0,
+        float((road_all["mean_tts_person_h_per_year"] + road_all["std_tts_person_h_per_year"].fillna(0.0)).max()) if not road_all.empty else 0.0,
+        float((rail_all["mean_tts_person_h_per_year"] + rail_all["std_tts_person_h_per_year"].fillna(0.0)).max()) if not rail_all.empty else 0.0,
     )
     shared_positive_xmax = max(shared_positive_xmax * 1.05, 1.0)
 
     for ax, mode in zip(axes, ["Road", "Rail"]):
         sub = df[df["mode"] == mode].copy()
-        sub["mean_hours"] = sub["mean_tts_minutes"] / 60.0
-        sub["std_hours"] = sub["std_tts_minutes"] / 60.0
-        sub = sub.sort_values("mean_hours", ascending=False).reset_index(drop=True)
+        sub = sub.sort_values("mean_tts_person_h_per_year", ascending=False).reset_index(drop=True)
         y = np.arange(len(sub))
-        lower = sub["mean_hours"] - sub["std_hours"].fillna(0.0)
-        upper = sub["mean_hours"] + sub["std_hours"].fillna(0.0)
+        lower = sub["mean_tts_person_h_per_year"] - sub["std_tts_person_h_per_year"].fillna(0.0)
+        upper = sub["mean_tts_person_h_per_year"] + sub["std_tts_person_h_per_year"].fillna(0.0)
         ax.hlines(y, lower, upper,
                   color="#8EC5E8", linewidth=2)
-        ax.scatter(sub["mean_hours"], y, color="#0E5A9C", s=24, zorder=3)
+        ax.scatter(sub["mean_tts_person_h_per_year"], y, color="#0E5A9C", s=24, zorder=3)
         ax.axvline(0, color="black", linestyle="--", linewidth=0.9)
         xmin = float(lower.min()) if not sub.empty else 0.0
         pad = max(shared_positive_xmax * 0.05, 1.0)
@@ -633,7 +722,7 @@ def plot_weighted_tts_mean_std(output_path: Path) -> None:
             ylabels = sub["development"].astype(str).tolist()
         ax.set_yticklabels(ylabels, fontsize=7 if mode == "Road" else 8)
         ax.invert_yaxis()
-        ax.set_xlabel("Travel time savings [hours]")
+        ax.set_xlabel("Demand-weighted travel time savings [person-h/year]")
         ax.set_ylabel("Development ID")
         ax.set_title(f"{mode}: mean TTS with standard deviation across scenarios")
         ax.grid(axis="x", alpha=0.25)
@@ -1403,19 +1492,17 @@ def plot_all_road_final_cost_savings(output_dir: Path) -> None:
 def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
     """
     Final cross-mode TTS boxplot:
-    - Rail: affected OD savings
-    - Road: affected OD savings
+    - Rail: demand-weighted annual TTS before monetization
+    - Road: demand-weighted annual TTS before monetization
     """
     if output_dir is None:
         output_dir = GENERATED_PLOTS_DIR
     output_path = Path(output_dir) / "combined_top5_tts_boxplot.png"
     
     selection_df = (
-        pd.read_csv(ANALYSIS_DIR / "integrated_bcr_top10_by_mode_plot_data.csv")[
-            ["mode", "development", "plot_order", "ranking_label_short"]
-        ]
+        _build_integrated_bcr_top10_by_mode_plot_data(5)[["mode", "development", "plot_order", "ranking_label_short", "bcr_mean"]]
         .drop_duplicates()
-        .sort_values("plot_order")
+        .sort_values("bcr_mean", ascending=False)
     )
     selection_df["development"] = selection_df["development"].astype(str)
     rail_top = selection_df.loc[selection_df["mode"] == "Rail", "development"].tolist()
@@ -1426,12 +1513,11 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
     }
     
     
-    # Load unweighted TTS distributions (rail OD relations, road OD relations).
-    data = load_od_level_tts_top(rail_top, road_top).copy() 
+    data = build_weighted_tts_by_scenario(rail_top, road_top).copy()
     if data.empty:
         return output_path
     data["label"] = data["mode"] + " " + data["development"].astype(str)
-    order = [f"Rail {dev}" for dev in rail_top] + [f"Road {dev}" for dev in road_top]
+    order = [f"{row.mode} {row.development}" for row in selection_df.itertuples(index=False)]
     order = [label for label in order if label in set(data["label"])]
     palette = {label: "#fff3b0" if label.startswith("Rail") else "#e09f3e" for label in order}
 
@@ -1440,7 +1526,7 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
     sns.boxplot(
         data=data,
         x="label",
-        y="tts_minutes",
+        y="weighted_tts_person_h_per_year",
         order=order,
         palette=palette,
         linewidth=0.9,
@@ -1450,21 +1536,17 @@ def plot_final_tts_boxplot_top5(output_dir: Path | None = None) -> Path:
         ax=ax,
     )
 
-    ax.axvline(x=len(rail_top) - 0.5, color="black", linestyle="-", alpha=0.7, linewidth=0.5)
     ax.axhline(y=ax.get_ylim()[0], color="0.7", linestyle="--", alpha=0.7)
     ax.set_xticks(np.arange(len(order)))
     ax.set_xticklabels([display_labels.get(label, label.split(" ", 1)[1]) for label in order], rotation=90)
-    ax.set_title("Distribution of unweighted travel time savings for developments selected in the integrated BCR ranking", fontsize=14, pad=20)
+    ax.set_title("Distribution of demand-weighted travel time savings for developments selected in the integrated BCR ranking", fontsize=14, pad=20)
     ax.set_xlabel("Development ID", fontsize=10, labelpad=20)
-    ax.set_ylabel("Travel time savings [minutes]", fontsize=10)
+    ax.set_ylabel("Demand-weighted travel time savings [person-h/year]", fontsize=10)
     ax.grid(axis="y", linestyle="--", alpha=0.7)
 
-    ax.text((len(rail_top) - 1) / 2, ax.get_ylim()[1] + 0.1, "Rail top 10", ha="center", va="top", fontsize=11)
-    ax.text(len(rail_top) + (len(road_top) - 1) / 2, ax.get_ylim()[1] + 0.1, "Road top 10", ha="center", va="top", fontsize=11)
-
     handles = [
-        mpatches.Patch(color="#fff3b0", label="Rail affected OD relations"),
-        mpatches.Patch(color="#e09f3e", label="Road affected OD relations"),
+        mpatches.Patch(color="#fff3b0", label="Rail selected scenarios"),
+        mpatches.Patch(color="#e09f3e", label="Road selected scenarios"),
     ]
     ax.legend(handles=handles, bbox_to_anchor=(1.01, 1), loc="upper left", frameon=False, fontsize=8)
 
@@ -1502,7 +1584,8 @@ def main() -> None:
         output_path=GENERATED_PLOTS_DIR / "rail_stacked_integrated_vs_standalone_annual.png",
     )
     plot_integrated_bcr_top10_by_mode(
-        output_path=GENERATED_PLOTS_DIR / "integrated_bcr_top10_by_mode_stacked.png",
+        output_path=GENERATED_PLOTS_DIR / "integrated_bcr_top5_by_mode_stacked.png",
+        top_n_per_mode=5,
     )
     plot_weighted_tts_mean_std(
         output_path=GENERATED_PLOTS_DIR / "weighted_tts_mean_std_by_mode.png",

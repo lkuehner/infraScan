@@ -11,6 +11,7 @@ what is the default
 import warnings
 
 from infraScan.infraScanIntegrated import pipeline_integrated as integrated_pipeline
+from infraScan.infraScanIntegrated import paths as integrated_paths
 from infraScan.infraScanIntegrated import settings as integrated_settings
 
 from infraScan.infraScanRail import cost_parameters as rail_cost_parameters
@@ -20,6 +21,47 @@ from infraScan.infraScanRail.main_pipeline import infrascanrail_cap
 from infraScan.infraScanRoad import cost_parameters as road_cost_parameters
 from infraScan.infraScanRoad import settings as road_settings
 from infraScan.infraScanRoad.main_pipeline import infrascanroad
+
+
+def write_standalone_run_report(run_mode):
+    if run_mode == "legacy_rail":
+        report_path = integrated_paths.RAIL_STANDALONE_RUN_REPORT_PATH
+        title = "INFRASCANRAIL STANDALONE RUN REPORT"
+        settings_rows = [
+            ("Run mode", "rail_standalone"),
+            ("Valuation year", rail_settings.start_valuation_year),
+            ("Appraisal period [years]", rail_cost_parameters.duration),
+            ("Discount rate", f"{rail_cost_parameters.discount_rate:.2%}"),
+            ("Scenario mode", rail_settings.scenario_type),
+            ("VTTS [CHF/h]", rail_cost_parameters.VTTS),
+        ]
+    elif run_mode == "legacy_road":
+        report_path = integrated_paths.ROAD_STANDALONE_RUN_REPORT_PATH
+        title = "INFRASCANROAD STANDALONE RUN REPORT"
+        settings_rows = [
+            ("Run mode", "road_standalone"),
+            ("Valuation year", road_settings.start_valuation_year),
+            ("Appraisal period [years]", road_cost_parameters.duration),
+            ("Discount rate", "not applied in road standalone static model"),
+            ("Scenario mode", road_settings.scenario_type),
+            ("Travel time method", road_settings.travel_time_savings_method),
+            ("VTTS [CHF/h]", road_cost_parameters.VTTS),
+        ]
+    else:
+        return None
+
+    with open(report_path, "w") as file:
+        file.write("=" * 80 + "\n")
+        file.write(title + "\n")
+        file.write("=" * 80 + "\n\n")
+        file.write("SETTINGS\n")
+        file.write("-" * 80 + "\n")
+        for label, value in settings_rows:
+            file.write(f"{label:.<40} {value}\n")
+        file.write("=" * 80 + "\n")
+
+    print(f"Standalone run report saved to: {report_path}")
+    return report_path
 
 
 def configure_integrated_run():
@@ -73,13 +115,19 @@ def run_legacy_mode():
         print("LEGACY RAIL MODE")
         print(f"Using rail settings.py defaults with valuation year {rail_settings.start_valuation_year}.")
         print(f"Appraisal period: {rail_cost_parameters.duration} years; discount rate: {rail_cost_parameters.discount_rate:.0%}.")
-        return infrascanrail_cap()
+        integrated_pipeline.sync_integrated_shared_settings()
+        integrated_pipeline.apply_integrated_overrides_to_rail()
+        result = infrascanrail_cap()
+        write_standalone_run_report("legacy_rail")
+        return result
 
     if integrated_settings.RUN_MODE == "legacy_road":
         print("LEGACY ROAD MODE")
         print(f"Using road settings.py defaults with valuation year {road_settings.start_valuation_year}.")
         print(f"Appraisal period: {road_cost_parameters.duration} years.")
-        return infrascanroad()
+        result = infrascanroad()
+        write_standalone_run_report("legacy_road")
+        return result
 
     return None
 
@@ -90,6 +138,12 @@ def infrascan_integrated():
 
     if integrated_settings.RUN_MODE in ("legacy_rail", "legacy_road"):
         return run_legacy_mode()
+
+    if integrated_settings.scenario_type != "GENERATED":
+        raise ValueError(
+            "Integrated mode only supports GENERATED scenarios. "
+            "Use legacy rail or legacy road mode for specific scenarios."
+        )
 
     return integrated_pipeline.run_integrated_pipeline()
 

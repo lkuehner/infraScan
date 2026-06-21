@@ -11,6 +11,8 @@ from scipy.stats import norm, qmc
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from infraScan.infraScanRoad import data_import as road_data_import
+from infraScan.infraScanRoad import settings as road_settings
 from infraScan.infraScanRoad.scoring import GetCommuneShapes
 from . import paths as integrated_paths
 from . import settings as integrated_settings
@@ -1681,6 +1683,7 @@ def generate_and_apply_shared_scenarios(
     run_road: bool = True,
     run_rail: bool = True,
     apply_selection_to_modes: bool = True,
+    road_limits_variables=None,
     do_plot: bool = False,
 ) -> Dict[str, Any]:
     data_root = integrated_paths.MAIN
@@ -1720,8 +1723,11 @@ def generate_and_apply_shared_scenarios(
 
             road_settings.travel_time_debug_enabled = True
             road_settings.travel_time_debug_scenarios = selected
+            road_settings.generated_selected_scenarios = selected
 
         if run_road:
+            if road_limits_variables is not None:
+                road_data_import.import_population_and_employment_rasters(road_limits_variables)
             materialize_road_scenarios(
                 start_year=start_year,
                 end_year=end_year,

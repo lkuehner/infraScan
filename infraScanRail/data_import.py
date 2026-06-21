@@ -17,6 +17,7 @@ def import_cities():
     """
     # Read csv file into pandas DataFrame
     df_cities = pd.read_csv("data/manually_gathered_data/City_map.csv", sep=";")
+    df_cities = df_cities.loc[:, ~df_cities.columns.str.startswith("Unnamed")]
 
     # Convert single values into coordinates of geopandas DataFrame and initialize the coordinate reference system
     gdf_cities = gpd.GeoDataFrame(df_cities, geometry=gpd.points_from_xy(df_cities["x"], df_cities["y"]),

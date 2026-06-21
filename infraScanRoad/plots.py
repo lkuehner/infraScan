@@ -23,6 +23,14 @@ from matplotlib.patches import FancyArrowPatch
 import math
 import matplotlib.lines as mlines
 
+from . import settings
+
+
+def _plot_path(*parts):
+    path = os.path.join(settings.PLOT_DIRECTORY, *parts)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
 
 def _safe_interpolate_grid(points, values, grid_x, grid_y):
     unique_points = np.unique(points, axis=0)
@@ -169,7 +177,7 @@ class CustomBasemap:
         gdf_voronoi["ID"] = gdf_voronoi["ID"].astype(int)
         #print(gdf_voronoi[gdf_voronoi["ID"] == id].head(9).to_string())
         gdf_voronoi[gdf_voronoi["ID"] == id].plot(ax=self.ax, edgecolor='red', facecolor='none' , lw=2)
-        plt.savefig(f"plots/Voronoi/developments/dev_{id}.png", dpi=400)
+        plt.savefig(_plot_path("Voronoi", "developments", f"dev_{id}.png"), dpi=400)
 
 
 def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=None, access_points=None, plot_name=False, col="total_medium"):
@@ -306,7 +314,7 @@ def plot_cost_result(df_costs, banned_area, title_bar, boundary=None, network=No
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=300)
 
     plt.show()
     return
@@ -440,7 +448,7 @@ def plot_single_cost_result(df_costs, banned_area , title_bar, boundary=None, ne
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=300)
 
     plt.show()
     return
@@ -619,7 +627,7 @@ def plot_cost_uncertainty(df_costs, banned_area, col, legend_title, boundary=Non
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=300)
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=300)
 
     plt.show()
     return
@@ -685,7 +693,7 @@ def plot_benefit_distribution_bar_single(df_costs, column):
     plt.tight_layout()
 
     # Safe figure
-    plt.savefig("plots/results/benefit_distribution.png", dpi=500)
+    plt.savefig(_plot_path("results", "benefit_distribution.png"), dpi=500)
 
     # Show the plot
     plt.show()
@@ -773,7 +781,7 @@ def plot_benefit_distribution_line_multi(df_costs, columns, labels, plot_name, l
     plt.grid(axis='y', linestyle='--', alpha=0.7, zorder=1)
 
     plt.tight_layout()
-    plt.savefig(fr"plots/results/04_distribution_line_{plot_name}.png", dpi=500)
+    plt.savefig(_plot_path("results", f"04_distribution_line_{plot_name}.png"), dpi=500)
     plt.show()
 
 
@@ -876,7 +884,7 @@ def boxplot(df, nbr):
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
     plt.tight_layout()
-    plt.savefig("plots/results/04_boxplot.png", dpi=500)
+    plt.savefig(_plot_path("results", "04_boxplot.png"), dpi=500)
     plt.show()
 
 
@@ -932,7 +940,7 @@ def plot_2x3_subplots(gdf, limits, network, location):
                   horizontalalignment='center', verticalalignment='center')
 
     # Show the plot
-    plt.savefig("plots/scenarios/5_all_scen.png", dpi=450, bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(_plot_path("scenarios", "5_all_scen.png"), dpi=450, bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
 
@@ -1030,7 +1038,7 @@ def plot_points_gen(points, edges, banned_area, points_2=None, boundary=None, ne
     plt.tight_layout()
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500, bbox_inches='tight')
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=500, bbox_inches='tight')
 
     plt.show()
     return
@@ -1108,7 +1116,7 @@ def plot_voronoi_comp(eucledian, traveltime, boundary=None, network=None, access
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500)
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=500)
 
     plt.show()
     return
@@ -1194,7 +1202,7 @@ def plot_voronoi_development(statusquo, development_voronoi, development_point, 
 
     if plot_name != False:
         plt.tight_layout()
-        plt.savefig(fr"plots/results/04_{plot_name}.png", dpi=500)
+        plt.savefig(_plot_path("results", f"04_{plot_name}.png"), dpi=500)
 
     plt.show()
     return

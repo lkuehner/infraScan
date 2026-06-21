@@ -79,7 +79,7 @@ def create_graphs_from_directories(directories, n_jobs=16):
 
     def process_file(directory):
         try:
-            print(f"Processing: {directory}...")
+            # print(f"Processing: {directory}...")
             # Read the file into a DataFrame
             if directory.endswith('.gpkg'):
                 df = gpd.read_file(directory)
@@ -95,7 +95,7 @@ def create_graphs_from_directories(directories, n_jobs=16):
 
             # Create the graph
             graph = create_directed_graph(df, cp.comfort_weighted_change_time)
-            print(f"Graph created for {directory}: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges.")
+            # print(f"Graph created for {directory}: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges.")
             return graph
         except Exception as e:
             print(f"Error processing file {directory}: {e}")

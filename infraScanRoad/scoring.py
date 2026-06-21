@@ -51,6 +51,23 @@ def _get_valid_construction_development_ids():
     return set(construction.loc[valid, "ID_new"].astype(int))
 
 
+def _get_valid_flow_development_ids():
+    # TODO: Check whether zero new-link flow comes from routing/connectivity.
+    path = "data/infraScanRoad/traffic_flow/link_flow_externalities/link_flow_externalities_long.csv"
+    if not os.path.exists(path):
+        return None
+
+    detail = pd.read_csv(path, usecols=["development", "link_role", "flow_development"])
+    new_links = detail[detail["link_role"] == "new_link"].copy()
+    if new_links.empty:
+        return None
+
+    new_links["development"] = pd.to_numeric(new_links["development"], errors="coerce")
+    new_links["flow_development"] = pd.to_numeric(new_links["flow_development"], errors="coerce").fillna(0.0)
+    flow_by_development = new_links.groupby("development")["flow_development"].sum()
+    return set(flow_by_development[flow_by_development > 0].index.dropna().astype(int))
+
+
 
 def import_elevation_model_old():
     # Replace with your actual file path list
@@ -207,7 +224,7 @@ def maintenance_costs(duration, highway, tunnel, bridge, structural):
 
     # Store the modified GeoDataFrame
     generated_links_gdf.to_file(r"data/infraScanRoad/costs/maintenance.gpkg", driver='GPKG')
-    print(generated_links_gdf.head(10).to_string())
+    # print(generated_links_gdf.head(10).to_string())
     return
 
 
@@ -256,7 +273,7 @@ def rail_crossing(links):
 
 def land_tb_reallocated(links, buffer_distance):
     zones = gpd.read_file("data/landuse_landcover/processed/partly_protected.gpkg")
-    print("Zones", zones.name.unique())
+    # print("Zones", zones.name.unique())
 
     buffer = links.copy()
     # Create a buffer around each line
@@ -962,6 +979,12 @@ def aggregate_costs():
     # Add noise costs
     total_costs = total_costs.merge(c_noise.drop("geometry", axis=1), how='inner', on='ID_new')
 
+    valid_flow_developments = _get_valid_flow_development_ids()
+    if valid_flow_developments is not None:
+        total_costs = total_costs[
+            total_costs["ID_new"].astype(int).isin(valid_flow_developments)
+        ].copy()
+
     tt_columns = [col for col in total_costs.columns if col.startswith("tt_")]
 
     base_columns = ['ID_new', 'cost_path', 'cost_bridge', 'cost_tunnel', 'cost_ramp', 'building_costs'] + local_columns + [
@@ -985,7 +1008,7 @@ def aggregate_costs():
 
     # Sum externality costs
     # total_costs["externalities"] = total_costs['climate_cost'] + total_costs['land_realloc'] + total_costs['nature']
-    print(total_costs.head(10).to_string())
+    # print(total_costs.head(10).to_string())
     # Compute net benefit for each development.
     # Local accessibility is only added back in the legacy aggregate STATIC path.
     if settings.scenario_type == "STATIC" and {"tt_low", "tt_medium", "tt_high"}.issubset(set(tt_columns)):

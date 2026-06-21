@@ -7,12 +7,13 @@ rail_network = 'AK_2035'
 
 #CACHE
 use_cache_network = False #Phase 3.1: Baseline network (current + AK2035)
-use_cache_pt_catchment = True #Phase 2.2: Public transport catchment areas (OD matrix)
+use_cache_pt_catchment = False #Phase 2.2: Public transport catchment areas (OD matrix)
 use_cache_developments = False #Phase 4.1: Infrastructure developments (new networks)
-use_cache_catchmentOD = True #Phase 5
-use_cache_stationsOD = True #Phase 5
+use_cache_capacity_analysis = False #Phase 4.2: Development capacity analysis
+use_cache_catchmentOD = False #Phase 5
+use_cache_stationsOD = False #Phase 5
 use_cache_traveltime_graph = False #Phase 6: travel time graph with developments
-use_cache_scenarios = True #Phase 8: Scenario generation (OD matrices for generated scenarios)
+use_cache_scenarios = False #Phase 8: Scenario generation (OD matrices for generated scenarios)
 use_cache_tts_calc = False #Phase 9: Travel time savings calculation
 
 # Infrastructure generation modules: Choose either 'EXTEND_LINES', 'NEW_DIRECT_CONNECTIONS' or 'ALL'
@@ -71,6 +72,11 @@ visualize_capacity_analysis = True  # Create plots during capacity analysis
 # Phase 3.3: Baseline Enhancement
 max_enhancement_iterations = 10  # Max Phase 4 enhancement iterations
 
+# Automated runs can set these to avoid stdin prompts. Defaults keep standalone
+# rail runs interactive.
+use_existing_capacity_prep = False
+intervention_costs_reviewed = False
+
 # Internal (set dynamically in Phase 3.3)
 baseline_network_for_developments = None  # Will be set to enhanced network label (e.g., "2024_extended_enhanced")
 
@@ -119,7 +125,7 @@ class PipelineConfig:
         """
         if self.grouping_strategy == 'manual':
             # Use original input
-            return self._original_input(prompt)
+            return self._original_input(prompt) if self._original_input else input(prompt)
         
         # Detect available choices from prompt
         # Look for patterns like "(1-2)" or "(1-3)" in the prompt      
@@ -146,7 +152,7 @@ class PipelineConfig:
             print(prompt + f"{choice}  [AUTO-SELECTED: Optimal]")
         else:
             # Fallback to manual
-            return self._original_input(prompt)
+            return self._original_input(prompt) if self._original_input else input(prompt)
         
         return choice
 

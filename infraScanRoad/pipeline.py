@@ -17,6 +17,7 @@ from .traveltime_delay import *
 from .voronoi_tiling import *
 from . import settings
 from . import cost_parameters
+from . import externalities_comp
 
 # ==================================================================================
 # PIPELIINE SETTINGS
@@ -49,6 +50,11 @@ TRAVEL_TIME_SAVINGS_PIPELINES = {
 
 CHECKPOINT_DIR = settings.CHECKPOINT_DIR
 USE_CHECKPOINTS = True
+PHASE_LOG_PREFIX = ""
+
+
+def _phase_title(title):
+    return f"{PHASE_LOG_PREFIX} {title}" if PHASE_LOG_PREFIX else title
 
 def _phase_label_for_checkpoint(name):
     if name.startswith("od_matrices_"):
@@ -145,7 +151,7 @@ def phase_1_initialization(runtimes):
     """
 
     print("\n" + "="*80)
-    print("PHASE 1: INITIALIZE VARIABLES")
+    print(_phase_title("PHASE 1: INITIALIZE VARIABLES"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -176,22 +182,23 @@ def phase_2_data_import(limits_corridor,runtimes):
     Import raw geographic data (lakes, cities).
     """
     print("\n" + "="*80)
-    print("PHASE 2: DATA IMPORT")
+    print(_phase_title("PHASE 2: DATA IMPORT"))
     print("="*80 + "\n")
     st = time.time()
+    print(f"  Corridor extent: {limits_corridor}")
 
     # import pop and empl rasters of the corridor
-    import_population_and_employment_rasters(limits=limits_corridor)
+    raster_outputs = import_population_and_employment_rasters(limits=limits_corridor)
 
     # Import shapes of lake for plots
-    get_lake_data()
+    lake_output = get_lake_data()
 
     # Import the file containing the locations to be ploted
-    import_locations()
+    locations_output = import_locations()
 
     # Define area that is protected for constructing highway links
     if not checkpoint_exists("import_raw_data_corridor"):
-        get_protected_area(limits=limits_corridor, suffix="corridor")
+        protected_area_outputs = get_protected_area(limits=limits_corridor, suffix="corridor")
         get_unproductive_area(limits=limits_corridor, suffix="corridor")
         landuse(limits=limits_corridor, suffix="corridor")
         save_checkpoint("import_raw_data_corridor")
@@ -206,6 +213,7 @@ def phase_2_data_import(limits_corridor,runtimes):
     else:
         print("  [CHECKPOINT] Skipping: protected_area_corridor")
 
+    print("  Land cover data prepared")
     runtimes["Import land use and land cover data"] = time.time() - st
 
 
@@ -218,7 +226,7 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
     """
 
     print("\n" + "="*80)
-    print("PHASE 3: INFRASTRUCTURE DEVELOPMENTS")
+    print(_phase_title("PHASE 3: INFRASTRUCTURE DEVELOPMENTS"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -276,6 +284,10 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
         # Add specific elements to the network
         required_manipulations_on_network()
 
+        processed_edges = gpd.read_file("data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
+        processed_points = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
+        print(f"  Network prepared: {len(processed_edges)} edges, {len(processed_points)} corridor points")
+
         save_checkpoint("preprocess_network")
     else:
         print("  [CHECKPOINT] Skipping: preprocess_network")
@@ -331,7 +343,7 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
         get_voronoi_status_quo()
         limits_variables = get_voronoi_all_developments()
         limits_variables = [2680600, 1227700, 2724300, 1265600]
-        print(limits_variables)
+        print(f"  Scenario variable extent: {limits_variables}")
 
         save_data_checkpoint("generate_infrastructure", {"limits_variables": limits_variables})
     else:
@@ -341,6 +353,10 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
     generated_points = gpd.read_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
     current_points = gpd.read_file("data/infraScanRoad/Network/processed/points_corridor_attribute.gpkg")
     current_access_points = current_points.loc[current_points["intersection"] == 0]
+    print(
+        "  Infrastructure developments prepared: "
+        f"{len(generated_points)} generated nodes, {len(current_access_points)} current access points"
+    )
 
     runtimes["Generate infrastructure developments"] = time.time() - st
 
@@ -350,19 +366,14 @@ def phase_3_infrastructure_developments(innerboundary, outerboundary, runtimes):
 
 def phase_4_scenario_generation(limits_variables, runtimes):
     print("\n" + "="*80)
-    print("PHASE 4: SCENARIO GENERATION")
+    print(_phase_title("PHASE 4: SCENARIO GENERATION"))
     print("="*80 + "\n")
     st = time.time()
 
 
-    # Import the raw data, reshape it partially and store it as tif
-    # TIFs are stored via Road settings as corridor rasters pop23 and empl23.
-    # File name indicates population (pop) and employment (empl), the year (20), and the extent swisswide (_ch) or only for corridor (no suffix)
-    if not checkpoint_exists("import_scenario_variables"):
-        import_data(limits_variables)
-        save_checkpoint("import_scenario_variables")
-    else:
-        print("  [CHECKPOINT] Skipping: import_scenario_variables")
+    # Rewrite pop23/empl23 on the scenario extent so generated OD rasters share
+    # the same grid as source_id_raster.tif.
+    import_population_and_employment_rasters(limits_variables)
 
     runtimes["Import variable for scenario (population and employment)"] = time.time() - st
     st = time.time()
@@ -416,7 +427,7 @@ def phase_4_scenario_generation(limits_variables, runtimes):
 
 def phase_5_costs_and_accesibility(limits_variables, runtimes):
     print("\n" + "="*80)
-    print("PHASE 5: COSTS AND ACCESSIBILITY")
+    print(_phase_title("PHASE 5: COSTS AND ACCESSIBILITY"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -604,7 +615,7 @@ def phase_5_costs_and_accesibility(limits_variables, runtimes):
 
 def phase_6_travel_time_savings(runtimes):
     print("\n" + "="*80)
-    print("PHASE 6: TRAVEL TIME SAVINGS")
+    print(_phase_title("PHASE 6: TRAVEL TIME SAVINGS"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -759,13 +770,16 @@ def phase_6_travel_time_savings(runtimes):
     else:
         print(f"  [CHECKPOINT] Skipping: {monetization_checkpoint}")
 
+    if method == "od":
+        externalities_comp.build_link_flow_externalities()
+
     runtimes["Compute travel time savings"] = time.time() - st
     return 
  
 
 def phase_7_aggregation(runtimes):
     print("\n" + "="*80)
-    print("PHASE 7: COST-BENEFIT INTEGRATION")
+    print(_phase_title("PHASE 7: COST-BENEFIT INTEGRATION"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -802,7 +816,7 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
                           boundary_plot,current_access_points, gdf_costs, 
                           runtimes):
     print("\n" + "="*80)
-    print("PHASE 8: VISUALIZATION")
+    print(_phase_title("PHASE 8: VISUALIZATION"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -811,7 +825,7 @@ def phase_8_visualization(voronoi_tt, innerboundary, network,
 
     links_beeline = gpd.read_file(r"data/infraScanRoad/Network/processed/new_links.gpkg")
     links_realistic = gpd.read_file(r"data/infraScanRoad/Network/processed/new_links_realistic.gpkg")
-    print(links_realistic.head(5).to_string())
+    #print(links_realistic.head(5).to_string())
 
     # Plot the net benefits for each generated point and interpolate the area in between
     generated_points = gpd.read_file(r"data/infraScanRoad/Network/processed/generated_nodes.gpkg")

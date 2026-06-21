@@ -375,12 +375,12 @@ def create_network_foreach_dev():
         # Save to the specified directory, naming the file after dev_id
         output_gpkg = os.path.join(output_directory, f"{dev_id}.gpkg")
         combined_gdf_new.to_file(output_gpkg, driver="GPKG")
-        print(f"Saved: {output_gpkg}")
+        #print(f"Saved: {output_gpkg}")
 
     # Process all groups in parallel
     Parallel(n_jobs=-1)(delayed(process_group)(dev_id_group) for dev_id_group in grouped_new_dev_rows)
 
-    print("Processing complete.")
+    print(f"Development network files prepared: {len(grouped_new_dev_rows)}")
 
 def update_stations(combined_gdf, output_path):
     """

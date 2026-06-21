@@ -92,8 +92,9 @@ def generated_access_points(extent,number):
 
 def filter_access_points(gdf):
     newgdf = gdf.copy()
-    print("All")
-    print(len(newgdf))
+    initial_count = len(newgdf)
+    #print("All")
+    #print(len(newgdf))
     # idx = list(np.zeros(N))
     """
     print("Lake")
@@ -126,12 +127,12 @@ def filter_access_points(gdf):
     print(len(newgdf))
     """
 
-    print("Schutzanordnung Natur und Landschaft")
+    #print("Schutzanordnung Natur und Landschaft")
     idx = get_idx_todrop(newgdf,"data/landuse_landcover/Schutzzonen/Canton_ZH/Schutzanordnungen_Natur_und_Landschaft/Schutzanordnungen_Natur_und_Landschaft_-SAO-_-OGD.gdb")
     newgdf.loc[:, "index"] = idx
     keepidx = newgdf['index'] == 0  # 1 is the value of the columns that should be dropped
     newgdf = newgdf.loc[keepidx, :].copy()
-    print(len(newgdf))
+    #print(len(newgdf))
     """
     print("Naturschutzobjekte")
     idx = get_idx_todrop(newgdf, "data/landuse_landcover/Schutzzonen/Inventar_der_Natur-_und_Landsch...uberkommunaler_Bedeutung_-OGD/INV80_NATURSCHUTZOBJEKTE_F.shp")
@@ -146,12 +147,12 @@ def filter_access_points(gdf):
     print(len(newgdf))
     """
 
-    print("Forest")
+    #print("Forest")
     idx = get_idx_todrop(newgdf,"data/landuse_landcover/Schutzzonen/Canton_ZH/Wald/Waldareal_-OGD/Waldareal_-OGD.gdb")
     newgdf.loc[:, "index"] = idx
     keepidx = newgdf['index'] == 0 # 1 is the value of the columns that should be dropped
     newgdf = newgdf.loc[keepidx,:]
-    print(len(newgdf))
+    #print(len(newgdf))
 
     ###########################################################################3
     """
@@ -163,7 +164,7 @@ def filter_access_points(gdf):
     print(len(newgdf))
     """
 
-    print("Network buffer")
+    #print("Network buffer")
     network_gdf = gpd.read_file("data/infraScanRoad/Network/processed/edges.gpkg")
     network_gdf['geometry'] = network_gdf['geometry'].buffer(1000)
     network_gdf.to_file("data/infraScanRoad/temp/buffered_network.gpkg")
@@ -172,7 +173,7 @@ def filter_access_points(gdf):
     newgdf.loc[:, "index"] = idx
     keepidx = newgdf['index'] == 0 # 1 is the value of the columns that should be dropped
     newgdf = newgdf.loc[keepidx,:]
-    print(len(newgdf))
+    #print(len(newgdf))
     """
     print("Residential area")
     idx = get_idx_todrop(newgdf,"data/landuse_landcover/landcover/Quartieranalyse_-OGD/QUARTIERE_F.shp")
@@ -182,7 +183,7 @@ def filter_access_points(gdf):
     print(len(newgdf))
     """
 
-    print("Protected zones")
+    #print("Protected zones")
     # List to store indices to drop
     indices_to_drop = []
 
@@ -205,24 +206,25 @@ def filter_access_points(gdf):
                     indices_to_drop.append(index)
 
             else:
-                print(f"Point outside the polygon {row_x, row_y}")
+                #print(f"Point outside the polygon {row_x, row_y}")
                 indices_to_drop.append(index)
 
         # Drop the points
     newgdf = newgdf.drop(indices_to_drop)
-    print(len(newgdf))
+    #print(len(newgdf))
 
-    print("FFF")
+    #print("FFF")
     idx = get_idx_todrop(newgdf, "data/landuse_landcover/Schutzzonen/Canton_ZH/Fruchtfolgeflachen/Fruchtfolgeflachen_-OGD/Fruchtfolgeflachen_-OGD.gdb")
     newgdf.loc[:, "index"] = idx
     keepidx = newgdf['index'] == 0  # 1 is the value of the columns that should be dropped
     newgdf = newgdf.loc[keepidx, :].copy()
-    print(len(newgdf))
+    #print(len(newgdf))
 
     newgdf = newgdf.rename(columns={"ID": "ID_new"})
     newgdf = newgdf.to_crs("epsg:2056")
 
     newgdf.to_file("data/infraScanRoad/Network/processed/generated_nodes.gpkg")
+    print(f"  Generated access points filtered: {initial_count} -> {len(newgdf)}")
 
     return
 
@@ -358,7 +360,7 @@ def line_scoring(lines_gdf,raster_location):
 def routing_raster(raster_path):
     # Process LineStrings
     generated_links = gpd.read_file("data/infraScanRoad/Network/processed/new_links.gpkg")
-    print(generated_links["ID_new"].unique())
+    #print(generated_links["ID_new"].unique())
 
     #print(generated_links.head(10))
     new_lines = []
@@ -473,7 +475,7 @@ def find_path(graph, start, end, list_no_path, point_end):
         return path, list_no_path
     except nx.NetworkXNoPath:
         list_no_path.append(point_end)
-        print("No path found ", point_end)
+        #print("No path found ", point_end)
         return None, list_no_path
 
 

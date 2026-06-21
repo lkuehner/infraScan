@@ -248,7 +248,7 @@ class _MultiTrackLegendHandler(HandlerBase):
 
 
 CAPACITY_DIR = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "capacity"
-DEFAULT_OUTPUT_DIR = Path(paths.MAIN) / "plots" / "network"
+DEFAULT_OUTPUT_DIR = Path(paths.PLOT_DIRECTORY) / "network"
 DEFAULT_OUTPUT = DEFAULT_OUTPUT_DIR / f"{settings.rail_network}_network_infrastructure.png"
 DEFAULT_CAPACITY_OUTPUT = DEFAULT_OUTPUT_DIR / f"{settings.rail_network}_network_capacity.png"
 DEFAULT_SPEED_OUTPUT = DEFAULT_OUTPUT_DIR / f"{settings.rail_network}_network_speed.png"

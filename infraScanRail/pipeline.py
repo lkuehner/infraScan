@@ -41,6 +41,12 @@ from pathlib import Path
 # ================================================================================
 # PHASE FUNCTIONS - Modular Pipeline Components
 # ================================================================================
+PHASE_LOG_PREFIX = ""
+
+
+def _phase_title(title):
+    return f"{PHASE_LOG_PREFIX} {title}" if PHASE_LOG_PREFIX else title
+
 
 def phase_1_initialization(runtimes: dict) -> tuple:
     """
@@ -53,7 +59,7 @@ def phase_1_initialization(runtimes: dict) -> tuple:
         tuple: (innerboundary, outerboundary) - Study area polygons
     """
     print("\n" + "="*80)
-    print("PHASE 1: INITIALIZE VARIABLES")
+    print(_phase_title("PHASE 1: INITIALIZE VARIABLES"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -77,7 +83,7 @@ def phase_2_data_import(runtimes: dict) -> None:
         - Writes cities.shp
     """
     print("\n" + "="*80)
-    print("PHASE 2: IMPORT RAW DATA")
+    print(_phase_title("PHASE 2: IMPORT RAW DATA"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -124,7 +130,7 @@ def phase_3_baseline_capacity_analysis(runtimes: dict) -> tuple:
             - enhanced_network_label: Label for enhanced network
     """
     print("\n" + "="*80)
-    print("PHASE 3: BASELINE CAPACITY ANALYSIS")
+    print(_phase_title("PHASE 3: BASELINE CAPACITY ANALYSIS"))
     print("="*80 + "\n")
 
     # ============================================================================
@@ -277,7 +283,7 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
         - Writes capacity_intervention_costs.csv to data/infraScanRail/costs/
     """
     print("\n" + "="*80)
-    print("PHASE 4: INFRASTRUCTURE DEVELOPMENTS")
+    print(_phase_title("PHASE 4: INFRASTRUCTURE DEVELOPMENTS"))
     print("="*80 + "\n")
 
     # ============================================================================
@@ -312,27 +318,45 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
     # STEP 4.2: ANALYZE DEVELOPMENT CAPACITY
     # ============================================================================
     print("\n--- Step 4.2: Analyze Development Capacity (Workflow 3) ---\n")
+    capacity_results_path = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "capacity" / "capacity_analysis_results.json"
+    use_cached_capacity_analysis = settings.use_cache_capacity_analysis and capacity_results_path.exists()
 
     # STEP 4.2: Determine if development visualizations should be generated
-    generate_dev_plots = settings.PIPELINE_CONFIG.should_generate_plots(default_yes=True)
-    if generate_dev_plots is None:  # Manual mode
-        print(f"Found {len(dev_id_lookup)} developments to analyze.")
-        print("Each development can generate capacity, speed profile, and service network plots.")
-        response = input("\nGenerate visualizations for all developments? (y/n) [y]: ").strip().lower()
-        generate_dev_plots = response != 'n'
-    
-    if generate_dev_plots:
-        print("  → Visualizations will be generated for each development")
+    if use_cached_capacity_analysis:
+        print(f"  → Loading capacity analysis results from cache: {capacity_results_path}")
+        generate_dev_plots = False
     else:
-        print("  → Visualizations will be skipped for all developments")
+        generate_dev_plots = settings.PIPELINE_CONFIG.should_generate_plots(default_yes=True)
+        if generate_dev_plots is None:  # Manual mode
+            print(f"Found {len(dev_id_lookup)} developments to analyze.")
+            print("Each development can generate capacity, speed profile, and service network plots.")
+            response = input("\nGenerate visualizations for all developments? (y/n) [y]: ").strip().lower()
+            generate_dev_plots = response != 'n'
+        
+        if generate_dev_plots:
+            print("  → Visualizations will be generated for each development")
+        else:
+            print("  → Visualizations will be skipped for all developments")
 
     print()
     st = time.time()
 
     capacity_analysis_results = {}
     failed_developments = []
+    dev_rows = dev_id_lookup.iterrows()
 
-    for idx, row in dev_id_lookup.iterrows():
+    if use_cached_capacity_analysis:
+        with open(capacity_results_path, 'r') as f:
+            capacity_analysis_results = json.load(f)
+        failed_developments = [
+            dev_id for dev_id, result in capacity_analysis_results.items()
+            if result.get('status') != 'success'
+        ]
+        dev_rows = []
+    elif settings.use_cache_capacity_analysis:
+        print("  → Capacity analysis cache requested, but no cache found. Recomputing...")
+
+    for idx, row in dev_rows:
         dev_id = row['dev_id']
         print(f"\n  [{idx+1}/{len(dev_id_lookup)}] Analyzing development {dev_id}...")
 
@@ -417,10 +441,10 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
             failed_developments.append(dev_id)
 
     # Save results
-    capacity_results_path = Path(paths.MAIN) / "data" / "infraScanRail" / "Network" / "capacity" / "capacity_analysis_results.json"
-    capacity_results_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(capacity_results_path, 'w') as f:
-        json.dump(capacity_analysis_results, f, indent=2)
+    if not use_cached_capacity_analysis:
+        capacity_results_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(capacity_results_path, 'w') as f:
+            json.dump(capacity_analysis_results, f, indent=2)
 
     # Summary
     successful = sum(1 for r in capacity_analysis_results.values() if r.get('status') == 'success')
@@ -459,7 +483,11 @@ def phase_4_infrastructure_developments(points: gpd.GeoDataFrame, runtimes: dict
     print("  4. Save the file and return here to continue")
     print("="*80)
 
-    response = input("\nHave you reviewed and (if needed) corrected the intervention costs (y/n)? ").strip().lower()
+    if settings.intervention_costs_reviewed:
+        response = "yes"
+        print("\nIntervention costs review confirmed by settings.")
+    else:
+        response = input("\nHave you reviewed and (if needed) corrected the intervention costs (y/n)? ").strip().lower()
     if response not in {"y", "yes"}:
         print("\nPipeline paused. Please review the intervention costs and re-run when ready.")
         print("You can resume from this point by running the pipeline again.\n")
@@ -503,7 +531,7 @@ def phase_5_demand_analysis(points: gpd.GeoDataFrame, runtimes: dict) -> None:
         - Writes OD matrix CSV to paths.OD_STATIONS_KT_ZH_PATH
     """
     print("\n" + "="*80)
-    print("PHASE 5: DEMAND ANALYSIS (OD MATRIX)")
+    print(_phase_title("PHASE 5: DEMAND ANALYSIS (OD MATRIX)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -537,7 +565,7 @@ def phase_6_travel_time_computation(dev_id_lookup: pd.DataFrame, runtimes: dict)
             - G_development: List of NetworkX graphs for developments (List)
     """
     print("\n" + "="*80)
-    print("PHASE 6: TRAVEL TIME COMPUTATION")
+    print(_phase_title("PHASE 6: TRAVEL TIME COMPUTATION"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -554,7 +582,7 @@ def phase_6_travel_time_computation(dev_id_lookup: pd.DataFrame, runtimes: dict)
 def phase_7_passenger_flow_visualization(G_development: list, G_status_quo: list, dev_id_lookup: pd.DataFrame, runtimes: dict) -> None:
     """Phase 7: Visualize passenger flows (optional)."""
     print("\n" + "="*80)
-    print("PHASE 7: PASSENGER FLOW VISUALIZATION")
+    print(_phase_title("PHASE 7: PASSENGER FLOW VISUALIZATION"))
     print("="*80 + "\n")
     
     # Use global visualization setting
@@ -588,7 +616,7 @@ def phase_8_scenario_generation(runtimes: dict) -> None:
         - Writes scenario plots (if do_plot=True)
     """
     print("\n" + "="*80)
-    print("PHASE 8: SCENARIO GENERATION")
+    print(_phase_title("PHASE 8: SCENARIO GENERATION"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -631,7 +659,7 @@ def phase_9_travel_time_savings(dev_id_lookup: pd.DataFrame, od_times_dev: dict,
             - scenario_list: List of scenarios
     """
     print("\n" + "="*80)
-    print("PHASE 9: TRAVEL TIME SAVINGS")
+    print(_phase_title("PHASE 9: TRAVEL TIME SAVINGS"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -661,7 +689,7 @@ def phase_10_old_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
         pd.DataFrame: Construction and maintenance costs with old capacity logic
     """
     print("\n" + "="*80)
-    print("PHASE 10 OLD: CONSTRUCTION & MAINTENANCE COSTS (8 trains/track)")
+    print(_phase_title("PHASE 10 OLD: CONSTRUCTION & MAINTENANCE COSTS (8 trains/track)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -701,7 +729,7 @@ def phase_10_new_construction_maintenance_costs(monetized_tt: pd.DataFrame, runt
         pd.DataFrame: Construction and maintenance costs with capacity interventions
     """
     print("\n" + "="*80)
-    print("PHASE 10 NEW: CONSTRUCTION & MAINTENANCE COSTS (Capacity Interventions)")
+    print(_phase_title("PHASE 10 NEW: CONSTRUCTION & MAINTENANCE COSTS (Capacity Interventions)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -739,7 +767,7 @@ def phase_11_old_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         pd.DataFrame: Discounted costs and benefits (OLD method)
     """
     print("\n" + "="*80)
-    print("PHASE 11 OLD: COST-BENEFIT INTEGRATION (8 trains/track)")
+    print(_phase_title("PHASE 11 OLD: COST-BENEFIT INTEGRATION (8 trains/track)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -782,7 +810,7 @@ def phase_11_new_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
         pd.DataFrame: Discounted costs and benefits (NEW method)
     """
     print("\n" + "="*80)
-    print("PHASE 11 NEW: COST-BENEFIT INTEGRATION (Capacity Interventions)")
+    print(_phase_title("PHASE 11 NEW: COST-BENEFIT INTEGRATION (Capacity Interventions)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -818,7 +846,7 @@ def phase_11_new_cost_benefit_integration(runtimes: dict) -> pd.DataFrame:
 
     if generate_cb_plots:
         print("\n  Generating plots for all developments...")
-        output_dir = os.path.join("plots", "Discounted Costs")
+        output_dir = os.path.join(paths.PLOT_DIRECTORY, "Discounted Costs")
 
         # Get all unique development IDs from the discounted dataframe
         dev_ids = costs_and_benefits_discounted.index.get_level_values('development').unique()
@@ -846,7 +874,7 @@ def phase_12_old_cost_aggregation(runtimes: dict) -> None:
         runtimes: Dictionary to track phase execution times
     """
     print("\n" + "="*80)
-    print("PHASE 12 OLD: COST AGGREGATION (8 trains/track)")
+    print(_phase_title("PHASE 12 OLD: COST AGGREGATION (8 trains/track)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -873,7 +901,7 @@ def phase_12_new_cost_aggregation(runtimes: dict) -> None:
         runtimes: Dictionary to track phase execution times
     """
     print("\n" + "="*80)
-    print("PHASE 12 NEW: COST AGGREGATION (Capacity Interventions)")
+    print(_phase_title("PHASE 12 NEW: COST AGGREGATION (Capacity Interventions)"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -892,7 +920,7 @@ def phase_12_new_cost_aggregation(runtimes: dict) -> None:
 def phase_13_results_visualization(runtimes: dict) -> None:
     """Phase 13: Generate all result visualizations."""
     print("\n" + "="*80)
-    print("PHASE 13: RESULTS VISUALIZATION")
+    print(_phase_title("PHASE 13: RESULTS VISUALIZATION"))
     print("="*80 + "\n")
     st = time.time()
 
@@ -941,8 +969,8 @@ def phase_13_results_visualization(runtimes: dict) -> None:
 
     # Generate pipeline comparison plots (Old vs New)
     if plot_preferences.get('pipeline_comparison', False):
-        create_ranked_pipeline_comparison_plots(plot_directory="plots", top_n_list=[5, 10])
-        create_all_developments_pipeline_comparison_plots(plot_directory="plots")
+        create_ranked_pipeline_comparison_plots(plot_directory=paths.PLOT_DIRECTORY, top_n_list=[5, 10])
+        create_all_developments_pipeline_comparison_plots(plot_directory=paths.PLOT_DIRECTORY)
 
         # Export comprehensive report statistics for pipeline comparison
         export_pipeline_comparison_report_statistics()
@@ -977,7 +1005,7 @@ def export_pipeline_comparison_report_statistics():
         return
 
     # Output directory
-    output_dir = os.path.join("plots", "Benefits_Pipeline_Comparison", "report_statistics")
+    output_dir = os.path.join(paths.PLOT_DIRECTORY, "Benefits_Pipeline_Comparison", "report_statistics")
     os.makedirs(output_dir, exist_ok=True)
 
     # Load and prepare data using the helper function from plots.py
@@ -1338,7 +1366,8 @@ def extract_capacity_intervention_costs(
         baseline_network_label: Baseline network label (e.g., "2024_extended")
 
     Returns:
-        DataFrame with columns: dev_id, int_id, construction_cost, maintenance_cost
+        DataFrame with columns: dev_id, int_id, construction_cost, maintenance_cost,
+        passing_siding_length_m
     """
     print("\n  Extracting capacity intervention costs for developments...")
 
@@ -1387,7 +1416,8 @@ def extract_capacity_intervention_costs(
                 'dev_id': dev_id,
                 'int_id': '',
                 'construction_cost': 0.0,
-                'maintenance_cost': 0.0
+                'maintenance_cost': 0.0,
+                'passing_siding_length_m': 0.0
             })
             continue
 
@@ -1400,7 +1430,8 @@ def extract_capacity_intervention_costs(
                 'dev_id': dev_id,
                 'int_id': '',
                 'construction_cost': 0.0,
-                'maintenance_cost': 0.0
+                'maintenance_cost': 0.0,
+                'passing_siding_length_m': 0.0
             })
             continue
 
@@ -1413,7 +1444,8 @@ def extract_capacity_intervention_costs(
                 'dev_id': dev_id,
                 'int_id': '',
                 'construction_cost': 0.0,
-                'maintenance_cost': 0.0
+                'maintenance_cost': 0.0,
+                'passing_siding_length_m': 0.0
             })
             continue
 
@@ -1421,6 +1453,7 @@ def extract_capacity_intervention_costs(
         matched_interventions = []
         total_construction_cost = 0.0
         total_maintenance_cost = 0.0
+        total_passing_siding_length_m = 0.0
 
         # Compare stations (tracks and platforms)
         for _, dev_station in dev_stations.iterrows():
@@ -1494,6 +1527,8 @@ def extract_capacity_intervention_costs(
                     matched_interventions.append(intervention['intervention_id'])
                     total_construction_cost += intervention['construction_cost_chf']
                     total_maintenance_cost += intervention['maintenance_cost_annual_chf']
+                    if pd.notna(intervention.get('length_m')):
+                        total_passing_siding_length_m += intervention['length_m']
                 else:
                     print(f"    ⚠ Warning: Segment {segment_id} in dev {dev_id} has increased tracks but no matching intervention found")
 
@@ -1507,7 +1542,8 @@ def extract_capacity_intervention_costs(
             'dev_id': dev_id,
             'int_id': int_id_str,
             'construction_cost': total_construction_cost,
-            'maintenance_cost': total_maintenance_cost
+            'maintenance_cost': total_maintenance_cost,
+            'passing_siding_length_m': total_passing_siding_length_m
         })
 
         if matched_interventions:
@@ -1723,7 +1759,7 @@ def plot_passenger_flows_on_network(G_development, G_status_quo, dev_id_lookup):
     # Calculate and visualize passenger flow for status quo (G_status_quo[0])
     flows_on_edges_sq, flows_on_railway_lines_sq = calculate_flow_on_edges(G_status_quo[0], OD_matrix_flow, points)
     plot_flow_graph(flows_on_edges_sq,
-                    output_path="plots/passenger_flows/passenger_flow_map_status_quo.png",
+                    output_path=os.path.join(paths.PLOT_DIRECTORY, "passenger_flows", "passenger_flow_map_status_quo.png"),
                     edge_scale=0.0007,
                     selected_stations=pp.selected_stations,
                     plot_perimeter=True,
@@ -1741,7 +1777,7 @@ def plot_passenger_flows_on_network(G_development, G_status_quo, dev_id_lookup):
 
         # Create visualizations
         plot_flow_graph(flows_on_edges,
-                        output_path=f"plots/passenger_flows/passenger_flow_map_{dev_id}.png",
+                        output_path=os.path.join(paths.PLOT_DIRECTORY, "passenger_flows", f"passenger_flow_map_{dev_id}.png"),
                         edge_scale=0.0007,
                         selected_stations=pp.selected_stations,
                         plot_perimeter=True,
@@ -1757,7 +1793,7 @@ def plot_passenger_flows_on_network(G_development, G_status_quo, dev_id_lookup):
 
         # Create difference visualization
         plot_flow_graph(flow_difference,
-                        output_path=f"plots/passenger_flows/passenger_flow_diff_{dev_id}.png",
+                        output_path=os.path.join(paths.PLOT_DIRECTORY, "passenger_flows", f"passenger_flow_diff_{dev_id}.png"),
                         edge_scale=0.003,
                         selected_stations=pp.selected_stations,
                         plot_perimeter=True,
@@ -1869,7 +1905,7 @@ def generate_infra_development(use_cache, mod_type, generate_plots=True):
             print("\n=== VISUALIZATION ===")
             print("Creating visualization of the network with highlighted missing connections...")
 
-            plots_dir = "plots/missing_connections"
+            plots_dir = os.path.join(paths.PLOT_DIRECTORY, "missing_connections")
             print(f"  → Creating individual plots in {plots_dir}/")
             plot_lines_for_each_missing_connection(new_railway_lines, G, pos, plots_dir)
             print(f"  ✓ Individual plots complete")
@@ -1914,7 +1950,7 @@ def rearange_costs(cost_and_benefits, output_prefix="", csv_only=False):
 def visualize_results(clear_plot_directory=False, plot_preferences=None):
     """Generate all result visualizations."""
     # Define the plot directory
-    plot_dir = "plots"
+    plot_dir = paths.PLOT_DIRECTORY
 
     # Clear only files in the main plot directory if requested
     if clear_plot_directory:
@@ -1952,6 +1988,6 @@ def visualize_results(clear_plot_directory=False, plot_preferences=None):
         create_and_save_plots(df=results_raw, railway_lines=railway_lines, plot_preferences=plot_preferences)
 
         # Plot cumulative cost distribution (always include if any plots enabled)
-        plot_cumulative_cost_distribution(results_raw, "plots/cumulative_cost_distribution.png")
+        plot_cumulative_cost_distribution(results_raw, os.path.join(paths.PLOT_DIRECTORY, "cumulative_cost_distribution.png"))
     else:
         print("  → Skipping all result visualizations (no plot types selected)")

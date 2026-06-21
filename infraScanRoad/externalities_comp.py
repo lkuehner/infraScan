@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover
 
 
 DATA_ROOT = Path(settings.MAIN)
-ROAD_ROOT = DATA_ROOT / "euler" / "alldev" / "data" / "infraScanRoad"
+ROAD_ROOT = DATA_ROOT / "data" / "infraScanRoad"
 LINK_FLOW_DIR = ROAD_ROOT / "traffic_flow" / "od" / "link_flows"
 RAW_OUTPUT_DIR = ROAD_ROOT / "traffic_flow" / "link_flow_externalities"
 BASE_EDGE_GPKG = ROAD_ROOT / "Network" / "processed" / "edges_only_flow.gpkg"
@@ -32,7 +32,6 @@ LANDCOVER_SHP = (
     / "swissTLMRegio_LandCover.shp"
 )
 NOISE_BUFFER_METERS = 50.0
-SELECTED_SCENARIOS = tuple(settings.get_travel_time_debug_scenarios() or [])
 DEV_RE = re.compile(r"^dev(\d+)_(scenario_\d+)\.csv$")
 
 
@@ -98,8 +97,9 @@ def compute_settlement_buffer_share(geometry, settlement_footprint, buffer_m: fl
     return max(0.0, min(1.0, intersection_area / buffered.area))
 
 
-def main() -> None:
+def build_link_flow_externalities() -> None:
     RAW_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    selected_scenarios = tuple(settings.get_travel_time_debug_scenarios() or [])
 
     # Load the network geometry used to translate link-flow changes into exposure shares.
     base_edges = gpd.read_file(BASE_EDGE_GPKG)
@@ -188,7 +188,7 @@ def main() -> None:
     rows: list[dict] = []
 
     # Compare each development flow file against the same scenario-specific status quo flows.
-    for scenario in SELECTED_SCENARIOS:
+    for scenario in selected_scenarios:
         status_path = LINK_FLOW_DIR / f"status_quo_{scenario}.csv"
         status_rows = read_flow_rows(status_path)
         if not status_rows:
@@ -267,4 +267,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    build_link_flow_externalities()

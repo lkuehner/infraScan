@@ -598,7 +598,7 @@ def build_rail_construction_result_df(
     rows = []
     """
     Rail construction costs 
-    - standalone values [CHF] are taken from the 'TotalConstructionCost' column of infraScanRail/costs/construction_cost.csv
+    - standalone values [CHF/y] are simple annual proxies based on TotalConstructionCost / appraisal years
     - integrated values [CHF/y] are calculated by applying the capital recovery factor to the standalone values
     """
     
@@ -626,7 +626,7 @@ def build_rail_construction_result_df(
         result_row = {
             "development": row.ID_new,
             "score_id": score_id,
-            "standalone_value": row.building_costs,
+            "standalone_value": row.building_costs / STANDALONE_ANNUAL_YEARS,
             "integrated_value": (
                 cost_track * crf_track
                 + cost_bridge * crf_bridge
@@ -940,6 +940,26 @@ def assemble_score_results_long(
         One long-format score table sorted by mode, development, scenario and score id.
     """
     score_long = pd.concat([road_result, rail_result], ignore_index=True)
+    road_externalities_detail = integrated_paths.ROAD_EXTERNALITIES_DETAIL_CSV
+    if road_externalities_detail.exists():
+        link_flows = pd.read_csv(
+            road_externalities_detail,
+            usecols=["development", "link_role", "vkm_development"],
+        )
+        link_flows["development"] = link_flows["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+        link_flows["vkm_development"] = pd.to_numeric(link_flows["vkm_development"], errors="coerce").fillna(0.0)
+        valid_road_developments = set(
+            link_flows.loc[
+                (link_flows["link_role"] == "new_link")
+                & (link_flows["vkm_development"] > 0),
+                "development",
+            ]
+        )
+        normalized_development = score_long["development"].astype(str).str.replace(r"\.0$", "", regex=True)
+        score_long = score_long[
+            score_long["mode"].ne("Road") | normalized_development.isin(valid_road_developments)
+        ].copy()
+
     score_long["scenario_sort"] = score_long["scenario"].astype(str).str.split("_").str[-1]
     score_long["scenario_sort"] = pd.to_numeric(score_long["scenario_sort"], errors="coerce").fillna(-1)
     score_long = score_long.sort_values(

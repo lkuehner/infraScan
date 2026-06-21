@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import requests
 import sys
+from tqdm import tqdm
 
 from .data_import import *
 from .plots import *
@@ -68,6 +69,7 @@ def nw_from_osm(limits):
 
     # Initialize the transformer between LV95 and WGS 84
     transformer = Transformer.from_crs("EPSG:2056", "EPSG:4326", always_xy=True)
+    skipped_tiles = 0
     try:
         for i, lv95_sub_polygon in enumerate(sub_polygons):
 
@@ -76,7 +78,6 @@ def nw_from_osm(limits):
 
             try:
                 # Attempt to process the OSM data for the sub-polygon
-                print(f"Processing sub-polygon {i + 1}/{len(sub_polygons)}", end='\r')
                 G = ox.graph_from_polygon(lat_lon_frame, network_type="drive", simplify=True, truncate_by_edge=True)
                 G = ox.add_edge_speeds(G)
 
@@ -94,12 +95,15 @@ def nw_from_osm(limits):
 
             except ValueError as e:
                 # Some boundary tiles can legitimately contain no drivable nodes.
-                print(f"Skipping graph in sub-polygon {i + 1} due to error: {e}")
+                skipped_tiles += 1
                 continue
     finally:
         _overpass._overpass_request = original_overpass_request
 
-    print(f"\nStored {len(list(output_dir.glob('sub_area_edges_*.gpkg')))} OSM road tiles")
+    print(
+        f"OSM road tiles prepared: {len(list(output_dir.glob('sub_area_edges_*.gpkg')))} "
+        f"stored, {skipped_tiles} skipped"
+    )
 
 
 def split_area(limits, num_splits):
@@ -160,7 +164,7 @@ def osm_nw_to_raster(limits):
     # print(gdf_combined.crs)
     # print(gdf_combined.head(10).to_string())
     gdf_combined.to_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
-    print("file stored")
+    print("OSM speed network prepared")
 
 
     gdf_combined = gpd.read_file('data/infraScanRoad/Network/OSM_tif/nw_speed_limit.gpkg')
@@ -170,7 +174,7 @@ def osm_nw_to_raster(limits):
 
     # Define the bounds of the raster (aligned with your initial limits)
     minx, miny, maxx, maxy = limits
-    print(limits)
+    # print(limits)
 
     # Compute the number of rows and columns
     num_cols = int((maxx - minx) / resolution)
@@ -187,10 +191,10 @@ def osm_nw_to_raster(limits):
     #lake = gpd.read_file("data/landuse_landcover/landcover/water_ch/Typisierung_LV95/typisierung.gpkg")
     ###############################################################################################################
 
-    print("ready to fill")
+    # print("ready to fill")
 
     tot_num = num_cols * num_cols
-    count=0
+    progress_bar = tqdm(total=tot_num, desc="Rasterizing OSM speed network", unit="cell")
 
     for row in range(num_rows):
         for col in range(num_cols):
@@ -214,11 +218,9 @@ def osm_nw_to_raster(limits):
                 max_speed = intersecting_roads['speed_kph'].max()
                 raster[row, col] = max_speed
 
-            # Print the progress
-            count += 1
-            progress_percentage = (count / tot_num) * 100
-            sys.stdout.write(f"\rProgress: {progress_percentage:.2f}%")
-            sys.stdout.flush()
+            progress_bar.update(1)
+
+    progress_bar.close()
 
     # Check for spatial overlap with the second raster and update values if necessary
     with rasterio.open("data/landuse_landcover/processed/unproductive_area.tif") as src2:
@@ -353,7 +355,7 @@ def get_voronoi_status_quo():
     df_voronoi = gpd.GeoDataFrame(geometry=gpd.GeoSeries([Polygon(vertices[region]) for region in regions]),
                                   crs="epsg:2056")
     # df_voronoi["ID"] = 1
-    print(df_voronoi.head(10).to_string())
+    #print(df_voronoi.head(10).to_string())
 
     df_voronoi.to_file("data/infraScanRoad/Voronoi/voronoi_status_quo_euclidian.gpkg")
 
@@ -443,7 +445,5 @@ def get_voronoi_all_developments():
 
     # convert the geopandas dataframe into a numpy array of points
     #points = node_filter_gdf[["XKOORD", "YKOORD"]].to_numpy()
-
-
 
 

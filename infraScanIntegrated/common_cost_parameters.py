@@ -7,6 +7,7 @@ discount_rate = 0.02
 
 # According to NISTRA / NIBA
 appraisal_years = 40
+real_wage_growth = 0.0069
 
 # Road maintenance NISTRA
 road_maintenance_operating_cost_growth = 0.01

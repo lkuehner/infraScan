@@ -3,8 +3,8 @@ from pathlib import Path
 
 # Use relative path from the script location
 # MAIN = str(Path(__file__).parent.resolve()) 
-MAIN = '/Volumes/WD_Windows/MSc_Thesis'
-#MAIN = '/cluster/home/lkuehner/MSc_Thesis'
+# MAIN = '/Volumes/WD_Windows/MSc_Thesis'
+MAIN = '/cluster/home/lkuehner/MSc_Thesis'
 
 
 RAIL_SERVICES_AK2035_PATH= 'data/infraScanRail/temp/railway_services_ak2035.gpkg'
@@ -41,8 +41,8 @@ COSTS_CONNECTION_CURVES = "data/infraScanRail/costs/costs_connection_curves.xlsx
 
 TTS_CACHE = "data/infraScanRail/Network/travel_time/cache/compute_tts_cache.pkl"
 
-PLOT_DIRECTORY = "plots"
-PLOT_SCENARIOS = "plots/scenarios"
+PLOT_DIRECTORY = os.path.join(MAIN, "plots", "rail_standalone")
+PLOT_SCENARIOS = os.path.join(PLOT_DIRECTORY, "scenarios")
 
 def get_rail_services_path(rail_network_settings):
     """
