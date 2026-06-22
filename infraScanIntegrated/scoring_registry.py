@@ -423,6 +423,18 @@ def build_road_externalities_result_df(
         "road_ecological_disruption_cost": None,
     }
     selected_score_ids = tuple(score_ids) if score_ids is not None else tuple(score_column_map)
+    air_pollution_dyn_factor = dynamization_factor(
+        growth_rate=common_cost_parameters.real_wage_growth,
+        appraisal_years=common_cost_parameters.appraisal_years,
+        discount_rate=common_cost_parameters.discount_rate,
+    )
+    externality_dyn_factors = {
+        "road_accident_cost": common_cost_parameters.dyn_accident_costs,
+        "road_airpollution_cost": air_pollution_dyn_factor,
+        "road_co2_cost": common_cost_parameters.dyn_climate_effects,
+        "road_noise_cost": common_cost_parameters.dyn_noise_pollution,
+        "road_land_consumption_cost": 1.0,
+    }
 
     standalone_lookup = {}
     if total_costs_df is not None:
@@ -444,7 +456,7 @@ def build_road_externalities_result_df(
                 if score_id == "road_land_consumption_cost":
                     integrated_value = abs(float(integrated_value))
                 else:
-                    integrated_value = float(integrated_value)
+                    integrated_value = float(integrated_value) * externality_dyn_factors.get(score_id, 1.0)
             rows.append({
                 "development": row.development,
                 "scenario": row.scenario,
@@ -820,6 +832,12 @@ def build_rail_externalities_result_df(
     except FileNotFoundError:
         pass
 
+    air_pollution_dyn_factor = dynamization_factor(
+        growth_rate=common_cost_parameters.real_wage_growth,
+        appraisal_years=common_cost_parameters.appraisal_years,
+        discount_rate=common_cost_parameters.discount_rate,
+    )
+
     for row in train_km_df.itertuples(index=False):
         development = row.Development
         delta_btkm = row.DeltaBTKM
@@ -827,10 +845,10 @@ def build_rail_externalities_result_df(
         noise_relevant_share = noise_relevant_share_by_development.get(development, 1.0)
 
         score_values = {
-            "rail_noise_cost": delta_btkm * noise_relevant_share * common_cost_parameters.rail_noise_costs,
-            "rail_airpollution_cost": delta_btkm * common_cost_parameters.rail_airpollution_costs,
-            "rail_co2_cost": delta_btkm * common_cost_parameters.rail_co2_costs,
-            "rail_accident_cost": delta_train_km * common_cost_parameters.rail_accident_costs,
+            "rail_noise_cost": delta_btkm * noise_relevant_share * common_cost_parameters.rail_noise_costs * common_cost_parameters.dyn_noise_pollution,
+            "rail_airpollution_cost": delta_btkm * common_cost_parameters.rail_airpollution_costs * air_pollution_dyn_factor,
+            "rail_co2_cost": delta_btkm * common_cost_parameters.rail_co2_costs * common_cost_parameters.dyn_climate_effects,
+            "rail_accident_cost": delta_train_km * common_cost_parameters.rail_accident_costs * common_cost_parameters.dyn_accident_costs,
             "rail_land_consumption_cost": land_consumption_by_development.get(development, 0.0),
         }
 

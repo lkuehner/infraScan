@@ -2,6 +2,8 @@ import os
 import pickle
 from typing import Any, Dict, Iterable, List
 
+import geopandas as gpd
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1382,8 +1384,6 @@ def select_representative_shared_scenarios(
             "rail_modal_split",
             "other_modal_split",
             "distance_per_person",
-            "road_demand_proxy",
-            "rail_demand_proxy",
         ]
 
     missing_cols = [col for col in feature_cols if col not in summary_df.columns]
@@ -1414,64 +1414,6 @@ def select_representative_shared_scenarios(
     selected["selection_order"] = range(1, len(selected) + 1)
     return selected
 
-"""
-# Select scenarios in the 25% to 75% Percentile
-def select_representative_shared_scenarios(
-    summary_df: pd.DataFrame,
-    n_representatives: int,
-) -> pd.DataFrame:
-    n_representatives = max(0, int(n_representatives))
-
-    if n_representatives == 0 or summary_df.empty:
-        return summary_df.iloc[0:0].copy()
-
-    if n_representatives >= len(summary_df):
-        selected = summary_df.copy()
-        selected["selection_order"] = range(1, len(selected) + 1)
-        return selected
-
-    sorted_df = summary_df.sort_values("shared_future_score").reset_index(drop=True)
-
-    if n_representatives == 1:
-        selected_positions = [len(sorted_df) // 2]
-    else:
-        lower_q = 0.25
-        upper_q = 0.75
-  
-        selected_positions = [
-            round(
-                (lower_q + idx * (upper_q - lower_q) / (n_representatives - 1))
-                * (len(sorted_df) - 1)
-            )
-            for idx in range(n_representatives)
-        ]
-
-    selected_rows = []
-    used_positions = set()
-
-    for order, target_pos in enumerate(selected_positions, start=1):
-
-        if target_pos not in used_positions:
-            chosen_pos = target_pos
-        else:
-            candidate_positions = sorted(
-                range(len(sorted_df)),
-                key=lambda pos: (abs(pos - target_pos), pos),
-            )
-            chosen_pos = next(
-                pos for pos in candidate_positions
-                if pos not in used_positions
-            )
-
-        used_positions.add(chosen_pos)
-
-        row = sorted_df.iloc[[chosen_pos]].copy()
-        row["selection_order"] = order
-        selected_rows.append(row)
-
-    return pd.concat(selected_rows, ignore_index=True)      
-"""
-
 def save_shared_scenario_summary(
     summary_df: pd.DataFrame,
     output_path: str = DEFAULT_SHARED_SUMMARY_PATH,
@@ -1498,11 +1440,32 @@ def save_representative_scenario_selection(
 # Plotting functions
 # ------------------------------------------------------------------------
 
+SAMPLE_LINE_COLOR = "#0E4F84"
+BAND_FIGSIZE = (14, 7)
+MAP_FIGSIZE = (14, 10)
+TITLE_FONT_SIZE = 20
+AXIS_LABEL_FONT_SIZE = 16
+TICK_LABEL_FONT_SIZE = 14
+LEGEND_FONT_SIZE = 13
+MAP_LABEL_FONT_SIZE = 11
+
+
+def _finish_band_plot(ax, legend_loc: str) -> None:
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    legend = ax.legend(loc=legend_loc, fontsize=LEGEND_FONT_SIZE, frameon=True)
+    legend.get_frame().set_facecolor("white")
+    legend.get_frame().set_alpha(1.0)
+    legend.get_frame().set_edgecolor("none")
+
+
 def _plot_modal_split_band(
     df: pd.DataFrame,
     title: str,
     output_path: str,
     federal_2050_range: tuple[float, float],
+    legend_loc: str = "upper left",
 ) -> None:
     year_stats = (
         df.groupby("year")["modal_split"]
@@ -1513,7 +1476,7 @@ def _plot_modal_split_band(
     year_stats["mean_plus_1_65std"] = year_stats["mean"] + 1.65 * std
     year_stats["mean_minus_1_65std"] = year_stats["mean"] - 1.65 * std
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    fig, ax = plt.subplots(figsize=BAND_FIGSIZE, dpi=300)
     ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], color="grey", alpha=0.3, label="Total range")
     ax.plot(year_stats["year"], year_stats["mean_plus_1_65std"], color="red", linestyle="-", alpha=0.7, label="+1.65σ (95%)")
     ax.plot(year_stats["year"], year_stats["mean_minus_1_65std"], color="red", linestyle="-", alpha=0.7, label="-1.65σ (5%)")
@@ -1521,7 +1484,7 @@ def _plot_modal_split_band(
 
     sample_id = int(df["scenario"].drop_duplicates().sample(n=1, random_state=42).iloc[0])
     sample_df = df[df["scenario"] == sample_id].sort_values("year")
-    ax.plot(sample_df["year"], sample_df["modal_split"], color="blue", linewidth=2, label=f"Sample scenario {sample_id}")
+    ax.plot(sample_df["year"], sample_df["modal_split"], color=SAMPLE_LINE_COLOR, linewidth=2, label=f"Sample scenario {sample_id}")
 
     lower_bound, upper_bound = federal_2050_range
     marker_color = "#E08D3C"
@@ -1530,13 +1493,13 @@ def _plot_modal_split_band(
     ax.plot([2050], [lower_bound], marker="_", markersize=10, color=marker_color)
     ax.plot([2050], [upper_bound], marker="_", markersize=10, color=marker_color)
 
-    ax.set_xlabel("Year")
-    ax.set_ylabel("Modal split (%)")
+    ax.set_xlabel("Year", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Modal split (%)", fontsize=AXIS_LABEL_FONT_SIZE)
     ax.set_ylim(0.0, 1.0)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x * 100:.0f}%"))
-    ax.set_title(title)
+    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
     ax.grid(True)
-    ax.legend(loc="upper left")
+    _finish_band_plot(ax, legend_loc)
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
@@ -1547,6 +1510,8 @@ def _plot_value_band(
     value_column: str,
     title: str,
     output_path: str,
+    ylabel: str | None = None,
+    legend_loc: str = "upper left",
 ) -> None:
     year_stats = (
         df.groupby("year")[value_column]
@@ -1557,58 +1522,164 @@ def _plot_value_band(
     year_stats["upper_195"] = year_stats["mean"] + 1.95 * std
     year_stats["lower_195"] = year_stats["mean"] - 1.95 * std
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+    fig, ax = plt.subplots(figsize=BAND_FIGSIZE, dpi=300)
     ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], alpha=0.22, color="#7f8c8d", label="Total range")
     ax.plot(year_stats["year"], year_stats["mean"], color="#2c3e50", linestyle="--", linewidth=1.8, label="Mean")
     ax.plot(year_stats["year"], year_stats["upper_195"], color="#8e44ad", linewidth=1.2, linestyle=":", label="Mean ± 1.95σ")
     ax.plot(year_stats["year"], year_stats["lower_195"], color="#8e44ad", linewidth=1.2, linestyle=":")
     sample_id = int(df["scenario"].drop_duplicates().iloc[0])
     sample_df = df[df["scenario"] == sample_id]
-    ax.plot(sample_df["year"], sample_df[value_column], color="#2980b9", linewidth=1.6, label=f"Sample scenario {sample_id + 1}")
-    ax.set_xlabel("Year")
-    ax.set_ylabel(value_column.replace("_", " ").title())
-    ax.set_title(title)
+    ax.plot(sample_df["year"], sample_df[value_column], color=SAMPLE_LINE_COLOR, linewidth=1.6, label=f"Sample scenario {sample_id + 1}")
+    ax.set_xlabel("Year", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel(ylabel or value_column.replace("_", " ").title(), fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
     ax.grid(True, alpha=0.25)
-    ax.legend()
+    _finish_band_plot(ax, legend_loc)
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
 
-def _plot_modal_split_stacked_mean(
-    rail_df: pd.DataFrame,
-    road_df: pd.DataFrame,
-    other_df: pd.DataFrame,
+def _plot_population_band(
+    df: pd.DataFrame,
+    title: str,
     output_path: str,
 ) -> None:
-    rail_mean = rail_df.groupby("year")["modal_split"].mean().sort_index()
-    road_mean = road_df.groupby("year")["modal_split"].mean().sort_index()
-    other_mean = other_df.groupby("year")["modal_split"].mean().sort_index()
-
-    years = rail_mean.index.to_numpy()
-    rail_values = rail_mean.to_numpy()
-    road_values = road_mean.reindex(rail_mean.index).to_numpy()
-    other_values = other_mean.reindex(rail_mean.index).to_numpy()
-
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ax.stackplot(
-        years,
-        road_values,
-        rail_values,
-        other_values,
-        labels=["Road", "Rail", "Other"],
-        colors=["#3E7CB1", "#837AC7", "#A8B5A2"],
-        alpha=0.95,
+    year_stats = (
+        df.groupby("year")["population"]
+        .agg(min="min", max="max", mean="mean", std="std")
+        .reset_index()
     )
-    ax.set_xlabel("Year")
-    ax.set_ylabel("Mean modal split (%)")
-    ax.set_ylim(0.0, 1.0)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x * 100:.0f}%"))
-    ax.set_title("Mean modal split composition over time")
-    ax.grid(True, axis="y", alpha=0.25)
-    ax.legend(loc="upper right")
+    year_stats["mean_plus_1_65std"] = year_stats["mean"] + 1.65 * year_stats["std"]
+    year_stats["mean_minus_1_65std"] = year_stats["mean"] - 1.65 * year_stats["std"]
+
+    fig, ax = plt.subplots(figsize=BAND_FIGSIZE, dpi=300)
+    ax.fill_between(year_stats["year"], year_stats["min"], year_stats["max"], color="grey", alpha=0.3, label="Total range")
+    ax.plot(year_stats["year"], year_stats["mean_plus_1_65std"], color="red", alpha=0.7, label="+1.65σ (95%)")
+    ax.plot(year_stats["year"], year_stats["mean_minus_1_65std"], color="red", alpha=0.7, label="-1.65σ (5%)")
+    ax.plot(year_stats["year"], year_stats["mean"], color="grey", linestyle="--", alpha=0.8, label="Mean")
+
+    sample_id = int(df["scenario"].drop_duplicates().sample(n=1, random_state=42).iloc[0])
+    sample_df = df[df["scenario"] == sample_id].sort_values("year")
+    ax.plot(sample_df["year"], sample_df["population"], color=SAMPLE_LINE_COLOR, linewidth=2, label=f"Sample scenario {sample_id}")
+
+    if 2050 in set(year_stats["year"]):
+        mean_2050 = float(year_stats.loc[year_stats["year"] == 2050, "mean"].iloc[0])
+        lower_bound = mean_2050 * 0.885
+        upper_bound = mean_2050 * 1.115
+        ax.vlines(
+            x=2050,
+            ymin=lower_bound,
+            ymax=upper_bound,
+            colors="#E08D3C",
+            linewidth=2,
+            label="Transport Perspectives 2050 (±11.5%)",
+        )
+        ax.plot([2050], [lower_bound], marker="_", markersize=10, color="#E08D3C")
+        ax.plot([2050], [upper_bound], marker="_", markersize=10, color="#E08D3C")
+
+    ax.set_xlabel("Year", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Population (thousands)", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f"{int(value / 1000):,}k"))
+    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    ax.grid(True)
+    _finish_band_plot(ax, "upper left")
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_total_population_band(
+    population_scenarios: Dict[str, pd.DataFrame],
+    output_dir: str,
+    start_year: int,
+    end_year: int,
+) -> None:
+    total_df = (
+        pd.concat(population_scenarios.values(), ignore_index=True)
+        .query("@start_year <= year <= @end_year")
+        .groupby(["scenario", "year"], as_index=False)["population"]
+        .sum()
+    )
+    _plot_population_band(
+        total_df,
+        "Population Growth for the Canton of Zurich over all Scenarios",
+        os.path.join(output_dir, "population_total_scenarios.png"),
+    )
+
+
+def plot_population_district_bands(
+    population_scenarios: Dict[str, pd.DataFrame],
+    output_dir: str,
+    start_year: int,
+    end_year: int,
+) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    for district, df in population_scenarios.items():
+        df = df[(df["year"] >= start_year) & (df["year"] <= end_year)].copy()
+        if df.empty:
+            continue
+
+        safe_district = str(district).lower().replace(" ", "_")
+        _plot_population_band(
+            df,
+            f"Population scenarios: {district}",
+            os.path.join(output_dir, f"population_{safe_district}_scenarios.png"),
+        )
+
+
+def plot_population_growth_map(
+    population_scenarios: Dict[str, pd.DataFrame],
+    output_dir: str,
+    start_year: int,
+    target_year: int,
+) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+
+    districts = gpd.read_file(integrated_paths.SWISS_DISTRICT_BOUNDARIES_PATH)
+    districts = districts[districts["kantonsnummer"].astype(int) == 1].rename(columns={"name": "district"})
+
+    rows = []
+    for district, df in population_scenarios.items():
+        values = df[df["year"] == target_year]
+        if not values.empty:
+            rows.append({"district": district, "mean_growth_index": values["growth_index"].mean()})
+
+    plot_data = districts.merge(pd.DataFrame(rows), on="district", how="left")
+    fig, ax = plt.subplots(figsize=MAP_FIGSIZE, dpi=300)
+    cmap = mcolors.LinearSegmentedColormap.from_list("population_growth", ["#fff7bc", "#7fc97f", "#145a32"], N=256)
+    plot = plot_data.plot(
+        column="mean_growth_index",
+        cmap=cmap,
+        linewidth=1.2,
+        edgecolor="white",
+        legend=True,
+        legend_kwds={"label": f"Mean growth index ({start_year} = 100)", "shrink": 0.75},
+        ax=ax,
+    )
+    colorbar_ax = plot.get_figure().get_axes()[1]
+    colorbar_ax.set_ylabel(f"Mean growth index ({start_year} = 100)", fontsize=AXIS_LABEL_FONT_SIZE)
+    colorbar_ax.tick_params(labelsize=TICK_LABEL_FONT_SIZE)
+
+    for row in plot_data.dropna(subset=["mean_growth_index"]).itertuples(index=False):
+        centroid = row.geometry.centroid
+        ax.annotate(
+            f"{row.district}\n({row.mean_growth_index:.1f})",
+            xy=(centroid.x, centroid.y),
+            ha="center",
+            va="center",
+            fontsize=MAP_LABEL_FONT_SIZE,
+            fontweight="bold",
+            color="black",
+            bbox=dict(facecolor="white", alpha=0.65, edgecolor="none", boxstyle="round,pad=0.25"),
+        )
+
+    ax.set_title(f"District population growth from {start_year} to {target_year}", fontsize=TITLE_FONT_SIZE)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_axis_off()
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, f"population_growth_map_{target_year}.png"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -1619,52 +1690,54 @@ def plot_shared_scenario_components(
     output_dir: str,
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
+    start_year = int(components["meta"]["start_year"])
+    end_year = int(components["meta"]["end_year"])
+    map_year = int(summary_df["valuation_year"].iloc[0]) if "valuation_year" in summary_df.columns else end_year
+
     _plot_modal_split_band(
         components["modal_split_rail"],
-        "Rail modal split scenarios",
+        "Rail Modal Split over all Scenarios",
         os.path.join(output_dir, "modal_split_rail.png"),
         federal_2050_range=(0.187, 0.243),
     )
     _plot_modal_split_band(
         components["modal_split_road"],
-        "Road modal split scenarios",
+        "Road Modal Split over all Scenarios",
         os.path.join(output_dir, "modal_split_road.png"),
         federal_2050_range=(0.670, 0.738),
+        legend_loc="lower right",
     )
     _plot_modal_split_band(
         components["modal_split_other"],
-        "Other modal split scenarios",
+        "Active Mobility Modal Split over all Scenarios",
         os.path.join(output_dir, "modal_split_other.png"),
         federal_2050_range=(0.067, 0.089),
-    )
-    _plot_modal_split_stacked_mean(
-        components["modal_split_rail"],
-        components["modal_split_road"],
-        components["modal_split_other"],
-        os.path.join(output_dir, "modal_split_stacked_mean.png"),
     )
     _plot_value_band(
         components["distance_per_person"],
         "distance_per_person",
-        "Distance per person scenarios",
+        "Distance per Person over all Scenarios",
         os.path.join(output_dir, "distance_per_person.png"),
+        ylabel="Distance per Person [km]",
     )
-
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-    ordered = summary_df.sort_values("shared_future_score").reset_index(drop=True)
-    ax.plot(np.arange(len(ordered)), ordered["shared_future_score"], color="#2c3e50", linewidth=1.6)
-    if not selected_df.empty:
-        selected_lookup = ordered.reset_index().merge(selected_df[["scenario", "selection_order"]], on="scenario", how="inner")
-        ax.scatter(selected_lookup["index"], selected_lookup["shared_future_score"], color="#c0392b", s=35, zorder=3)
-        for row in selected_lookup.itertuples(index=False):
-            ax.text(row.index, row.shared_future_score, f"  {row.selection_order}", va="center", fontsize=8)
-    ax.set_xlabel("Scenario rank")
-    ax.set_ylabel("Shared future score")
-    ax.set_title("Representative scenario selection")
-    ax.grid(True, alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(os.path.join(output_dir, "shared_future_score.png"), bbox_inches="tight")
-    plt.close(fig)
+    plot_total_population_band(
+        population_scenarios=components["population_scenarios"],
+        output_dir=output_dir,
+        start_year=start_year,
+        end_year=end_year,
+    )
+    plot_population_district_bands(
+        population_scenarios=components["population_scenarios"],
+        output_dir=output_dir,
+        start_year=start_year,
+        end_year=end_year,
+    )
+    plot_population_growth_map(
+        population_scenarios=components["population_scenarios"],
+        output_dir=output_dir,
+        start_year=start_year,
+        target_year=map_year,
+    )
 
 
 # ------------------------------------------------------------------------
@@ -1685,6 +1758,7 @@ def generate_and_apply_shared_scenarios(
     apply_selection_to_modes: bool = True,
     road_limits_variables=None,
     do_plot: bool = False,
+    use_cache: bool = False,
 ) -> Dict[str, Any]:
     data_root = integrated_paths.MAIN
     if not os.path.isdir(os.path.join(data_root, "data")):
@@ -1694,28 +1768,41 @@ def generate_and_apply_shared_scenarios(
     try:
         os.chdir(data_root)
 
-        components = build_shared_scenario_components(
-            start_year=start_year,
-            end_year=end_year,
-            num_of_scenarios=num_of_scenarios,
-        )
-        saved_path = save_shared_scenario_components(components, output_path=components_path)
-        summary_df = build_shared_scenario_summary(
-            components,
-            valuation_year=integrated_settings.start_valuation_year,
-        )
-        summary_file = save_shared_scenario_summary(summary_df, output_path=summary_path)
+        if use_cache and os.path.exists(components_path):
+            components = load_shared_scenario_components(components_path)
+            saved_path = components_path
+        else:
+            components = build_shared_scenario_components(
+                start_year=start_year,
+                end_year=end_year,
+                num_of_scenarios=num_of_scenarios,
+            )
+            saved_path = save_shared_scenario_components(components, output_path=components_path)
+
+        if use_cache and os.path.exists(summary_path):
+            summary_df = pd.read_csv(summary_path)
+            summary_file = summary_path
+        else:
+            summary_df = build_shared_scenario_summary(
+                components,
+                valuation_year=integrated_settings.start_valuation_year,
+            )
+            summary_file = save_shared_scenario_summary(summary_df, output_path=summary_path)
 
         if representative_scenarios_count is None:
             representative_scenarios_count = integrated_settings.representative_scenarios_count
-        selected_df = select_representative_shared_scenarios(
-            summary_df,
-            n_representatives=representative_scenarios_count,
-        )
-        selection_file = save_representative_scenario_selection(
-            selected_df,
-            output_path=selection_path,
-        )
+        if use_cache and os.path.exists(selection_path):
+            selected_df = pd.read_csv(selection_path)
+            selection_file = selection_path
+        else:
+            selected_df = select_representative_shared_scenarios(
+                summary_df,
+                n_representatives=representative_scenarios_count,
+            )
+            selection_file = save_representative_scenario_selection(
+                selected_df,
+                output_path=selection_path,
+            )
         selected_scenarios = selected_df["scenario"].tolist()
 
         if apply_selection_to_modes:
@@ -1732,7 +1819,7 @@ def generate_and_apply_shared_scenarios(
                 start_year=start_year,
                 end_year=end_year,
                 num_of_scenarios=num_of_scenarios,
-                use_cache=False,
+                use_cache=use_cache,
                 do_plot=do_plot,
                 shared_components_path=saved_path,
             )
@@ -1742,7 +1829,7 @@ def generate_and_apply_shared_scenarios(
                 start_year=start_year,
                 end_year=end_year,
                 num_of_scenarios=num_of_scenarios,
-                use_cache=False,
+                use_cache=use_cache,
                 do_plot=do_plot,
                 shared_components_path=saved_path,
             )

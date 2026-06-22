@@ -16,6 +16,9 @@ road_traffic_growth = 0.01
 # NIBA dynamization factors
 rail_maintenance_cost_growth = 1.055
 rail_operation_cost_growth = 1.055
+dyn_noise_pollution = 1.048
+dyn_climate_effects = 1.227
+dyn_accident_costs = 1.074
 
 # NIBA Value structure incl. discounting of 2%
 rail_noise_costs = 0.00204 # CHF/Btkm

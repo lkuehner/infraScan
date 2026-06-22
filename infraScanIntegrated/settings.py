@@ -22,14 +22,15 @@ PLOT_INTEGRATED = True
 # in infraScanRail.settings the detailed cache settings can be defined
 # in infraScanRoad the cache is controlled by checkpoints files under data/infraScanRoad/cache
 use_cache_rail = True # False: full rerun of the rail model
-use_cache_road_checkpoints = False # False: full rerun of the road model
+use_cache_road_checkpoints = True # False: full rerun of the road model
+use_cache_shared_scenarios = True # True: reuse shared scenario components and selected representatives
 
 # Rail standalone prompts are not usable in sbatch (e.g. EULER) integrated runs. These values
 # are applied only by infraScanIntegrated/pipeline_integrated.py.
 rail_visualization_mode = "all"  # "manual", "none", "all"
 rail_grouping_strategy = "baseline"  # "manual", "conservative", "baseline", "optimal"
 rail_capacity_threshold = 2.0
-rail_max_enhancement_iterations = 3
+rail_max_enhancement_iterations = 20
 rail_use_existing_capacity_prep = True
 rail_intervention_costs_reviewed = True
 

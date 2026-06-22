@@ -36,6 +36,7 @@ ROAD_EDGES_GPKG = ROAD_NETWORK_PROCESSED_DIR / "edges_with_attribute.gpkg"
 ROAD_NEW_LINKS_GPKG = ROAD_NETWORK_PROCESSED_DIR / "new_links.gpkg"
 ROAD_HIGHWAY_NETWORK_GPKG = ROAD_DATA_ROOT / "temp" / "network_highway.gpkg"
 SWISS_MUNICIPALITY_BOUNDARIES_PATH = DATA_ROOT / "data" / "Spatial_Data" / "Boundaries" / "SwissBoundaries_Municipalities_2026_CH.gpkg"
+SWISS_DISTRICT_BOUNDARIES_PATH = DATA_ROOT / "data" / "Spatial_Data" / "Boundaries" / "SwissBoundaries_Bezirke_2026_CH.gpkg"
 SWISS_LAKES_PATH = DATA_ROOT / "data" / "Spatial_Data" / "Land_Use" / "Hydrography" / "swissTLMRegio_Lake.shp"
 RAIL_ACTIVE_SERVICE_NETWORK_GPKG = DATA_ROOT / "data" / "infraScanRail" / "Network" / "processed" / "combined_network_with_all_modifications.gpkg"
 

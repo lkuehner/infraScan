@@ -208,6 +208,7 @@ def run_shared_scenario_generation(runtimes, limits_variables):
             run_rail=True,
             road_limits_variables=limits_variables,
             do_plot=False,
+            use_cache=integrated_settings.use_cache_shared_scenarios,
         )
         print("Selected scenarios: " + ", ".join(result["selected_scenarios"]))
         prefix_new_runtime_keys(runtimes, existing_keys, "scenario")
