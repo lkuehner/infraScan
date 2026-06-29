@@ -1,2 +1,0 @@
-preset,xi2_objective,scenario,development,delta_weighted_mean_tt_h,delta_mean_tt_h,sq_weighted_mean_tt_h,dev_weighted_mean_tt_h
-slsqp_pragmatic,False,scenario_19,557,0.06591345023821726,0.09473862120057858,0.31682940929905007,0.2509159590608328
