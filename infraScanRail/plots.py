@@ -2004,10 +2004,18 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
 
     df.rename(columns={'ID_new': 'Scenario'}, inplace=True)
     df['monetized_savings_total'] = df['monetized_savings_total'].abs()
-    df['total_costs'] = df['TotalConstructionCost'] + df['TotalMaintenanceCost'] + df['TotalUncoveredOperatingCost']
+    if 'TotalExternalityCost' not in df.columns:
+        df['TotalExternalityCost'] = 0.0
+    df['total_costs'] = (
+        df['TotalConstructionCost']
+        + df['TotalMaintenanceCost']
+        + df['TotalUncoveredOperatingCost']
+        + df['TotalExternalityCost']
+    )
     df['total_net_benefit'] = df['monetized_savings_total'] - df['total_costs']
     df['cba_ratio'] = df['monetized_savings_total'] / df['total_costs']
     df['Color'] = 'gray'
+    value_unit = "CHF million/year" if df.get("__annualized", pd.Series(False, index=df.index)).astype(bool).any() else "CHF million"
 
     # Mapping: df['development'] (float) → railway_lines['name'] (string)
     dev_to_conn = railway_lines.set_index('name')['missing_connection'].to_dict()
@@ -2065,6 +2073,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
             'TotalConstructionCost': '#a6bddb',
             'TotalMaintenanceCost': '#3690c0',
             'TotalUncoveredOperatingCost': '#034e7b',
+            'TotalExternalityCost': '#D5A834',
             'monetized_savings_total': '#31a354'
         }
 
@@ -2086,7 +2095,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
         )
         ax.set_xlim(-0.5, n_lines - 0.5)
         plt.xlabel('Line', fontsize=12)
-        plt.ylabel('Monetised travel time savings in million CHF', fontsize=12)
+        plt.ylabel(f'Monetised travel time savings in {value_unit}', fontsize=12)
         plt.xticks(rotation=90)
         plt.grid(axis='y', linestyle='--', alpha=0.7)
 
@@ -2130,7 +2139,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
         )
         ax.set_xlim(-0.5, n_lines - 0.5)
         plt.xlabel('Line', fontsize=12)
-        plt.ylabel('Monetised travel time savings in million CHF', fontsize=12)
+        plt.ylabel(f'Monetised travel time savings in {value_unit}', fontsize=12)
         plt.xticks(rotation=90)
         plt.grid(axis='y', linestyle='--', alpha=0.7)
 
@@ -2162,7 +2171,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
         )
         ax.set_xlim(-0.5, n_lines - 0.5)
         plt.xlabel('Line', fontsize=12)
-        plt.ylabel('Net benefit in CHF million', fontsize=12)
+        plt.ylabel(f'Net benefit in {value_unit}', fontsize=12)
         plt.axhline(y=0, color='red', linestyle='-', alpha=0.5)
         plt.xticks(rotation=90)
         plt.grid(axis='y', linestyle='--', alpha=0.7)
@@ -2214,6 +2223,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
             'TotalConstructionCost': 'mean',
             'TotalMaintenanceCost': 'mean',
             'TotalUncoveredOperatingCost': 'mean',
+            'TotalExternalityCost': 'mean',
             'monetized_savings_total': 'mean'
         }).loc[(slice(None), order), :].reset_index().set_index('line_name').loc[order].reset_index()
 
@@ -2230,6 +2240,9 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
         plt.bar(x_pos, -summary['TotalUncoveredOperatingCost'] / 1e6, width=bar_width,
                 bottom=-(summary['TotalConstructionCost'] + summary['TotalMaintenanceCost']) / 1e6,
                 color=kosten_farben['TotalUncoveredOperatingCost'], label='Uncovered operating costs')
+        plt.bar(x_pos, -summary['TotalExternalityCost'] / 1e6, width=bar_width,
+                bottom=-(summary['TotalConstructionCost'] + summary['TotalMaintenanceCost'] + summary['TotalUncoveredOperatingCost']) / 1e6,
+                color=kosten_farben['TotalExternalityCost'], label='Externality costs')
         
         for i, line_name in enumerate(order):
             plt.bar(x_pos[i], summary[summary['line_name'] == line_name]['monetized_savings_total'].values[0] / 1e6,
@@ -2238,7 +2251,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
         plt.axhline(y=0, color='black', linestyle='-')
         plt.xticks(x_pos, summary['line_name'], rotation=90)
         plt.xlabel('Line', fontsize=12)
-        plt.ylabel('Value in CHF million', fontsize=12)
+        plt.ylabel(f'Value in {value_unit}', fontsize=12)
         plt.title('Costs and benefits per modification', fontsize=14)
         plt.grid(axis='y', linestyle='--', alpha=0.7)
 
@@ -2246,6 +2259,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
             mpatches.Patch(color=kosten_farben['TotalConstructionCost'], label='Construction costs'),
             mpatches.Patch(color=kosten_farben['TotalMaintenanceCost'], label='Uncovered maintenance costs'),
             mpatches.Patch(color=kosten_farben['TotalUncoveredOperatingCost'], label='Uncovered operating costs'),
+            mpatches.Patch(color=kosten_farben['TotalExternalityCost'], label='Externality costs'),
             mpatches.Patch(facecolor="none", hatch='////', edgecolor='black', label='Travel time savings'),
         ]
 
@@ -2353,7 +2367,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
 
                 # Generate network map
                 map_filename = f"railway_lines_{ranked_filename_prefix}.png"
-                map_output_path = os.path.join(paths.PLOT_DIRECTORY, map_filename)
+                map_output_path = os.path.join(plot_directory, map_filename)
                 os.makedirs(os.path.dirname(map_output_path), exist_ok=True)
 
                 plot_railway_lines_only(
@@ -2371,7 +2385,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
                     "cumulative_cost_distribution"
                 ]:
                     chart_path = os.path.join(benefits_ranked_dir, f"{ranked_filename_prefix}_{suffix}.png")
-                    map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{ranked_filename_prefix}.png")
+                    map_path = os.path.join(plot_directory, f"railway_lines_{ranked_filename_prefix}.png")
                     os.makedirs(os.path.dirname(map_path), exist_ok=True)
                     combined_path = os.path.join(benefits_ranked_combined_dir, f"{ranked_filename_prefix}_{suffix}_combined.png")
 
@@ -2454,7 +2468,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
 
                     # Network map saved to plots/ (root level, as per Q4)
                     filename = f"railway_lines_{filename_prefix}.png"
-                    output_file_name = os.path.join(paths.PLOT_DIRECTORY, filename)
+                    output_file_name = os.path.join(plot_directory, filename)
                     os.makedirs(os.path.dirname(output_file_name), exist_ok=True)
 
                     plot_railway_lines_only(
@@ -2472,7 +2486,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
                         "cumulative_cost_distribution"
                     ]:
                         chart_path = os.path.join(benefits_dir, f"{filename_prefix}_{suffix}.png")
-                        map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{filename_prefix}.png")
+                        map_path = os.path.join(plot_directory, f"railway_lines_{filename_prefix}.png")
                         os.makedirs(os.path.dirname(map_path), exist_ok=True)
                         combined_path = os.path.join(benefits_combined_dir, f"{filename_prefix}_{suffix}_combined.png")
 
@@ -2550,7 +2564,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
 
                 # Network map saved to plots/ (root level)
                 global_filename = f"railway_lines_{global_filename_prefix}.png"
-                global_output_file_name = os.path.join(paths.PLOT_DIRECTORY, global_filename)
+                global_output_file_name = os.path.join(plot_directory, global_filename)
                 os.makedirs(os.path.dirname(global_output_file_name), exist_ok=True)
 
                 plot_railway_lines_only(
@@ -2568,7 +2582,7 @@ def create_and_save_plots(df, railway_lines, plot_directory=None, plot_preferenc
                     "cumulative_cost_distribution"
                 ]:
                     chart_path = os.path.join(benefits_ranked_dir, f"{global_filename_prefix}_{suffix}.png")
-                    map_path = os.path.join(paths.PLOT_DIRECTORY, f"railway_lines_{global_filename_prefix}.png")
+                    map_path = os.path.join(plot_directory, f"railway_lines_{global_filename_prefix}.png")
                     os.makedirs(os.path.dirname(map_path), exist_ok=True)
                     combined_path = os.path.join(benefits_ranked_combined_dir, f"{global_filename_prefix}_{suffix}_combined.png")
 

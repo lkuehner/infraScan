@@ -22,6 +22,7 @@ general_KDG = 0.623
 duration = 50  # years
 tts_valuation_period = (2050, 2100)
 construction_start_year = 2050
+tts_annualization_days = 365
 
 empty_train_weight_tonnes = 297 #Bt (train RABe 511)
 

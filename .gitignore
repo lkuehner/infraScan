@@ -15,3 +15,7 @@ __pycache__/
 *.pyc
 
 .codex/
+
+# Local run logs and reports
+*.log
+*run_report*.txt

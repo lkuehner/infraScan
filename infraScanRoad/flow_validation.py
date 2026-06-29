@@ -36,7 +36,7 @@ ASTRA_GPKG_DEFAULT = Path("/Volumes/WD_Windows/MSc_Thesis/data/infraScanRoad/tra
 EDGES_GPKG_DEFAULT = Path("/Volumes/WD_Windows/MSc_Thesis/data/infraScanRoad/Network/processed/edges_with_attribute.gpkg")
 OUTPUT_DIR_PLOT = Path("/Volumes/WD_Windows/draft/plots/road_standalone")
 
-LINK_IDS = [64, 90, 96, 83, 77, 129, 175, 102, 132, 178]
+LINK_IDS = [64, 90, 96, 83, 77, 129, 175, 102, 132]
 MANUAL_MLOCNR_BY_EDGE = {178: 761}  # match ID_edge 178 manual to mlocnr 761 (Uster-Hinwil)
 MANUAL_NT_BY_EDGE = {90: 1087} # add the flow manually to edge 90 
 
@@ -256,12 +256,12 @@ def plot_flow_ranges(plot_df: pd.DataFrame, output_path: Path) -> None:
     ax.spines["right"].set_visible(False)
 
     legend_handles = [
-        mlines.Line2D([], [], color=range_color, linewidth=2.5, label="Szenario-Range Modell"),
-        mlines.Line2D([], [], color=nt_color, marker="o", linestyle="None", markersize=10, label="Traffic Count Hourly"),
-        mlines.Line2D([], [], color=peak_color, marker="o", linestyle="None", markersize=10, label="Traffic Count Peak Hour"),
-        mlines.Line2D([], [], color=capacity_color, marker="D", linestyle="None", markersize=8, label="Capacity Limit"),
+        mlines.Line2D([], [], color=range_color, linewidth=3.0, label="Szenario-Range Modell"),
+        mlines.Line2D([], [], color=nt_color, marker="o", linestyle="None", markersize=12, label="Traffic Count Hourly"),
+        mlines.Line2D([], [], color=peak_color, marker="o", linestyle="None", markersize=12, label="Traffic Count Peak Hour"),
+        mlines.Line2D([], [], color=capacity_color, marker="D", linestyle="None", markersize=10, label="Capacity Limit"),
     ]
-    ax.legend(handles=legend_handles, loc="upper right", frameon=False, fontsize=14)
+    ax.legend(handles=legend_handles, loc="upper right", frameon=False, fontsize=16)
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=240, bbox_inches="tight")

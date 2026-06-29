@@ -297,7 +297,14 @@ def calculate_total_travel_times(od_times_list, scenario_ODs_dir, df_access):
 
     return total_travel_times
 
-def calculate_monetized_tt_savings(TTT_status_quo, TTT_developments, VTTS, output_path, dev_id_lookup_table):
+def calculate_monetized_tt_savings(
+    TTT_status_quo,
+    TTT_developments,
+    VTTS,
+    output_path,
+    dev_id_lookup_table,
+    annualization_days=365,
+):
     """
     Calculate and monetize travel time savings for each development scenario compared to the status quo,
     scaling peak hour data to daily trips using a fixed tau value.
@@ -316,9 +323,6 @@ def calculate_monetized_tt_savings(TTT_status_quo, TTT_developments, VTTS, outpu
 
     # Define tau (fraction of trips occurring in the peak hour)
     tau = 0.13  # Assumes 13% of daily trips occur in the peak hour
-
-    # Monetization factor of travel time (CHF/h * 365 d/a * duration)
-    mon_factor = VTTS * 365
 
     # Prepare a list to store the results
     results = []
@@ -340,7 +344,7 @@ def calculate_monetized_tt_savings(TTT_status_quo, TTT_developments, VTTS, outpu
                 # Calculate travel time savings (negative if no savings), scaled to daily trips
                 tt_savings_daily = (status_quo_tt - dev_tt_weighted) #again scaling with tau?
                 tt_savings_daily_unweighted = status_quo_tt_unweighted - dev_tt_unweighted
-                monetized_savings_yearly = tt_savings_daily * 365 * VTTS
+                monetized_savings_yearly = tt_savings_daily * annualization_days * VTTS
                 # Monetize the travel time savings
                 dev_id_lookup = dev_id_lookup_table.loc[int(dev_id.removeprefix("Development_")), "dev_id"]
                 # Append the results

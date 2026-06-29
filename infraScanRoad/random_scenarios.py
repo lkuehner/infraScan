@@ -956,7 +956,7 @@ def get_random_scenarios(start_year=2018, end_year=2100, num_of_scenarios=100, u
         with open(resolved_shared_components_path, "rb") as f:
             scenario_components = pickle.load(f)
     else:
-        from infraScan.infraScanIntegrated.Ideas.random_scenarios import (
+        from MSc_Thesis.euler_git_backup.Ideas.random_scenarios import (
             build_shared_scenario_components,
             save_shared_scenario_components,
         )

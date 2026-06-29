@@ -1,6 +1,10 @@
 """
 infraScanIntegrated settings
 
+Quick orientation:
+- Interactive choices in main_integrated.py: run mode, standalone outputs, valuation year
+- Static choices in this file: valuation, scenario generation, cache usage, rail options
+
 Defaults for the integrated orchestrator. These values may be overridden
 interactively in main_integrated.py for the current run only.
 """
@@ -44,6 +48,7 @@ rail_intervention_costs_reviewed = True
 appraisal_years = 40
 rail_VTTS = 25.24 # CHF/h NIBA adjusted 2023
 road_VTTS = 26.85 # CHF/h EBeN adjusted 2023
+rail_tts_annualization_days = 250
 
 # SN-641821
 discount_rate = 0.02

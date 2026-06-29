@@ -1838,7 +1838,8 @@ def compute_tts(dev_id_lookup, od_times_dev, od_times_status_quo, use_cache=Fals
         TTT_developments,
         cp.VTTS,
         output_path,
-        dev_id_lookup
+        dev_id_lookup,
+        cp.tts_annualization_days,
     )
 
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)

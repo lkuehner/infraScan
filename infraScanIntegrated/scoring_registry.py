@@ -958,6 +958,18 @@ def assemble_score_results_long(
         One long-format score table sorted by mode, development, scenario and score id.
     """
     score_long = pd.concat([road_result, rail_result], ignore_index=True)
+
+    shared_selection_path = Path(integrated_paths.SHARED_SELECTION_PATH)
+    if shared_selection_path.exists():
+        selected_scenarios = (
+            pd.read_csv(shared_selection_path, usecols=["scenario"])["scenario"]
+            .dropna()
+            .astype(str)
+            .tolist()
+        )
+        score_long["scenario"] = score_long["scenario"].astype(str)
+        score_long = score_long[score_long["scenario"].isin(selected_scenarios)].copy()
+
     road_externalities_detail = integrated_paths.ROAD_EXTERNALITIES_DETAIL_CSV
     if road_externalities_detail.exists():
         link_flows = pd.read_csv(

@@ -99,6 +99,7 @@ def apply_integrated_cost_overrides():
 
     rail_cost_parameters.VTTS = integrated_settings.rail_VTTS
     rail_cost_parameters.duration = integrated_settings.appraisal_years
+    rail_cost_parameters.tts_annualization_days = integrated_settings.rail_tts_annualization_days
     rail_cost_parameters.construction_start_year = integrated_settings.start_valuation_year
     rail_cost_parameters.discount_rate = common_cost_parameters.discount_rate
     rail_cost_parameters.tts_valuation_period = (
